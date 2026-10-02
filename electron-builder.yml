@@ -2,13 +2,10 @@ appId: be.kuleuven.mathiasbk.marginalia-poc
 productName: marginalia-poc
 directories:
   buildResources: build
+# Only the built app; electron-builder adds the production dependencies itself.
 files:
-  - '!**/.vscode/*'
-  - '!src/*'
-  - '!electron.vite.config.{js,ts,mjs,cjs}'
-  - '!vitest.config.{js,ts,mjs,cjs}'
-  - '!{.eslintcache,eslint.config.mjs,.prettierignore,.prettierrc.yaml}'
-  - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
+  - out/**
+  - package.json
 # Windows cannot start an .exe from inside app.asar; see claudeExecutable() in src/main/claude/cli.ts.
 asarUnpack:
   - node_modules/@anthropic-ai/claude-agent-sdk-*/**
