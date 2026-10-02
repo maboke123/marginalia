@@ -32,6 +32,9 @@ export function claudeEnvironment(apiKey: string | null): Record<string, string 
     ...process.env,
     CLAUDE_AGENT_SDK_CLIENT_APP: `marginalia-poc/${app.getVersion()}`
   }
+  // The CLI's updater moves its running exe aside to replace it, which left the SDK without
+  // its binary. This copy must stay at the version the SDK expects; npm updates it.
+  env.DISABLE_AUTOUPDATER = '1'
   // Set when the app is started from a Claude Code terminal; the CLI would think it is nested.
   delete env.CLAUDECODE
   delete env.ELECTRON_RUN_AS_NODE
