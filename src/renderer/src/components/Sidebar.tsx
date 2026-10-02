@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { NOTEBOOK_COLORS, type Position, type VaultNode } from '../../../shared/types'
+import { draggingFiles, importDroppedFiles } from '../lib/drop'
 import { childrenOf, isFolder, isWithin, visibleRows, type Row } from '../lib/tree'
 import { useApp } from '../store'
 import { ContextMenu, type MenuItem } from './ContextMenu'
@@ -102,6 +103,11 @@ export function Sidebar(): React.JSX.Element {
           onSelect: () => app.create('section', node.path)
         },
         { label: 'New page', onSelect: () => app.create('page', node.path) },
+        {
+          label: 'Import PDF...',
+          hint: 'Ctrl+Shift+I',
+          onSelect: () => app.importPdfs(undefined, node.path)
+        },
         { separator: true }
       )
     } else {
@@ -156,7 +162,19 @@ export function Sidebar(): React.JSX.Element {
 
   function onDragOver(e: React.DragEvent, row: Row): void {
     const node = dragged.current
-    if (!node) return
+    if (!node) {
+      // PDFs dragged in from Explorer can be dropped on a notebook or section.
+      if (!draggingFiles(e)) return
+      if (!isFolder(row.node)) {
+        setDrop(null)
+        return
+      }
+      e.preventDefault()
+      e.stopPropagation()
+      e.dataTransfer.dropEffect = 'copy'
+      if (drop?.path !== row.node.path) setDrop({ path: row.node.path, zone: 'into' })
+      return
+    }
     const zone = zoneFor(e, row)
     const { parent, before } = dropTarget(row, zone)
     if (!canDrop(node, parent, before)) {
@@ -171,8 +189,12 @@ export function Sidebar(): React.JSX.Element {
   function onDrop(e: React.DragEvent, row: Row): void {
     const node = dragged.current
     e.preventDefault()
+    e.stopPropagation()
     setDrop(null)
-    if (!node) return
+    if (!node) {
+      if (draggingFiles(e) && isFolder(row.node)) importDroppedFiles(e, row.node.path)
+      return
+    }
     const { parent, before } = dropTarget(row, zoneFor(e, row))
     if (canDrop(node, parent, before)) app.move(node.path, parent, before)
   }
@@ -192,6 +214,14 @@ export function Sidebar(): React.JSX.Element {
         </button>
         <button
           className="icon-button"
+          title="Import PDF (Ctrl+Shift+I)"
+          aria-label="Import PDF"
+          onClick={() => app.importPdfs()}
+        >
+          <Icon name="import" />
+        </button>
+        <button
+          className="icon-button"
           title="New notebook"
           aria-label="New notebook"
           onClick={() => app.create('notebook', '')}
@@ -206,6 +236,9 @@ export function Sidebar(): React.JSX.Element {
         role="tree"
         tabIndex={0}
         onKeyDown={onKeyDown}
+        onDragLeave={(e) => {
+          if (!e.currentTarget.contains(e.relatedTarget as Node)) setDrop(null)
+        }}
         onContextMenu={(e) =>
           openMenu(e, [{ label: 'New notebook', onSelect: () => app.create('notebook', '') }])
         }

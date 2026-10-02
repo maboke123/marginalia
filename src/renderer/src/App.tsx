@@ -15,6 +15,17 @@ export function App(): React.JSX.Element | null {
     return window.api.vault.onChanged(() => useApp.getState().refresh())
   }, [])
 
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent): void => {
+      if (e.ctrlKey && e.shiftKey && e.code === 'KeyI') {
+        e.preventDefault()
+        if (useApp.getState().vault) useApp.getState().importPdfs()
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [])
+
   if (!ready) return null
 
   return (
