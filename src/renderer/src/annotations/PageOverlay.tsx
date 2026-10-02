@@ -25,6 +25,7 @@ import {
   translateStroke,
   type Point
 } from './geometry'
+import { applyChanges, planWrite, type WriteAnswer } from '../claude/writePlan'
 import { GhostView } from './GhostView'
 import { strokePath } from './ink'
 import { HIGHLIGHT_OPACITY, HIGHLIGHTER_WIDTH, pageUnit, TEXT_SIZES } from '../../../shared/palette'
@@ -224,15 +225,16 @@ function AnnotatedOverlay({
   }
 
   /** A /claude answer for a box I already closed: put it in as its own undo step. */
-  function lateAnswer(id: string, original: string, answer: string): void {
+  function lateAnswer(id: string, original: string, answer: WriteAnswer): void {
     const current = findItem(doc.getState().pages, { page: number, kind: 'textBoxes', id })
     const at = current?.markdown.indexOf(original) ?? -1
     if (!current || at === -1) {
       useApp.getState().showError('The /claude request was changed; nothing was inserted')
       return
     }
-    const markdown =
-      current.markdown.slice(0, at) + answer + current.markdown.slice(at + original.length)
+    const request = { from: at, to: at + original.length }
+    const { changes } = planWrite(current.markdown, request, answer)
+    const markdown = applyChanges(current.markdown, changes).trim()
     doc.getState().change((p) => replaceItem(p, number, 'textBoxes', { ...current, markdown }))
   }
 

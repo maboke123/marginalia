@@ -1,6 +1,7 @@
 import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import type { TextBox } from '../../../shared/annotations'
 import { Cancelled, cancelWrite, findRequest, newRequestId, writeWithClaude } from '../claude/write'
+import { mapPosition, planWrite, type WriteAnswer } from '../claude/writePlan'
 import { renderMarkdown } from '../lib/markdown'
 import { useApp } from '../store'
 
@@ -18,7 +19,7 @@ interface Props {
   /** Page the box is on, sent to Claude with a /claude request. */
   page: number
   /** A /claude answer that arrived after editing ended: replace `original` in the box. */
-  onLateAnswer(original: string, answer: string): void
+  onLateAnswer(original: string, answer: WriteAnswer): void
 }
 
 export const TextBoxView = memo(function TextBoxView(props: Props): React.JSX.Element {
@@ -75,18 +76,27 @@ function wrapSelection(el: HTMLTextAreaElement, before: string, after: string): 
   el.setSelectionRange(start + before.length, end + before.length)
 }
 
-/** Puts Claude's answer where the request was, keeping my cursor and the box's own undo. */
-function replaceInEditor(el: HTMLTextAreaElement, original: string, answer: string): boolean {
+/**
+ * Makes Claude's changes in the box being typed in, keeping my cursor and the box's own undo.
+ * Returns the edits it could not find, or null when the request itself is gone.
+ */
+function applyInEditor(
+  el: HTMLTextAreaElement,
+  original: string,
+  answer: WriteAnswer
+): string[] | null {
   const at = el.value.indexOf(original)
-  if (at === -1) return false
+  if (at === -1) return null
+  const { changes, missing } = planWrite(el.value, { from: at, to: at + original.length }, answer)
   const [start, end] = [el.selectionStart, el.selectionEnd]
-  const shift = (pos: number): number =>
-    pos >= at + original.length ? pos + answer.length - original.length : Math.min(pos, at)
   el.focus()
-  el.setSelectionRange(at, at + original.length)
-  document.execCommand('insertText', false, answer)
-  el.setSelectionRange(shift(start), shift(end))
-  return true
+  // Last change first, so the positions of the earlier ones stay valid.
+  for (const c of [...changes].reverse()) {
+    el.setSelectionRange(c.from, c.to)
+    document.execCommand(c.insert ? 'insertText' : 'delete', false, c.insert)
+  }
+  el.setSelectionRange(mapPosition(start, changes), mapPosition(end, changes))
+  return missing
 }
 
 function Editor({
@@ -98,7 +108,7 @@ function Editor({
   initial: string
   page: number
   onCommit(markdown: string): void
-  onLateAnswer(original: string, answer: string): void
+  onLateAnswer(original: string, answer: WriteAnswer): void
 }): React.JSX.Element {
   const ref = useRef<HTMLTextAreaElement>(null)
   const done = useRef(false)
@@ -120,8 +130,11 @@ function Editor({
       .then((answer) => {
         const el = ref.current
         if (el && !done.current) {
-          if (!replaceInEditor(el, original, answer)) {
+          const missing = applyInEditor(el, original, answer)
+          if (!missing) {
             useApp.getState().showError('The /claude request was changed; nothing was inserted')
+          } else if (missing.length) {
+            useApp.getState().showError('Claude wanted to change text that is not in this box')
           }
           grow(el)
         } else {

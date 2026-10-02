@@ -86,7 +86,7 @@ export async function history(sessionId) {
 /** The one-off request behind /claude in a note. "slow" waits until it is cancelled. */
 export async function complete(input) {
   await record('complete', { text: input.text, images: input.images.length, question: 'complete' })
-  const ask = /What to write at ⟦here⟧: (.*)$/.exec(input.text)?.[1] ?? ''
+  const ask = /My request at ⟦here⟧: (.*)$/.exec(input.text)?.[1] ?? ''
   const wait = ask.startsWith('slow') ? 60_000 : ask.startsWith('later') ? 1500 : 400
   await new Promise((resolve, reject) => {
     const timer = setTimeout(resolve, wait)
@@ -97,5 +97,18 @@ export async function complete(input) {
   })
   // Real answers sometimes put display math in the middle of a line.
   if (ask.startsWith('display')) return '$$x_{k+1} = x_k - \\alpha \\nabla f(x_k)$$'
+  // Changing and removing text that is already there, the way the real prompt asks for it.
+  if (ask.startsWith('change the formula above')) {
+    return [
+      '<<<<<<< FIND',
+      '$\\alpha^* = \\arg\\min_\\alpha L(\\alpha)$',
+      '=======',
+      '$\\alpha^* = \\arg\\min_{\\alpha > 0} L(\\alpha)$',
+      '>>>>>>> REPLACE'
+    ].join('\n')
+  }
+  if (ask.startsWith('remove the line above')) {
+    return ['<<<<<<< FIND', 'Background: /claude slow', '=======', '>>>>>>> REPLACE'].join('\n')
+  }
   return '$\\alpha^* = \\arg\\min_\\alpha L(\\alpha)$'
 }

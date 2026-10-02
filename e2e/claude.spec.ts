@@ -224,7 +224,7 @@ test('/claude in a note: several at once, each its own undo step and cancel', as
   expect(sent.images).toBe(1)
   expect(sent.text).toContain(`Slides: ${pdfRel}, page 2 of 8.`)
   expect(sent.text).toContain('Later.\nThe best step size: ⟦here⟧')
-  expect(sent.text).toContain('What to write at ⟦here⟧: insert the formula for the optimal alpha')
+  expect(sent.text).toContain('My request at ⟦here⟧: insert the formula for the optimal alpha')
 
   // Each request has its own Cancel; the text stays as typed.
   await page.locator('.cm-claude-cancel').click()
@@ -279,6 +279,30 @@ test('/claude in a text box on a slide, also after the box is closed', async () 
   await page.locator('.pdf-scroll').focus()
   await page.keyboard.press('Control+Z')
   await expect.poll(boxes).toContain('Later: /claude later please')
+})
+
+test('/claude changes text that is already there, as one undo step', async () => {
+  await row('Machine Learning').click()
+  await row('B2 Decision trees').first().click()
+  await row('Summary').click()
+  await page.locator('.md-editor .cm-content').click()
+  await page.keyboard.press('Control+End')
+  await page.keyboard.type('Best: /claude the optimal alpha')
+  await page.keyboard.press('Enter')
+  const before = 'Best: $\\alpha^* = \\arg\\min_\\alpha L(\\alpha)$\n'
+  await expect.poll(readSummary).toBe(SUMMARY + before)
+
+  // Changes the formula above instead of writing a new one; the request line goes away.
+  await page.keyboard.type('/claude change the formula above')
+  await page.keyboard.press('Enter')
+  const after = 'Best: $\\alpha^* = \\arg\\min_{\\alpha > 0} L(\\alpha)$\n'
+  await expect.poll(readSummary).toBe(SUMMARY + after)
+  await expect(page.locator('.cm-claude-changed')).toBeVisible()
+  const [asked] = (await readLog()).filter((e) => e.text.includes('change the formula above'))
+  expect(asked.text).toContain('Best: $\\alpha^* = \\arg\\min_\\alpha L(\\alpha)$\n⟦here⟧')
+
+  await page.keyboard.press('Control+Z')
+  await expect.poll(readSummary).toBe(SUMMARY + before + '/claude change the formula above\n')
 })
 
 test('answers with display math inside a line keep the editor working', async () => {

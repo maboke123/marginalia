@@ -1,4 +1,5 @@
 import { slideContext } from './context'
+import { parseAnswer, type WriteAnswer } from './writePlan'
 
 // "/claude <what to write>" + Enter, in a note or in a text box on a slide: Claude's answer
 // replaces the request. Several can run at once; each has an id to cancel it by.
@@ -11,12 +12,6 @@ export function findRequest(line: string): { at: number; ask: string } | null {
     if (ask) found = { at: m.index + m[1].length, ask }
   }
   return found
-}
-
-/** Claude sometimes wraps its answer in a code fence anyway; the text wants the content. */
-function unwrap(text: string): string {
-  const fenced = /^```[\w-]*\n([\s\S]*?)\n```$/.exec(text.trim())
-  return (fenced ? fenced[1] : text).trim()
 }
 
 export class Cancelled extends Error {
@@ -47,8 +42,8 @@ export interface WriteRequest {
   slide?: { path: string; page: number }
 }
 
-/** Asks Claude for the text to put at ⟦here⟧. Throws Cancelled when cancelled. */
-export async function writeWithClaude(request: WriteRequest): Promise<string> {
+/** Asks Claude what to put at ⟦here⟧ and what to change around it. Throws Cancelled. */
+export async function writeWithClaude(request: WriteRequest): Promise<WriteAnswer> {
   try {
     const slide = request.slide
       ? await slideContext(request.slide.path, request.slide.page, null)
@@ -59,7 +54,7 @@ export async function writeWithClaude(request: WriteRequest): Promise<string> {
       `I am writing in ${request.where}.`,
       'Here is the text around the spot; ⟦here⟧ marks where your text goes:',
       `<text>\n${request.around}\n</text>`,
-      `What to write at ⟦here⟧: ${request.ask}`
+      `My request at ⟦here⟧: ${request.ask}`
     ]
       .filter(Boolean)
       .join('\n\n')
@@ -75,7 +70,7 @@ export async function writeWithClaude(request: WriteRequest): Promise<string> {
       throw err
     }
     if (cancelled.has(request.id)) throw new Cancelled()
-    return unwrap(answer)
+    return parseAnswer(answer)
   } finally {
     cancelled.delete(request.id)
   }

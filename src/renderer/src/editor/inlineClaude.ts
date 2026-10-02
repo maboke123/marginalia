@@ -8,6 +8,7 @@ import {
   type DecorationSet
 } from '@codemirror/view'
 import { Cancelled, cancelWrite, findRequest, newRequestId, writeWithClaude } from '../claude/write'
+import { planWrite } from '../claude/writePlan'
 import { useApp } from '../store'
 import { notePath } from './livePreview'
 import { headingPath, textAround } from './sections'
@@ -81,6 +82,43 @@ export const inlineRequests = StateField.define<Pending[]>({
     })
 })
 
+/** What Claude just changed lights up for a moment, also when it is further up the note. */
+const flash = StateEffect.define<{ id: string; ranges: { from: number; to: number }[] }>()
+/** Ends one flash only: another answer may have arrived meanwhile. */
+const unflash = StateEffect.define<string>()
+// Whole lines: a changed formula is drawn as a widget, which would hide a mark on the text.
+
+export const claudeChanges = StateField.define<DecorationSet>({
+  create: () => Decoration.none,
+  update(value, tr) {
+    let next = value.map(tr.changes)
+    for (const effect of tr.effects) {
+      if (effect.is(flash)) {
+        const starts = new Set<number>()
+        for (const r of effect.value.ranges) {
+          const last = tr.state.doc.lineAt(r.to).number
+          for (let n = tr.state.doc.lineAt(r.from).number; n <= last; n++) {
+            starts.add(tr.state.doc.line(n).from)
+          }
+        }
+        const line = Decoration.line({ class: 'cm-claude-changed', flash: effect.value.id })
+        next = next.update({ add: [...starts].map((at) => line.range(at)), sort: true })
+      }
+      if (effect.is(unflash)) {
+        const id = effect.value
+        next = next.update({ filter: (_from, _to, deco) => deco.spec.flash !== id })
+      }
+    }
+    return next
+  },
+  provide: (field) => EditorView.decorations.from(field)
+})
+
+const short = (text: string): string => {
+  const line = text.trim().split('\n')[0]
+  return line.length > 60 ? `${line.slice(0, 60)}...` : line
+}
+
 function stop(view: EditorView, id: string): void {
   cancelWrite(id)
   view.dispatch({ effects: finish.of(id) })
@@ -115,11 +153,26 @@ async function request(view: EditorView, pending: Pending, ask: string): Promise
       showError('A /claude request was changed while Claude wrote; nothing was inserted')
       return
     }
+    const { changes, missing } = planWrite(view.state.doc.toString(), now, answer)
+    // Where the new text ends up once all changes are made.
+    let shift = 0
+    const changed: { from: number; to: number }[] = []
+    for (const c of changes) {
+      if (c.insert) changed.push({ from: c.from + shift, to: c.from + shift + c.insert.length })
+      shift += c.insert.length - (c.to - c.from)
+    }
+    // Everything Claude did is one undo step: Ctrl+Z puts the request and the old text back.
     view.dispatch({
-      changes: { from: now.from, to: now.to, insert: answer },
-      effects: finish.of(pending.id),
+      changes,
+      effects: [finish.of(pending.id), flash.of({ id: pending.id, ranges: changed })],
       annotations: [isolateHistory.of('full'), Transaction.userEvent.of('input.claude')]
     })
+    setTimeout(() => {
+      if (view.dom.isConnected) view.dispatch({ effects: unflash.of(pending.id) })
+    }, 2500)
+    if (missing.length) {
+      showError(`Claude wanted to change text that is not in the note: "${short(missing[0])}"`)
+    }
   } catch (err) {
     done()
     if (!(err instanceof Cancelled)) {

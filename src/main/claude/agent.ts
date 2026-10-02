@@ -116,10 +116,19 @@ export interface CompleteInput {
 /** One question, one answer, no conversation: text Claude writes straight into a note. */
 export type Complete = (input: CompleteInput) => Promise<string>
 
-const WRITER_PROMPT = `You write text that goes straight into my lecture notes.
+const WRITER_PROMPT = `You edit my lecture notes in place. My request stood where ⟦here⟧ is.
 - The notes are Markdown that Obsidian reads: $...$ for inline math, $$ on its own lines for display math.
-- Reply with only the text to put at the marked spot: no introduction, no explanation, no code fence around it.
-- Fit it into the sentence or paragraph around the spot, in the language and style of my notes.
+- To change or remove text that is already there (for example "the formula above"), write one
+  block per change, copying the current text exactly, character for character:
+<<<<<<< FIND
+the current text
+=======
+the new text (nothing here removes it)
+>>>>>>> REPLACE
+- Everything outside those blocks is new text that goes at ⟦here⟧. Write nothing else when I
+  only ask to change or remove something. Never put ⟦here⟧ in a block.
+- No introduction, no explanation, no code fence around the text.
+- Fit new text into the sentence or paragraph around the spot, in the language and style of my notes.
 - Keep it as short as the request allows.`
 
 export const claudeComplete: Complete = async (input) => {

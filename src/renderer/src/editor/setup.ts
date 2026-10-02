@@ -8,7 +8,7 @@ import { tags } from '@lezer/highlight'
 import { editorKeymap, insertImageFiles, slashCommands } from './commands'
 import { livePreview, notePath } from './livePreview'
 import { mathSyntax } from './mathSyntax'
-import { claudeEscape, inlineRequests } from './inlineClaude'
+import { claudeChanges, claudeEscape, inlineRequests } from './inlineClaude'
 import { pendingEdit } from './proposal'
 
 const highlight = HighlightStyle.define([
@@ -43,6 +43,7 @@ export function editorExtensions({ path, onOpenLink }: EditorOptions): Extension
     livePreview,
     pendingEdit,
     inlineRequests,
+    claudeChanges,
     autocompletion({ override: [slashCommands], icons: false }),
     placeholder('Type / for headings, tables, math, slides and Claude'),
     // Before the Markdown keymap, whose Enter continues lists.
