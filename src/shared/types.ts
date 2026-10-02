@@ -80,6 +80,10 @@ export interface MarginaliaApi {
     saveAsset(note: string, data: Uint8Array, extension: string): Promise<string>
     /** Asks for image files and copies them into the note's assets folder. */
     importImages(note: string): Promise<string[]>
+    /** The note that goes with a PDF in lecture mode, if one was linked and still exists. */
+    linkedNote(pdf: string): Promise<string | null>
+    linkedPdf(note: string): Promise<string | null>
+    setLinkedNote(pdf: string, note: string | null): Promise<void>
     readAnnotations(pdf: string): Promise<LoadedAnnotations>
     writeAnnotations(pdf: string, file: AnnotationFile): Promise<void>
     /** Asks where to save, then writes a copy with the annotations drawn in. Null when cancelled. */

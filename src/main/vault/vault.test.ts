@@ -342,6 +342,37 @@ describe('last page', () => {
   })
 })
 
+describe('notes linked to PDFs', () => {
+  it('remembers the note per PDF and follows renames, moves and trash of both', async () => {
+    await write('ML/les_1.pdf')
+    await write('ML/les_2.pdf')
+    await write('ML/les_1.md', '')
+    await write('ML/Summary.md', '')
+    await fs.mkdir(path.join(root, 'Stats'))
+
+    await vault.setLinkedNote('ML/les_1.pdf', 'ML/les_1.md')
+    await vault.setLinkedNote('ML/les_2.pdf', 'ML/Summary.md')
+    expect(await vault.linkedNote('ML/les_1.pdf')).toBe('ML/les_1.md')
+    expect(await vault.linkedPdf('ML/Summary.md')).toBe('ML/les_2.pdf')
+
+    await vault.rename('ML/les_1.md', 'Lesson 1 notes')
+    await vault.rename('ML/les_1.pdf', 'Lesson 1')
+    expect(await vault.linkedNote('ML/Lesson 1.pdf')).toBe('ML/Lesson 1 notes.md')
+
+    await vault.rename('ML', 'Machine Learning')
+    expect(await vault.linkedNote('Machine Learning/les_2.pdf')).toBe('Machine Learning/Summary.md')
+    await vault.move('Machine Learning/Summary.md', 'Stats')
+    expect(await vault.linkedNote('Machine Learning/les_2.pdf')).toBe('Stats/Summary.md')
+
+    await vault.trash('Stats/Summary.md')
+    expect(await vault.linkedNote('Machine Learning/les_2.pdf')).toBeNull()
+    const state = JSON.parse(await fs.readFile(path.join(root, '.marginalia/state.json'), 'utf8'))
+    expect(state.notes).toEqual({
+      'Machine Learning/Lesson 1.pdf': 'Machine Learning/Lesson 1 notes.md'
+    })
+  })
+})
+
 describe('chat sessions', () => {
   it('keeps one conversation per section that follows renames, moves and trash', async () => {
     await fs.mkdir(path.join(root, 'ML/B2/Entropy'), { recursive: true })

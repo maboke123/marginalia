@@ -35,7 +35,33 @@ interface VaultState {
   lastPage?: Record<string, number>
   /** Section path -> Claude session id, so each lesson keeps its own conversation. */
   chats?: Record<string, string>
+  /** PDF path -> the note that goes with it in lecture mode. */
+  notes?: Record<string, string>
   [key: string]: unknown
+}
+
+const within = (p: string, base: string): boolean => p === base || p.startsWith(base + '/')
+
+/**
+ * Points values at a path that moved (also anything below a moved folder). Entries whose
+ * value was trashed are dropped.
+ */
+function remapValues(
+  map: Record<string, string> | undefined,
+  from: string,
+  to: string | null
+): Record<string, string> | null {
+  if (!map) return null
+  let changed = false
+  const out: Record<string, string> = {}
+  for (const [key, value] of Object.entries(map)) {
+    if (!within(value, from)) out[key] = value
+    else {
+      changed = true
+      if (to !== null) out[key] = to + value.slice(from.length)
+    }
+  }
+  return changed ? out : null
 }
 
 /** Re-keys entries for a path that moved (also everything below a moved folder); null drops them. */
@@ -306,6 +332,32 @@ export class Vault {
     })
   }
 
+  /** The note linked to a PDF for lecture mode, if it still exists. */
+  async linkedNote(pdf: string): Promise<string | null> {
+    const state = await this.readData<VaultState>(STATE_FILE)
+    const note = state.notes?.[pdf]
+    return note && (await exists(this.resolve(note))) ? note : null
+  }
+
+  /** The PDF a note is linked to, if any. */
+  async linkedPdf(note: string): Promise<string | null> {
+    const state = await this.readData<VaultState>(STATE_FILE)
+    for (const [pdf, linked] of Object.entries(state.notes ?? {})) {
+      if (linked === note && (await exists(this.resolve(pdf)))) return pdf
+    }
+    return null
+  }
+
+  setLinkedNote(pdf: string, note: string | null): Promise<void> {
+    return this.updateData<VaultState>(STATE_FILE, (state) => {
+      if ((state.notes?.[pdf] ?? null) === note) return null
+      const notes = { ...state.notes }
+      if (note) notes[pdf] = note
+      else delete notes[pdf]
+      return { ...state, notes }
+    })
+  }
+
   async rename(rel: string, newName: string): Promise<string> {
     const abs = this.resolveItem(rel)
     const isDir = (await fs.stat(abs)).isDirectory()
@@ -434,15 +486,23 @@ export class Vault {
   }
 
   /**
-   * Keeps remembered pages and conversations attached to PDFs and sections that were
-   * renamed, moved (also via a parent folder) or trashed.
+   * Keeps remembered pages, conversations and PDF-note links attached to files and sections
+   * that were renamed, moved (also via a parent folder) or trashed.
    */
   private remapState(from: string, to: string | null): Promise<void> {
     return this.updateData<VaultState>(STATE_FILE, (state) => {
       const lastPage = remapKeys(state.lastPage, from, to)
       const chats = remapKeys(state.chats, from, to)
-      if (!lastPage && !chats) return null
-      return { ...state, ...(lastPage && { lastPage }), ...(chats && { chats }) }
+      // Links between PDFs and notes follow whichever side moved.
+      const byPdf = remapKeys(state.notes, from, to)
+      const notes = remapValues(byPdf ?? state.notes, from, to) ?? byPdf
+      if (!lastPage && !chats && !notes) return null
+      return {
+        ...state,
+        ...(lastPage && { lastPage }),
+        ...(chats && { chats }),
+        ...(notes && { notes })
+      }
     })
   }
 

@@ -54,7 +54,7 @@ export function SearchPanel(): React.JSX.Element {
   const open = (hit: SearchHit): void => {
     const app = useApp.getState()
     app.setOverlay(null)
-    app.openFile(hit.path, hit.page, hit.line)
+    void app.goTo(hit.path, hit.page, hit.line)
   }
   const { active, setActive, onKeyDown } = useListKeys(hits.length, (i) => open(hits[i]))
 

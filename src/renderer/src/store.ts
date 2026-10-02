@@ -110,6 +110,11 @@ interface AppState {
   setExpanded(path: string, open: boolean): void
   /** Opens a file; a PDF at `page`, a note at `line`. */
   openFile(path: string, page?: number, line?: number): void
+  /**
+   * Opening a file on purpose (quick switcher, search). In lecture mode a PDF brings its own
+   * note along, and a note becomes the note of the slides on screen.
+   */
+  goTo(path: string, page?: number, line?: number): Promise<void>
   setOverlay(overlay: Overlay): void
   toggleLecture(): Promise<void>
   setEditor(editor: EditorHandle | null): void
@@ -245,6 +250,34 @@ export const useApp = create<AppState>((set, get) => {
     return children.find((n) => n.kind === kind)?.path ?? null
   }
 
+  /**
+   * The note that goes with a PDF in lecture mode: the one linked before; else
+   * "<pdf name>.md" next to it; else, when the PDF is alone in its folder, the note already
+   * there; else a new "<pdf name>.md". The choice is remembered (in .marginalia/state.json).
+   */
+  async function noteFor(pdf: string): Promise<string | null> {
+    const linked = await attempt(() => api.linkedNote(pdf))
+    if (linked && findNode(get().nodes, linked)) return linked
+    const folder = parentOf(pdf)
+    if (!folder) return null
+    const base = pdf
+      .split('/')
+      .pop()!
+      .replace(/\.pdf$/i, '')
+    const siblings = findNode(get().nodes, folder)?.children ?? []
+    const sameName = siblings.find(
+      (n) => n.kind === 'markdown' && n.name.toLowerCase() === `${base.toLowerCase()}.md`
+    )
+    const alone = siblings.filter((n) => n.kind === 'pdf').length === 1
+    let note = sameName?.path ?? (alone ? firstIn(folder, 'markdown') : null)
+    if (!note) {
+      note = (await attempt(() => api.createNote(folder, base))) ?? null
+      await get().refresh()
+    }
+    if (note) await attempt(() => api.setLinkedNote(pdf, note))
+    return note
+  }
+
   let errorTimer: ReturnType<typeof setTimeout> | undefined
   let gotoNonce = 0
   let initStarted = false
@@ -350,6 +383,18 @@ export const useApp = create<AppState>((set, get) => {
       expandAncestors(path)
     },
 
+    async goTo(path, page, line) {
+      const { lectureMode, slidesFile } = get()
+      get().openFile(path, page, line)
+      if (!lectureMode) return
+      if (/\.pdf$/i.test(path)) {
+        const note = await noteFor(path)
+        if (note) set({ summaryFile: note })
+      } else if (slidesFile) {
+        await attempt(() => api.setLinkedNote(slidesFile, path))
+      }
+    },
+
     setOverlay: (overlay) => set({ overlay }),
 
     async toggleLecture() {
@@ -357,20 +402,18 @@ export const useApp = create<AppState>((set, get) => {
         set({ lectureMode: false })
         return
       }
-      let { slidesFile, summaryFile } = get()
-      const { activeFile } = get()
-      // Pair with what is open now, then look in the same section for the other half.
-      if (activeFile?.toLowerCase().endsWith('.pdf')) slidesFile = activeFile
-      if (activeFile?.toLowerCase().endsWith('.md')) summaryFile = activeFile
-      if (slidesFile && !summaryFile) {
-        const folder = parentOf(slidesFile)
-        summaryFile = firstIn(folder, 'markdown')
-        if (!summaryFile && folder) {
-          summaryFile = (await attempt(() => api.createNote(folder, 'Summary'))) ?? null
-          await get().refresh()
-        }
+      const { activeFile, slidesFile: lastSlides } = get()
+      let slidesFile: string | null = null
+      let summaryFile: string | null = null
+      // Start from what is on screen: slides bring their own note, a note finds its slides.
+      if (activeFile?.toLowerCase().endsWith('.md')) {
+        summaryFile = activeFile
+        slidesFile =
+          (await attempt(() => api.linkedPdf(activeFile))) ?? firstIn(parentOf(activeFile), 'pdf')
+      } else {
+        slidesFile = activeFile?.toLowerCase().endsWith('.pdf') ? activeFile : lastSlides
+        if (slidesFile) summaryFile = await noteFor(slidesFile)
       }
-      if (summaryFile && !slidesFile) slidesFile = firstIn(parentOf(summaryFile), 'pdf')
       if (!slidesFile && !summaryFile) {
         get().showError('Open slides or a summary first')
         return

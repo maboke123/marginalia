@@ -98,13 +98,15 @@ test('math and tables render while typing, and the file stays plain Markdown', a
 })
 
 test('lecture mode, slide links and snapshots', async () => {
+  const notes = path.join(env.vault, section, 'slides.md')
+  const readSummary = (): Promise<string> => fs.readFile(notes, 'utf8')
   await openSection()
   await row('slides.pdf').click()
   await page.keyboard.press('Control+Shift+M')
 
-  // No summary in the section yet, so lecture mode makes one.
+  // No note for these slides yet, so lecture mode makes one named after the PDF.
   await expect(page.locator('.lecture-pane')).toHaveCount(2)
-  await expect.poll(() => fs.readFile(summaryFile(), 'utf8').catch(() => null)).toBe('')
+  await expect.poll(() => fs.readFile(notes, 'utf8').catch(() => null)).toBe('')
   await expect(editor()).toBeVisible()
 
   await page.getByRole('textbox', { name: 'Page' }).fill('3')
@@ -136,6 +138,50 @@ test('lecture mode, slide links and snapshots', async () => {
     .poll(() => page.locator('img.cm-image').evaluate((img: HTMLImageElement) => img.naturalWidth))
     .toBeGreaterThan(100)
   await page.screenshot({ path: path.join('test-results', 'lecture.png') })
+})
+
+test('each PDF keeps its own note in lecture mode', async () => {
+  for (const name of ['les_1.pdf', 'les_2.pdf']) {
+    await fs.copyFile(slides, path.join(env.vault, section, name))
+  }
+  await fs.writeFile(summaryFile(), '# Overview\n')
+  await openSection()
+  const noteTitle = page.locator('.md-pane .pane-title')
+  const slidesTitle = page.locator('.pdf-title')
+  const lecture = async (pdf: string): Promise<void> => {
+    await row(pdf).click()
+    await expect(slidesTitle).toHaveText(pdf)
+    await page.keyboard.press('Control+Shift+M')
+    await expect(page.locator('.lecture-pane')).toHaveCount(2)
+  }
+
+  // Several PDFs share the folder, so each gets a note named after it.
+  await lecture('les_1.pdf')
+  await expect(noteTitle).toHaveText('les_1')
+  await editor().click()
+  await page.keyboard.type('Notes on lesson one')
+  await expect
+    .poll(() => fs.readFile(path.join(env.vault, section, 'les_1.md'), 'utf8').catch(() => ''))
+    .toBe('Notes on lesson one')
+  await page.keyboard.press('Control+Shift+M')
+
+  await lecture('les_2.pdf')
+  await expect(noteTitle).toHaveText('les_2')
+  // Picking another note in lecture mode makes it the note for these slides.
+  await page.keyboard.press('Control+P')
+  await page.getByRole('textbox', { name: 'Go to file' }).fill('Summary')
+  await page.keyboard.press('Enter')
+  await expect(noteTitle).toHaveText('Summary')
+  await page.keyboard.press('Control+Shift+M')
+
+  // From the note, lecture mode finds its slides again; and les_1 still has its own note.
+  await page.keyboard.press('Control+Shift+M')
+  await expect(slidesTitle).toHaveText('les_2.pdf')
+  await expect(noteTitle).toHaveText('Summary')
+  await page.keyboard.press('Control+Shift+M')
+  await lecture('les_1.pdf')
+  await expect(noteTitle).toHaveText('les_1')
+  await expect(editor()).toContainText('Notes on lesson one')
 })
 
 test('a heading from the slash menu leaves the cursor after the hashes', async () => {

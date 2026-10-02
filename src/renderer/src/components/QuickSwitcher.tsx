@@ -71,7 +71,7 @@ export function QuickSwitcher(): React.JSX.Element {
       const parts = node.path.split('/')
       parts.forEach((_, i) => app.setExpanded(parts.slice(0, i + 1).join('/'), true))
     } else {
-      app.openFile(node.path)
+      void app.goTo(node.path)
     }
   }
 

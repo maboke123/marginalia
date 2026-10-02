@@ -143,6 +143,11 @@ export function registerIpc(
     }
     return links
   })
+  handle('vault:linkedNote', (p: string) => current().linkedNote(p))
+  handle('vault:linkedPdf', (p: string) => current().linkedPdf(p))
+  handle('vault:setLinkedNote', (p: string, note: string | null) =>
+    current().setLinkedNote(p, note)
+  )
   handle('vault:readAnnotations', (p: string) => current().readAnnotations(p))
   handle('vault:writeAnnotations', (p: string, file: AnnotationFile) =>
     current().writeAnnotations(p, file)
