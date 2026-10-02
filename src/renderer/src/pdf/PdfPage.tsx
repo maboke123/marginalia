@@ -1,0 +1,73 @@
+import { memo, useEffect, useRef } from 'react'
+import { RenderingCancelledException, type PDFDocumentProxy, type RenderTask } from 'pdfjs-dist'
+
+interface Props {
+  pdf: PDFDocumentProxy
+  number: number
+  top: number
+  left: number
+  width: number
+  height: number
+  scale: number
+  /** Only pages near the viewport get a canvas; the rest are empty placeholders. */
+  rendered: boolean
+}
+
+export const PdfPage = memo(function PdfPage(props: Props): React.JSX.Element {
+  const { pdf, number, top, left, width, height, scale, rendered } = props
+  const canvasRef = useRef<HTMLCanvasElement>(null)
+  const renderedScale = useRef<number | null>(null)
+
+  useEffect(() => {
+    if (!rendered) {
+      renderedScale.current = null
+      return
+    }
+    let task: RenderTask | null = null
+    let cancelled = false
+
+    async function draw(): Promise<void> {
+      const page = await pdf.getPage(number)
+      if (cancelled) return
+      const viewport = page.getViewport({ scale: scale * window.devicePixelRatio })
+      // Render off screen and copy when done, so the old image stays visible while zooming
+      // instead of flashing white.
+      const buffer = document.createElement('canvas')
+      buffer.width = Math.floor(viewport.width)
+      buffer.height = Math.floor(viewport.height)
+      task = page.render({ canvas: buffer, viewport })
+      await task.promise
+      const canvas = canvasRef.current
+      if (cancelled || !canvas) return
+      canvas.width = buffer.width
+      canvas.height = buffer.height
+      canvas.getContext('2d')!.drawImage(buffer, 0, 0)
+      renderedScale.current = scale
+    }
+
+    // While zooming, scale changes on every wheel step; only re-render once it settles.
+    const delay = renderedScale.current === null ? 0 : 150
+    const timer = setTimeout(() => {
+      draw().catch((err) => {
+        if (!(err instanceof RenderingCancelledException)) console.error(err)
+      })
+    }, delay)
+
+    return () => {
+      cancelled = true
+      clearTimeout(timer)
+      task?.cancel()
+    }
+  }, [pdf, number, scale, rendered])
+
+  return (
+    <div
+      className="pdf-page"
+      data-page={number}
+      style={{ top, left, width, height }}
+      aria-label={`Page ${number}`}
+    >
+      {rendered && <canvas ref={canvasRef} />}
+    </div>
+  )
+})

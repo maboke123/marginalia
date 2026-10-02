@@ -6,6 +6,9 @@
   --bg-active: #d3dfef;
   --bg-input: #ffffff;
   --bg-menu: #ffffff;
+  --bg-canvas: #e9e9e6;
+  --page-bg: #ffffff;
+  --page-border: #d6d6d2;
   --text: #1f1f1e;
   --text-muted: #6e6e6b;
   --border: #e3e3e0;
@@ -43,6 +46,9 @@
     --bg-active: #33435a;
     --bg-input: #1c1c1e;
     --bg-menu: #2a2a2d;
+    --bg-canvas: #141416;
+    --page-bg: #ffffff;
+    --page-border: #000000;
     --text: #e8e8e6;
     --text-muted: #9a9a96;
     --border: #333336;
@@ -388,15 +394,21 @@ h2 {
 /* Workspace */
 
 .workspace {
+  display: flex;
+  flex-direction: column;
   flex: 1;
   min-width: 0;
+}
+
+.workspace.padded,
+.workspace.empty {
   padding: 24px 32px;
   overflow: auto;
 }
 
-.workspace.empty {
-  display: flex;
-  align-items: flex-start;
+.workspace.dropping {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
 }
 
 .workspace-header {
@@ -497,4 +509,119 @@ h2 {
 
 .toast-close:hover {
   background: var(--bg-hover);
+}
+
+/* Buttons with text inside toolbars */
+
+.text-button {
+  height: 26px;
+  padding: 0 8px;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  background: transparent;
+  cursor: pointer;
+}
+
+.text-button:hover {
+  background: var(--bg-hover);
+}
+
+.text-button.pressed {
+  border-color: var(--border-strong);
+  background: var(--bg-selected);
+}
+
+/* PDF viewer */
+
+.pdf-viewer {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.pdf-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  height: 40px;
+  padding: 0 12px 0 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.pdf-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font-weight: 600;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.pdf-page-input {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-variant-numeric: tabular-nums;
+}
+
+.pdf-page-input input {
+  width: 44px;
+  height: 24px;
+  padding: 0 6px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--bg-input);
+  color: var(--text);
+  font: inherit;
+  text-align: right;
+  user-select: text;
+}
+
+.pdf-zoom {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.pdf-zoom-level {
+  min-width: 44px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.pdf-zoom .text-button {
+  margin-left: 6px;
+}
+
+.pdf-scroll {
+  flex: 1;
+  overflow: auto;
+  background: var(--bg-canvas);
+}
+
+.pdf-scroll:focus-visible {
+  outline: none;
+}
+
+.pdf-content {
+  position: relative;
+}
+
+.pdf-page {
+  position: absolute;
+  outline: 1px solid var(--page-border);
+  background: var(--page-bg);
+}
+
+.pdf-page canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.pdf-message {
+  padding: 24px 32px;
+  color: var(--text-muted);
 }

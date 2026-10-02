@@ -1,10 +1,17 @@
 import { create } from 'zustand'
 import type { NotebookColor, Position, VaultInfo, VaultNode } from '../../shared/types'
-import { findNode, parentOf, remap } from './lib/tree'
+import { findNode, isFolder, parentOf, remap } from './lib/tree'
 
 const api = window.api.vault
 
 type NewItem = 'notebook' | 'section' | 'page'
+
+/** What the slide viewer shows right now; read by the slide-link hotkey and (later) Claude. */
+export interface PdfView {
+  path: string
+  page: number
+  pageCount: number
+}
 
 const DEFAULT_NAMES: Record<NewItem, string> = {
   notebook: 'New notebook',
@@ -23,6 +30,7 @@ interface AppState {
   activeFile: string | null
   renaming: string | null
   error: string | null
+  pdfView: PdfView | null
 
   init(): Promise<void>
   openVault(root?: string): Promise<void>
@@ -32,12 +40,15 @@ interface AppState {
   openFile(path: string): void
   startRename(path: string | null): void
   showError(message: string | null): void
+  setPdfView(view: PdfView | null): void
 
   create(item: NewItem, parent: string): Promise<void>
   rename(path: string, name: string): Promise<void>
   move(path: string, parent: string, before?: Position): Promise<void>
   trash(path: string): Promise<void>
   setColor(notebook: string, color: NotebookColor | null): Promise<void>
+  /** Without `sources` a file dialog asks for them; without `parent` the current section is used. */
+  importPdfs(sources?: string[], parent?: string): Promise<void>
 }
 
 // Which folders are open is a per-machine convenience, so it lives in localStorage
@@ -101,6 +112,23 @@ export const useApp = create<AppState>((set, get) => {
     await get().refresh()
   }
 
+  /** The folder the user is "in": the selected folder, or the folder of the selected or open page. */
+  function currentFolder(): string | null {
+    const { nodes, selected, activeFile } = get()
+    const node = selected ? findNode(nodes, selected) : null
+    if (node) return isFolder(node) ? node.path : parentOf(node.path)
+    return activeFile ? parentOf(activeFile) : null
+  }
+
+  function expandAncestors(path: string): void {
+    const parts = path.split('/').slice(0, -1)
+    updateExpanded((e) => {
+      const next = { ...e }
+      parts.forEach((_, i) => (next[parts.slice(0, i + 1).join('/')] = true))
+      return next
+    })
+  }
+
   let errorTimer: ReturnType<typeof setTimeout> | undefined
   let initStarted = false
 
@@ -115,6 +143,7 @@ export const useApp = create<AppState>((set, get) => {
     activeFile: null,
     renaming: null,
     error: null,
+    pdfView: null,
 
     async init() {
       // React's StrictMode runs effects twice in development.
@@ -158,6 +187,23 @@ export const useApp = create<AppState>((set, get) => {
       clearTimeout(errorTimer)
       set({ error: message })
       if (message) errorTimer = setTimeout(() => set({ error: null }), 6000)
+    },
+
+    setPdfView: (view) => set({ pdfView: view }),
+
+    async importPdfs(sources, parent) {
+      const target = parent ?? currentFolder()
+      if (!target) {
+        get().showError('Select a notebook or section to import into')
+        return
+      }
+      const files = sources ?? (await attempt(() => api.pickPdfs()))
+      if (!files?.length) return
+      const imported = await attempt(() => api.importPdfs(target, files))
+      if (!imported?.length) return
+      await get().refresh()
+      expandAncestors(imported[0])
+      get().openFile(imported[0])
     },
 
     async create(item, parent) {
