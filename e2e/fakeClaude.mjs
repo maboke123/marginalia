@@ -86,7 +86,8 @@ export async function history(sessionId) {
 /** The one-off request behind /claude in a note. "slow" waits until it is cancelled. */
 export async function complete(input) {
   await record('complete', { text: input.text, images: input.images.length, question: 'complete' })
-  const ask = /My request at ⟦here⟧: (.*)$/.exec(input.text)?.[1] ?? ''
+  // The request is its own line; instructions may follow it.
+  const ask = /My request at ⟦here⟧: (.*)$/m.exec(input.text)?.[1] ?? ''
   const wait = ask.startsWith('slow') ? 60_000 : ask.startsWith('later') ? 1500 : 400
   await new Promise((resolve, reject) => {
     const timer = setTimeout(resolve, wait)
