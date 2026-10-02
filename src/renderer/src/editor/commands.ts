@@ -184,8 +184,11 @@ function wrap(marker: string): Command {
 function setHeading(view: EditorView, level: number): void {
   const line = view.state.doc.lineAt(view.state.selection.main.head)
   const existing = /^#{1,6}\s+/.exec(line.text)?.[0].length ?? 0
+  const marks = '#'.repeat(level) + ' '
   view.dispatch({
-    changes: { from: line.from, to: line.from + existing, insert: '#'.repeat(level) + ' ' },
+    changes: { from: line.from, to: line.from + existing, insert: marks },
+    // A cursor at the insert point would otherwise stay in front of the new "## ".
+    selection: { anchor: line.to - existing + marks.length },
     userEvent: 'input'
   })
 }

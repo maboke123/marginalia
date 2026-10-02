@@ -138,6 +138,20 @@ test('lecture mode, slide links and snapshots', async () => {
   await page.screenshot({ path: path.join('test-results', 'lecture.png') })
 })
 
+test('a heading from the slash menu leaves the cursor after the hashes', async () => {
+  await fs.writeFile(summaryFile(), '')
+  await openSection()
+  await row('Summary').click()
+  await expect(editor()).toBeFocused()
+
+  await page.keyboard.type('/heading 2')
+  await expect(page.locator('.cm-tooltip-autocomplete')).toContainText('Heading 2')
+  await page.waitForTimeout(150)
+  await page.keyboard.press('Enter')
+  await page.keyboard.type('Pruning')
+  await expect.poll(readSummary).toBe('## Pruning')
+})
+
 test('picks up changes made outside the app', async () => {
   await fs.writeFile(summaryFile(), '# Before\n')
   await openSection()
