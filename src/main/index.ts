@@ -5,6 +5,9 @@ import { registerIpc } from './ipc'
 
 let mainWindow: BrowserWindow | null = null
 
+// UI tests run while I use other apps: their window opens off screen and never takes focus.
+const offscreen = process.env['MARGINALIA_OFFSCREEN'] === '1'
+
 function createWindow(): void {
   const win = new BrowserWindow({
     width: 1280,
@@ -12,6 +15,7 @@ function createWindow(): void {
     minWidth: 720,
     minHeight: 480,
     show: false,
+    ...(offscreen ? { x: -20000, y: 0, skipTaskbar: true } : {}),
     // Matches --bg in the renderer so the window does not flash white on start.
     backgroundColor: nativeTheme.shouldUseDarkColors ? '#1c1c1e' : '#ffffff',
     webPreferences: {
@@ -23,7 +27,7 @@ function createWindow(): void {
   })
   mainWindow = win
 
-  win.on('ready-to-show', () => win.show())
+  win.on('ready-to-show', () => (offscreen ? win.showInactive() : win.show()))
   win.on('closed', () => (mainWindow = null))
 
   // Give the renderer a moment to save annotations still waiting for their autosave.

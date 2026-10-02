@@ -25,9 +25,11 @@ export async function createEnv(): Promise<TestEnv> {
 export async function launch(env: TestEnv): Promise<{ app: ElectronApplication; page: Page }> {
   // ELECTRON_RUN_AS_NODE is set when this runs from inside VS Code; it would start Electron as plain Node.
   const vars = Object.fromEntries(
-    Object.entries({ ...process.env, MARGINALIA_USER_DATA: env.userData }).filter(
-      (e): e is [string, string] => e[0] !== 'ELECTRON_RUN_AS_NODE' && e[1] !== undefined
-    )
+    Object.entries({
+      ...process.env,
+      MARGINALIA_USER_DATA: env.userData,
+      MARGINALIA_OFFSCREEN: process.env.MARGINALIA_SHOW_WINDOW ? '0' : '1'
+    }).filter((e): e is [string, string] => e[0] !== 'ELECTRON_RUN_AS_NODE' && e[1] !== undefined)
   )
   const app = await electron.launch({ args: ['.'], env: vars })
   const page = await app.firstWindow()
