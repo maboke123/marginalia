@@ -49,6 +49,22 @@ const api: MarginaliaApi = {
     pending: () => invoke('search:pending'),
     storePdf: (path, stamp, pages) => invoke('search:storePdf', path, stamp, pages)
   },
+  terminal: {
+    start: (cols, rows) => invoke('terminal:start', cols, rows),
+    stop: () => invoke('terminal:stop'),
+    input: (data) => ipcRenderer.send('terminal:input', data),
+    resize: (cols, rows) => ipcRenderer.send('terminal:resize', cols, rows),
+    onData: (listener) => {
+      const handler = (_e: unknown, data: string): void => listener(data)
+      ipcRenderer.on('terminal:data', handler)
+      return () => ipcRenderer.removeListener('terminal:data', handler)
+    },
+    onExit: (listener) => {
+      const handler = (_e: unknown, code: number): void => listener(code)
+      ipcRenderer.on('terminal:exit', handler)
+      return () => ipcRenderer.removeListener('terminal:exit', handler)
+    }
+  },
   claude: {
     settings: () => invoke('claude:settings'),
     setSettings: (update) => invoke('claude:setSettings', update),

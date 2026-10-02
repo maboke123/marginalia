@@ -1,8 +1,7 @@
 import type { Options, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
-import { app } from 'electron'
-import path from 'path'
 import type { ChatEvent, ChatImage } from '../../shared/claude'
 import type { StoredClaudeSettings } from '../config'
+import { claudeEnvironment, claudeExecutable } from './cli'
 import { toChatEvents, type StreamState } from './events'
 import { SYSTEM_APPEND } from './prompt'
 import { APP_TOOLS, appToolServer, type CallTool } from './tools'
@@ -26,36 +25,6 @@ export type Agent = (input: AgentInput) => AsyncIterable<ChatEvent>
 
 const READ_TOOLS = ['Read', 'Glob', 'Grep']
 const WEB_TOOLS = ['WebSearch', 'WebFetch']
-
-/**
- * In the installed app the SDK sits inside app.asar, where Windows cannot start an .exe.
- * electron-builder unpacks the CLI binary (asarUnpack); point the SDK at that copy.
- */
-function cliPath(): string | undefined {
-  if (!app.isPackaged) return undefined
-  const pkg = `claude-agent-sdk-${process.platform}-${process.arch}`
-  return path.join(
-    process.resourcesPath,
-    'app.asar.unpacked/node_modules/@anthropic-ai',
-    pkg,
-    process.platform === 'win32' ? 'claude.exe' : 'claude'
-  )
-}
-
-function environment(apiKey: string | null): Record<string, string | undefined> {
-  const env: Record<string, string | undefined> = {
-    ...process.env,
-    CLAUDE_AGENT_SDK_CLIENT_APP: `marginalia-poc/${app.getVersion()}`
-  }
-  // Set when the app is started from a Claude Code terminal; the CLI would think it is nested.
-  delete env.CLAUDECODE
-  delete env.ELECTRON_RUN_AS_NODE
-  // A key in the environment would silently switch billing from the subscription to the API.
-  // Only a key entered in the app's settings is used.
-  if (apiKey) env.ANTHROPIC_API_KEY = apiKey
-  else delete env.ANTHROPIC_API_KEY
-  return env
-}
 
 async function* oneMessage(text: string, images: ChatImage[]): AsyncIterable<SDKUserMessage> {
   yield {
@@ -112,8 +81,8 @@ export const claudeAgent: Agent = async function* (input) {
           },
     includePartialMessages: true,
     abortController,
-    env: environment(input.apiKey),
-    pathToClaudeCodeExecutable: cliPath()
+    env: claudeEnvironment(input.apiKey),
+    pathToClaudeCodeExecutable: claudeExecutable()
   }
 
   const query = sdk.query({ prompt: oneMessage(input.text, input.images), options })

@@ -2000,3 +2000,40 @@ h2 {
   color: var(--danger);
   font-size: 12px;
 }
+
+/* Claude panel: terminal tab */
+
+.claude-tabs {
+  display: flex;
+  gap: 2px;
+}
+
+.claude-terminal-tab {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.claude-terminal-tab[hidden] {
+  display: none;
+}
+
+.claude-terminal {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  padding: 6px 0 6px 12px;
+}
+
+.claude-terminal-screen {
+  flex: 1;
+  min-height: 0;
+}
+
+.claude-terminal-ended {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 4px 2px;
+}

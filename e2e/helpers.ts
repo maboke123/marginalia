@@ -25,7 +25,10 @@ export async function createEnv(): Promise<TestEnv> {
 /** Where the fake agent writes what it received, per session. */
 export const fakeLog = (env: TestEnv): string => path.join(env.dir, 'claude-log.json')
 
-export async function launch(env: TestEnv): Promise<{ app: ElectronApplication; page: Page }> {
+export async function launch(
+  env: TestEnv,
+  extra: Record<string, string> = {}
+): Promise<{ app: ElectronApplication; page: Page }> {
   // ELECTRON_RUN_AS_NODE is set when this runs from inside VS Code; it would start Electron as plain Node.
   const vars = Object.fromEntries(
     Object.entries({
@@ -34,7 +37,8 @@ export async function launch(env: TestEnv): Promise<{ app: ElectronApplication; 
       MARGINALIA_OFFSCREEN: process.env.MARGINALIA_SHOW_WINDOW ? '0' : '1',
       // Tests never talk to the real Claude: a scripted agent answers instead.
       MARGINALIA_FAKE_CLAUDE: path.resolve('e2e/fakeClaude.mjs'),
-      MARGINALIA_FAKE_LOG: fakeLog(env)
+      MARGINALIA_FAKE_LOG: fakeLog(env),
+      ...extra
     }).filter((e): e is [string, string] => e[0] !== 'ELECTRON_RUN_AS_NODE' && e[1] !== undefined)
   )
   const app = await electron.launch({ args: ['.'], env: vars })

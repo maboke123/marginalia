@@ -97,6 +97,15 @@ export interface MarginaliaApi {
     pending(): Promise<PdfToIndex[]>
     storePdf(path: string, stamp: string, pages: string[]): Promise<void>
   }
+  terminal: {
+    /** Starts the CLI in the vault folder, or attaches to the running one (with its output). */
+    start(cols: number, rows: number): Promise<TerminalSession>
+    stop(): Promise<void>
+    input(data: string): void
+    resize(cols: number, rows: number): void
+    onData(listener: (data: string) => void): () => void
+    onExit(listener: (code: number) => void): () => void
+  }
   claude: {
     settings(): Promise<ClaudeSettings>
     setSettings(update: ClaudeSettingsUpdate): Promise<ClaudeSettings>
@@ -119,6 +128,11 @@ export interface MarginaliaApi {
     /** Absolute path of a file dropped from Explorer. */
     pathFor(file: File): string
   }
+}
+
+export interface TerminalSession {
+  /** Recent output of a session that was already running, to redraw the screen. */
+  output: string
 }
 
 export interface ExportedPdf {

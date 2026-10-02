@@ -11,12 +11,12 @@ import type {
 } from '../../shared/claude'
 import { claudeSettings, type ConfigStore } from '../config'
 import { VaultError } from '../vault/names'
+import type { Handle } from '../ipc'
 import type { Vault } from '../vault/vault'
 import { claudeAgent, type Agent } from './agent'
+import { storedApiKey } from './cli'
 import { toHistory } from './events'
 import type { CallTool } from './tools'
-
-type Handle = <A extends unknown[], R>(channel: string, fn: (...args: A) => R | Promise<R>) => void
 
 /** UI tests load a scripted agent instead, so they never use the real Claude. */
 interface AgentModule {
@@ -76,15 +76,6 @@ export function registerClaude(
     return { ...claude, hasApiKey: !!apiKey }
   }
 
-  function decryptKey(stored: string | null): string | null {
-    if (!stored) return null
-    try {
-      return safeStorage.decryptString(Buffer.from(stored, 'base64'))
-    } catch {
-      throw new VaultError('The stored API key cannot be read on this account; enter it again')
-    }
-  }
-
   handle('claude:settings', settings)
 
   handle('claude:setSettings', async (update: ClaudeSettingsUpdate) => {
@@ -115,7 +106,8 @@ export function registerClaude(
 
     try {
       const { agent } = await agentModule
-      const { claude, apiKey } = await config.read()
+      const { claude } = await config.read()
+      const apiKey = await storedApiKey(config)
       let sessionId = await v.chatSession(request.chat)
       for (let attempt = 0; attempt < 2; attempt++) {
         let done: ChatEvent | null = null
@@ -126,7 +118,7 @@ export function registerClaude(
           images: request.images,
           sessionId,
           settings: claude,
-          apiKey: decryptKey(apiKey),
+          apiKey,
           callTool,
           signal: controller.signal,
           onSession: (id) => void v.setChatSession(request.chat, id).catch(console.error)

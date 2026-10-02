@@ -8,6 +8,7 @@ import { findNode } from '../lib/tree'
 import { useApp } from '../store'
 import { chatOf, useChat, type Message, type Part } from './chat'
 import { currentChips } from './context'
+import { TerminalView } from './TerminalView'
 
 const HEIGHT_KEY = 'claude-height'
 const EMPTY: Message[] = []
@@ -64,6 +65,9 @@ export function ClaudePanel(): React.JSX.Element {
   const running = useChat((s) => s.running)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [height, setHeight] = useState(loadHeight)
+  const [tab, setTab] = useState<'chat' | 'terminal'>('chat')
+  // Mounted on first use and then kept, so switching tabs does not clear its screen.
+  const [terminalUsed, setTerminalUsed] = useState(false)
 
   useEffect(() => {
     void useChat.getState().load(chat)
@@ -100,21 +104,41 @@ export function ClaudePanel(): React.JSX.Element {
       <div className="claude-resize" role="separator" onPointerDown={startResize} />
       <header className="claude-header">
         <span className="claude-title">Claude</span>
-        <span className="muted claude-chat-name" title={chat || vaultName}>
-          {title}
-        </span>
+        <div className="claude-tabs" role="tablist">
+          {(['chat', 'terminal'] as const).map((t) => (
+            <button
+              key={t}
+              role="tab"
+              aria-selected={tab === t}
+              className={tab === t ? 'text-button pressed' : 'text-button'}
+              onClick={() => {
+                setTab(t)
+                if (t === 'terminal') setTerminalUsed(true)
+              }}
+            >
+              {t === 'chat' ? 'Chat' : 'Terminal'}
+            </button>
+          ))}
+        </div>
+        {tab === 'chat' && (
+          <span className="muted claude-chat-name" title={chat || vaultName}>
+            {title}
+          </span>
+        )}
         <span className="spacer" />
-        <button
-          className="text-button"
-          disabled={running === chat}
-          onClick={() => void useChat.getState().newChat(chat)}
-        >
-          New chat
-        </button>
+        {tab === 'chat' && (
+          <button
+            className="text-button"
+            disabled={running === chat}
+            onClick={() => void useChat.getState().newChat(chat)}
+          >
+            New chat
+          </button>
+        )}
         <button
           className={settingsOpen ? 'icon-button pressed' : 'icon-button'}
-          title="Settings"
-          aria-label="Settings"
+          title="Claude settings"
+          aria-label="Claude settings"
           aria-pressed={settingsOpen}
           onClick={() => setSettingsOpen((open) => !open)}
         >
@@ -129,13 +153,17 @@ export function ClaudePanel(): React.JSX.Element {
           <Icon name="close" />
         </button>
       </header>
-      {settingsOpen ? (
-        <SettingsView onDone={() => setSettingsOpen(false)} />
-      ) : (
+      {settingsOpen && <SettingsView onDone={() => setSettingsOpen(false)} />}
+      {!settingsOpen && tab === 'chat' && (
         <>
           <MessageList messages={messages} running={running === chat} />
           <ChatInput chat={chat} busy={running !== null} />
         </>
+      )}
+      {terminalUsed && (
+        <div className="claude-terminal-tab" hidden={settingsOpen || tab !== 'terminal'}>
+          <TerminalView />
+        </div>
       )}
     </section>
   )

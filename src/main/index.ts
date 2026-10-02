@@ -4,6 +4,7 @@ import { pathToFileURL } from 'url'
 import { ConfigStore } from './config'
 import { registerClaude } from './claude/service'
 import { handle, registerIpc } from './ipc'
+import { registerTerminal } from './terminal'
 
 let mainWindow: BrowserWindow | null = null
 
@@ -88,6 +89,7 @@ app.whenReady().then(async () => {
   nativeTheme.themeSource = (await config.read()).settings.theme
   const currentVault = registerIpc(() => mainWindow, config, app.getPath('userData'))
   registerClaude(handle, () => mainWindow, config, currentVault)
+  registerTerminal(handle, () => mainWindow, config, currentVault)
   protocol.handle('vault', (request) => {
     const vault = currentVault()
     if (!vault) return new Response('No vault open', { status: 404 })

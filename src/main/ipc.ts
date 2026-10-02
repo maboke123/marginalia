@@ -13,6 +13,11 @@ import { VaultError } from './vault/names'
 import { Vault } from './vault/vault'
 import { watchVault } from './vault/watcher'
 
+export type Handle = <A extends unknown[], R>(
+  channel: string,
+  fn: (...args: A) => R | Promise<R>
+) => void
+
 // ipcMain.handle mangles thrown errors into "Error invoking remote method ...",
 // so errors travel as plain values and the preload rethrows them.
 export function handle<A extends unknown[], R>(
@@ -52,6 +57,7 @@ export function registerIpc(
     search = new SearchIndex(vault, path.join(dataDir, 'search', `${id}.json`))
     stopWatching = watchVault(root, () => getWindow()?.webContents.send('vault:changed'))
     await config.addRecentVault(root)
+    ipcMain.emit('vault:opened')
     return info(root)
   }
 
