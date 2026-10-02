@@ -8,13 +8,13 @@ export const ORDER_FILE = '_order.json'
 export const SIDECAR_SUFFIX = '.annotations.json'
 export const ASSETS_DIR = 'assets'
 
-const INVALID_CHARS = /[<>:"/\\|?*\u0000-\u001f]/
+const INVALID_CHARS = /[<>:"/\\|?*]/
 const RESERVED = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(\..*)?$/i
 
 export function validateName(name: string): string {
   const trimmed = name.trim()
   if (!trimmed) throw new VaultError('Name cannot be empty')
-  if (INVALID_CHARS.test(trimmed)) {
+  if (INVALID_CHARS.test(trimmed) || [...trimmed].some((c) => c.charCodeAt(0) < 32)) {
     throw new VaultError('Name cannot contain any of these characters: < > : " / \\ | ? *')
   }
   if (trimmed.endsWith('.')) throw new VaultError('Name cannot end with a dot')
