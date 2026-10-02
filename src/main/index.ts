@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Menu, nativeTheme, shell } from 'electron'
+import { app, BrowserWindow, ipcMain, Menu, nativeTheme, shell } from 'electron'
 import path from 'path'
 import { ConfigStore } from './config'
 import { registerIpc } from './ipc'
@@ -25,6 +25,24 @@ function createWindow(): void {
 
   win.on('ready-to-show', () => win.show())
   win.on('closed', () => (mainWindow = null))
+
+  // Give the renderer a moment to save annotations still waiting for their autosave.
+  let canClose = false
+  let closing = false
+  const close = (): void => {
+    canClose = true
+    if (!win.isDestroyed()) win.close()
+  }
+  win.on('close', (event) => {
+    if (canClose) return
+    event.preventDefault()
+    if (closing) return
+    closing = true
+    win.webContents.send('app:before-close')
+    ipcMain.once('app:ready-to-close', close)
+    // A renderer that hangs must not keep the window open forever.
+    setTimeout(close, 3000)
+  })
 
   win.webContents.setWindowOpenHandler(({ url }) => {
     if (/^https?:\/\//.test(url)) shell.openExternal(url)

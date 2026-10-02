@@ -26,11 +26,21 @@ const api: MarginaliaApi = {
     readFile: (path) => invoke('vault:readFile', path),
     lastPage: (path) => invoke('vault:lastPage', path),
     setLastPage: (path, page) => invoke('vault:setLastPage', path, page),
+    readAnnotations: (pdf) => invoke('vault:readAnnotations', pdf),
+    writeAnnotations: (pdf, file) => invoke('vault:writeAnnotations', pdf, file),
     onChanged: (listener) => {
       const handler = (): void => listener()
       ipcRenderer.on('vault:changed', handler)
       return () => ipcRenderer.removeListener('vault:changed', handler)
     }
+  },
+  app: {
+    onBeforeClose: (listener) => {
+      const handler = (): void => listener()
+      ipcRenderer.on('app:before-close', handler)
+      return () => ipcRenderer.removeListener('app:before-close', handler)
+    },
+    readyToClose: () => ipcRenderer.send('app:ready-to-close')
   },
   files: {
     pathFor: (file) => webUtils.getPathForFile(file)

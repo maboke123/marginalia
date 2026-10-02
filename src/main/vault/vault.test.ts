@@ -2,6 +2,7 @@ import { promises as fs } from 'fs'
 import os from 'os'
 import path from 'path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import type { AnnotationFile } from '../../shared/annotations'
 import type { VaultNode } from '../../shared/types'
 import { writeFileAtomic } from './atomic'
 import { resolveInVault, validateName } from './names'
@@ -338,6 +339,85 @@ describe('last page', () => {
     expect(await vault.lastPage('ML/b.pdf')).toBe(2)
     expect(await vault.lastPage('ML/c.pdf')).toBe(3)
     expect((await vault.tree()).colors).toEqual({ ML: 'green' })
+  })
+})
+
+describe('annotations', () => {
+  const file: AnnotationFile = {
+    version: 1,
+    pdf: 'slides.pdf',
+    pdfSha256: '',
+    marginWidth: 0.6,
+    pages: {
+      '12': {
+        strokes: [
+          {
+            id: 's_01',
+            tool: 'pen',
+            color: '#1f6feb',
+            width: 1.5,
+            points: [
+              [412.1, 88, 0.52],
+              [413, 90.2, 0.55]
+            ],
+            author: 'me'
+          }
+        ],
+        highlights: [],
+        textBoxes: [
+          {
+            id: 't_01',
+            x: 620,
+            y: 96,
+            width: 220,
+            markdown: 'weighted average! $\\frac{|S_i|}{|S|}$',
+            author: 'claude'
+          }
+        ]
+      }
+    }
+  }
+
+  it('saves next to the PDF and reads back the same data', async () => {
+    await write('ML/slides.pdf', 'pdf bytes')
+
+    const empty = await vault.readAnnotations('ML/slides.pdf')
+    expect(empty.file).toBeNull()
+    expect(empty.pdfSha256).toMatch(/^[0-9a-f]{64}$/)
+
+    await vault.writeAnnotations('ML/slides.pdf', { ...file, pdfSha256: empty.pdfSha256 })
+    const loaded = await vault.readAnnotations('ML/slides.pdf')
+    expect(loaded.file).toEqual({ ...file, pdfSha256: empty.pdfSha256 })
+    expect(await list('ML')).toEqual(['slides.pdf', 'slides.pdf.annotations.json'])
+  })
+
+  it('keeps point arrays on one line', async () => {
+    await write('ML/slides.pdf')
+    await vault.writeAnnotations('ML/slides.pdf', file)
+
+    const text = await fs.readFile(path.join(root, 'ML/slides.pdf.annotations.json'), 'utf8')
+    expect(text).toContain('"points": [[412.1,88,0.52],[413,90.2,0.55]]')
+  })
+
+  it('reports a replaced PDF through a different hash', async () => {
+    await write('ML/slides.pdf', 'version 1')
+    const before = (await vault.readAnnotations('ML/slides.pdf')).pdfSha256
+    await write('ML/slides.pdf', 'version 2')
+
+    expect((await vault.readAnnotations('ML/slides.pdf')).pdfSha256).not.toBe(before)
+  })
+
+  it('refuses a damaged sidecar instead of treating it as empty', async () => {
+    await write('ML/slides.pdf')
+    await write('ML/slides.pdf.annotations.json', '{"version":1,"pages":')
+
+    await expect(vault.readAnnotations('ML/slides.pdf')).rejects.toThrow('damaged')
+    await expect(
+      vault.writeAnnotations('ML/slides.pdf', { pages: 'nope' } as unknown as AnnotationFile)
+    ).rejects.toThrow('invalid')
+    expect(await fs.readFile(path.join(root, 'ML/slides.pdf.annotations.json'), 'utf8')).toBe(
+      '{"version":1,"pages":'
+    )
   })
 })
 

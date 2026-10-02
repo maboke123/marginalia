@@ -1,5 +1,7 @@
 export type NodeKind = 'notebook' | 'section' | 'markdown' | 'pdf'
 
+import type { AnnotationFile, LoadedAnnotations } from './annotations'
+
 export interface VaultNode {
   /** File or folder name on disk, including extension. */
   name: string
@@ -62,7 +64,14 @@ export interface MarginaliaApi {
     readFile(path: string): Promise<Uint8Array>
     lastPage(path: string): Promise<number | null>
     setLastPage(path: string, page: number): Promise<void>
+    readAnnotations(pdf: string): Promise<LoadedAnnotations>
+    writeAnnotations(pdf: string, file: AnnotationFile): Promise<void>
     onChanged(listener: () => void): () => void
+  }
+  app: {
+    /** The window is about to close; save everything, then call readyToClose(). */
+    onBeforeClose(listener: () => void): () => void
+    readyToClose(): void
   }
   files: {
     /** Absolute path of a file dropped from Explorer. */

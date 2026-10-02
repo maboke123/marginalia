@@ -1,6 +1,8 @@
 import { constants as fsConstants, promises as fs } from 'fs'
 import path from 'path'
+import type { AnnotationFile, LoadedAnnotations } from '../../shared/annotations'
 import type { NotebookColor, Position, VaultNode, VaultTree } from '../../shared/types'
+import { formatAnnotations, isAnnotationFile, sha256File } from './annotations'
 import { renameWithRetry, tempPathFor, writeFileAtomic } from './atomic'
 import {
   DATA_DIR,
@@ -172,6 +174,37 @@ export class Vault {
     return fs.readFile(abs)
   }
 
+  async readAnnotations(rel: string): Promise<LoadedAnnotations> {
+    const abs = await this.existingPdf(rel)
+    const [pdfSha256, text] = await Promise.all([
+      sha256File(abs),
+      fs.readFile(abs + SIDECAR_SUFFIX, 'utf8').catch((err: NodeJS.ErrnoException) => {
+        if (err.code === 'ENOENT') return null
+        throw err
+      })
+    ])
+    if (text === null) return { file: null, pdfSha256 }
+    let parsed: unknown
+    try {
+      parsed = JSON.parse(text)
+    } catch {
+      parsed = null
+    }
+    // The app then shows the PDF read-only, so the file is never overwritten.
+    if (!isAnnotationFile(parsed)) {
+      throw new VaultError(
+        `${path.basename(abs)}${SIDECAR_SUFFIX} is damaged, so annotations are off`
+      )
+    }
+    return { file: parsed, pdfSha256 }
+  }
+
+  async writeAnnotations(rel: string, file: AnnotationFile): Promise<void> {
+    const abs = await this.existingPdf(rel)
+    if (!isAnnotationFile(file)) throw new VaultError('Refusing to save invalid annotations')
+    await writeFileAtomic(abs + SIDECAR_SUFFIX, formatAnnotations(file) + '\n')
+  }
+
   async lastPage(rel: string): Promise<number | null> {
     const state = await this.readData<VaultState>(STATE_FILE)
     return state.lastPage?.[toRel(this.root, this.resolveItem(rel))] ?? null
@@ -281,6 +314,13 @@ export class Vault {
       await renameWithRetry(to, from)
       throw err
     }
+  }
+
+  private async existingPdf(rel: string): Promise<string> {
+    const abs = this.resolveItem(rel)
+    const stat = await fs.stat(abs).catch(() => null)
+    if (!isPdf(abs) || !stat?.isFile()) throw new VaultError(`"${rel}" is not a PDF in this vault`)
+    return abs
   }
 
   private resolveItem(rel: string): string {

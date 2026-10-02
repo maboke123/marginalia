@@ -1,6 +1,7 @@
 import { BrowserWindow, dialog, ipcMain, shell } from 'electron'
 import { promises as fs } from 'fs'
 import path from 'path'
+import type { AnnotationFile } from '../shared/annotations'
 import type { IpcResult, NotebookColor, Position, VaultInfo } from '../shared/types'
 import { ConfigStore } from './config'
 import { VaultError } from './vault/names'
@@ -73,6 +74,10 @@ export function registerIpc(getWindow: () => BrowserWindow | null, config: Confi
   handle('vault:readFile', (p: string) => current().readFile(p))
   handle('vault:lastPage', (p: string) => current().lastPage(p))
   handle('vault:setLastPage', (p: string, page: number) => current().setLastPage(p, page))
+  handle('vault:readAnnotations', (p: string) => current().readAnnotations(p))
+  handle('vault:writeAnnotations', (p: string, file: AnnotationFile) =>
+    current().writeAnnotations(p, file)
+  )
 
   handle('vault:pickPdfs', async () => {
     const win = getWindow()
