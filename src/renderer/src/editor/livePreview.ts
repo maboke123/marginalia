@@ -133,10 +133,16 @@ function inlineDecorations(view: EditorView): DecorationSet {
             return false
 
           case 'InlineMath': {
-            if (selectionTouches(state, node.from, node.to)) {
+            const mark = node.node.firstChild
+            const size = mark ? mark.to - mark.from : 1
+            // CodeMirror cannot replace text across a line break with an inline widget.
+            const oneLine = state.doc.lineAt(node.from).number === state.doc.lineAt(node.to).number
+            if (!oneLine || selectionTouches(state, node.from, node.to)) {
               decos.push(Decoration.mark({ class: 'cm-math-source' }).range(node.from, node.to))
             } else {
-              const widget = new MathWidget(mathSource(state, node, 1), false)
+              const tex = mathSource(state, node, size)
+              // $$x$$ inside a line: display style, still inline so the line stays one line.
+              const widget = new MathWidget(size === 2 ? `\\displaystyle ${tex}` : tex, false)
               decos.push(Decoration.replace({ widget }).range(node.from, node.to))
             }
             return false

@@ -3,6 +3,7 @@ import type { MarkdownConfig } from '@lezer/markdown'
 const DOLLAR = 36
 const BACKSLASH = 92
 const SPACE = 32
+const NEWLINE = 10
 
 /**
  * $inline$ and $$display$$ math for the Markdown parser, following Obsidian (and Pandoc):
@@ -53,15 +54,30 @@ export const mathSyntax: MarkdownConfig = {
       name: 'InlineMath',
       before: 'Emphasis',
       parse(cx, next, pos) {
-        if (next !== DOLLAR || cx.char(pos + 1) === DOLLAR) return -1
-        const first = cx.char(pos + 1)
-        if (first === SPACE || first < 0) return -1
+        if (next !== DOLLAR) return -1
+        // $$x$$ inside a line is display math written inline; it may have spaces inside.
+        const double = cx.char(pos + 1) === DOLLAR
+        const open = double ? 2 : 1
+        const first = cx.char(pos + open)
+        if (first < 0 || first === NEWLINE || first === DOLLAR || (!double && first === SPACE)) {
+          return -1
+        }
         const end = cx.offset + cx.text.length
-        for (let i = pos + 1; i < end; i++) {
+        for (let i = pos + open; i < end; i++) {
           const c = cx.char(i)
+          // Never across a line break: CodeMirror cannot draw a widget over one, and a lone
+          // $ at the end of a line would otherwise pair with one on the next line.
+          if (c === NEWLINE) return -1
           if (c === BACKSLASH) {
             i++
-          } else if (c === DOLLAR && i > pos + 1 && cx.char(i - 1) !== SPACE) {
+          } else if (double && c === DOLLAR && cx.char(i + 1) === DOLLAR && i > pos + 2) {
+            return cx.addElement(
+              cx.elt('InlineMath', pos, i + 2, [
+                cx.elt('MathMark', pos, pos + 2),
+                cx.elt('MathMark', i, i + 2)
+              ])
+            )
+          } else if (!double && c === DOLLAR && i > pos + 1 && cx.char(i - 1) !== SPACE) {
             return cx.addElement(
               cx.elt('InlineMath', pos, i + 1, [
                 cx.elt('MathMark', pos, pos + 1),

@@ -21,6 +21,18 @@ describe('math syntax', () => {
     expect(nodes('escaped \\$ and $a \\$ b$', 'InlineMath')).toEqual(['$a \\$ b$'])
   })
 
+  it('finds $$display$$ math in the middle of a line, without a stray $', () => {
+    expect(nodes('A: $$x_{k+1} = x_k$$ and more', 'InlineMath')).toEqual(['$$x_{k+1} = x_k$$'])
+    expect(nodes('A: $$ x $$ too', 'InlineMath')).toEqual(['$$ x $$'])
+    expect(nodes('A: $$x$$\nB: $y$', 'InlineMath')).toEqual(['$$x$$', '$y$'])
+  })
+
+  it('never runs inline math across a line break', () => {
+    // A lone $ at the end of a line must not pair with a $ on the next line.
+    expect(nodes('total $\nB: costs $5$ now', 'InlineMath')).toEqual(['$5$'])
+    expect(nodes('A: $$x\nB: y$$', 'InlineMath')).toEqual([])
+  })
+
   it('keeps emphasis markers inside math as math', () => {
     expect(nodes('$a*b*c$', 'Emphasis')).toEqual([])
   })
