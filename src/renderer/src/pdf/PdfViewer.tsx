@@ -371,66 +371,74 @@ function Document({
     <div className="pdf-viewer" ref={viewerRef}>
       <div className="pdf-toolbar">
         <AnnotationToolbar doc={activeDoc} pageWidth={(n) => sizes[n - 1].width} />
-        <span className="pdf-title">{title}</span>
-        <PageInput page={page} count={sizes.length} onGo={goTo} />
-        <select
-          className="toolbar-select"
-          title="Width of the margin next to each slide"
-          aria-label="Margin"
-          value={margin}
-          disabled={!activeDoc}
-          onChange={(e) => setMargin(Number(e.target.value))}
-        >
-          {MARGIN_WIDTHS.map((m) => (
-            <option key={m.value} value={m.value}>
-              {m.name} margin
-            </option>
-          ))}
-        </select>
-        <div className="pdf-zoom">
+        <span className="pdf-title" title={title}>
+          {title}
+        </span>
+        {/* One group, so a narrow pane moves it to a second line in one piece. */}
+        <div className="pdf-view-controls">
+          <PageInput page={page} count={sizes.length} onGo={goTo} />
+          <select
+            className="toolbar-select"
+            title="Width of the margin next to each slide"
+            aria-label="Margin"
+            value={margin}
+            disabled={!activeDoc}
+            onChange={(e) => setMargin(Number(e.target.value))}
+          >
+            {MARGIN_WIDTHS.map((m) => (
+              <option key={m.value} value={m.value}>
+                {m.name}
+              </option>
+            ))}
+          </select>
+          <div className="pdf-zoom">
+            <button
+              className="icon-button"
+              title="Zoom out (Ctrl+-)"
+              aria-label="Zoom out"
+              onClick={() => zoomTo(stepZoom(scale, -1))}
+            >
+              <Icon name="minus" />
+            </button>
+            <span className="pdf-zoom-level">{Math.round(scale * 100)}%</span>
+            <button
+              className="icon-button"
+              title="Zoom in (Ctrl+=)"
+              aria-label="Zoom in"
+              onClick={() => zoomTo(stepZoom(scale, 1))}
+            >
+              <Icon name="plus" />
+            </button>
+            <button
+              className={zoom === 'fit' ? 'text-button pressed' : 'text-button'}
+              title="Fit width (Ctrl+0)"
+              aria-pressed={zoom === 'fit'}
+              onClick={() => setZoom('fit')}
+            >
+              Fit width
+            </button>
+          </div>
           <button
             className="icon-button"
-            title="Zoom out (Ctrl+-)"
-            aria-label="Zoom out"
-            onClick={() => zoomTo(stepZoom(scale, -1))}
+            title="Export a copy with the annotations drawn in"
+            aria-label="Export annotated PDF"
+            onClick={() => useApp.getState().exportPdf(path)}
           >
-            <Icon name="minus" />
+            <Icon name="export" />
           </button>
-          <span className="pdf-zoom-level">{Math.round(scale * 100)}%</span>
-          <button
-            className="icon-button"
-            title="Zoom in (Ctrl+=)"
-            aria-label="Zoom in"
-            onClick={() => zoomTo(stepZoom(scale, 1))}
-          >
-            <Icon name="plus" />
-          </button>
-          <button
-            className={zoom === 'fit' ? 'text-button pressed' : 'text-button'}
-            title="Fit width (Ctrl+0)"
-            aria-pressed={zoom === 'fit'}
-            onClick={() => setZoom('fit')}
-          >
-            Fit width
-          </button>
+          {/* In lecture mode the note's header has the button, at the window's right edge. */}
+          {!lectureMode && (
+            <button
+              className="icon-button"
+              title={`Lecture mode (${useApp.getState().settings.hotkeys.lecture})`}
+              aria-label="Lecture mode"
+              aria-pressed={false}
+              onClick={() => toggleLecture()}
+            >
+              <Icon name="columns" />
+            </button>
+          )}
         </div>
-        <button
-          className="icon-button"
-          title="Export a copy with the annotations drawn in"
-          aria-label="Export annotated PDF"
-          onClick={() => useApp.getState().exportPdf(path)}
-        >
-          <Icon name="export" />
-        </button>
-        <button
-          className={lectureMode ? 'icon-button pressed' : 'icon-button'}
-          title={`Lecture mode (${useApp.getState().settings.hotkeys.lecture})`}
-          aria-label="Lecture mode"
-          aria-pressed={lectureMode}
-          onClick={() => toggleLecture()}
-        >
-          <Icon name="columns" />
-        </button>
       </div>
 
       {typeof annotations === 'string' && (

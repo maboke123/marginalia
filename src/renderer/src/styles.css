@@ -541,6 +541,7 @@ h2 {
 
 .text-button {
   height: 26px;
+  white-space: nowrap;
   padding: 0 8px;
   border: 1px solid transparent;
   border-radius: var(--radius);
@@ -568,15 +569,24 @@ h2 {
 
 .pdf-toolbar {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 16px;
-  height: 40px;
-  padding: 0 12px 0 16px;
+  gap: 4px 16px;
+  min-height: 40px;
+  padding: 4px 12px 4px 16px;
   border-bottom: 1px solid var(--border);
 }
 
+.pdf-view-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-left: auto;
+  white-space: nowrap;
+}
+
 .pdf-title {
-  flex: 1;
+  flex: 1 1 80px;
   min-width: 0;
   overflow: hidden;
   font-weight: 600;
@@ -586,6 +596,7 @@ h2 {
 
 .pdf-page-input {
   display: flex;
+  white-space: nowrap;
   align-items: center;
   gap: 6px;
   font-variant-numeric: tabular-nums;
@@ -1040,6 +1051,8 @@ h2 {
   flex: 1 1 0;
   flex-direction: column;
   min-width: 0;
+  /* Nothing in one pane may draw over the other. */
+  overflow: hidden;
 }
 
 .lecture-pane:first-child {
