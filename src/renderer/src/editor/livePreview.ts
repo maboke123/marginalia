@@ -8,8 +8,17 @@ import {
   type ViewUpdate
 } from '@codemirror/view'
 import type { SyntaxNodeRef } from '@lezer/common'
+import { colorSpans } from '../../../shared/textColor'
+import { colorBar } from './colorBar'
 import { resolveLink, vaultUrl } from './links'
-import { BulletWidget, ImageWidget, MathWidget, RuleWidget, TableWidget } from './widgets'
+import {
+  BulletWidget,
+  CheckboxWidget,
+  ImageWidget,
+  MathWidget,
+  RuleWidget,
+  TableWidget
+} from './widgets'
 
 /**
  * Obsidian-style live preview: Markdown renders in place, and whatever the cursor is on shows
@@ -118,13 +127,26 @@ function inlineDecorations(view: EditorView): DecorationSet {
 
           case 'ListMark': {
             const bullet = node.node.parent?.parent?.name === 'BulletList'
-            if (bullet && !isActive(node.from)) {
+            if (isActive(node.from)) return
+            if (node.node.parent?.getChild('Task')) {
+              // A task shows only its checkbox, like in Obsidian.
+              const end = state.sliceDoc(node.to, node.to + 1) === ' ' ? node.to + 1 : node.to
+              decos.push(hide.range(node.from, end))
+            } else if (bullet) {
               decos.push(
                 Decoration.replace({ widget: new BulletWidget() }).range(node.from, node.to)
               )
             }
             return
           }
+
+          case 'TaskMarker':
+            if (!isActive(node.from)) {
+              const checked = /x/i.test(state.sliceDoc(node.from, node.to))
+              const widget = new CheckboxWidget(checked)
+              decos.push(Decoration.replace({ widget }).range(node.from, node.to))
+            }
+            return
 
           case 'HorizontalRule':
             if (!isActive(node.from)) {
@@ -184,8 +206,57 @@ function inlineDecorations(view: EditorView): DecorationSet {
         return
       }
     })
+    for (let pos = from; pos <= to;) {
+      const line = state.doc.lineAt(pos)
+      inlineHtml(state, line.from, line.text, decos)
+      pos = line.to + 1
+    }
   }
   return Decoration.set(decos, true)
+}
+
+/**
+ * Coloured text and <u>, the two HTML tags notes may use. The tags stay hidden even on the
+ * line being edited, because they are long; only a cursor inside a tag shows it.
+ */
+function inlineHtml(
+  state: EditorState,
+  lineFrom: number,
+  text: string,
+  decos: Range<Decoration>[]
+): void {
+  if (!text.includes('<')) return
+  const found: { from: number; openTo: number; closeFrom: number; to: number; cls: string }[] =
+    colorSpans(text).map((s) => ({ ...s, cls: `tc-${s.color}` }))
+  for (const m of text.matchAll(/<u>(.*?)<\/u>/gi)) {
+    const to = m.index + m[0].length
+    found.push({ from: m.index, openTo: m.index + 3, closeFrom: to - 4, to, cls: 'cm-underline' })
+  }
+  const tree = syntaxTree(state)
+  // Not in code or math, where the same text is just text.
+  // resolve, not resolveInner: inside a tag the HTML parser is mounted, with its own node names.
+  const isTag = (pos: number): boolean => tree.resolve(lineFrom + pos, 1).name === 'HTMLTag'
+  const cursorIn = (from: number, to: number): boolean =>
+    state.selection.ranges.some(
+      (r) => r.empty && r.head > lineFrom + from && r.head < lineFrom + to
+    )
+  for (const span of found) {
+    if (!isTag(span.from) || !isTag(span.closeFrom)) continue
+    if (!cursorIn(span.from, span.openTo)) {
+      decos.push(hide.range(lineFrom + span.from, lineFrom + span.openTo))
+    }
+    if (!cursorIn(span.closeFrom, span.to)) {
+      decos.push(hide.range(lineFrom + span.closeFrom, lineFrom + span.to))
+    }
+    if (span.closeFrom > span.openTo) {
+      decos.push(
+        Decoration.mark({ class: span.cls }).range(
+          lineFrom + span.openTo,
+          lineFrom + span.closeFrom
+        )
+      )
+    }
+  }
 }
 
 const inlinePreview = ViewPlugin.fromClass(
@@ -207,7 +278,21 @@ const inlinePreview = ViewPlugin.fromClass(
       }
     }
   },
-  { decorations: (plugin) => plugin.decorations }
+  {
+    decorations: (plugin) => plugin.decorations,
+    eventHandlers: {
+      mousedown(event, view) {
+        const box = (event.target as HTMLElement).closest('.cm-task')
+        if (!box || event.button !== 0) return false
+        event.preventDefault()
+        // The widget replaces "[ ]": the character after "[" is the mark.
+        const at = view.posAtDOM(box) + 1
+        const done = view.state.sliceDoc(at, at + 1) !== ' '
+        view.dispatch({ changes: { from: at, to: at + 1, insert: done ? ' ' : 'x' } })
+        return true
+      }
+    }
+  }
 )
 
 function blockDecorations(state: EditorState): DecorationSet {
@@ -254,4 +339,4 @@ const blockPreview = StateField.define<DecorationSet>({
   provide: (field) => EditorView.decorations.from(field)
 })
 
-export const livePreview = [inlinePreview, blockPreview]
+export const livePreview = [inlinePreview, blockPreview, colorBar]

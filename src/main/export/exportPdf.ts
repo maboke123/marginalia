@@ -103,7 +103,7 @@ function drawTextBox(
 ): void {
   const size = box.fontSize ?? TEXT_SIZES[1].value * pageUnit(pageWidth)
   const lines = wrap(markdownToText(box.markdown), fonts, size, box.width - 2 * PADDING_X)
-  const color = hex(lib, PAPER_TEXT)
+  const color = hex(lib, box.color && /^#[0-9a-f]{6}$/i.test(box.color) ? box.color : PAPER_TEXT)
   lines.forEach((line, i) => {
     const top = box.y + PADDING_TOP + i * size * LINE_HEIGHT
     // Baseline about 0.8 em below the top of the line box, as in the browser.

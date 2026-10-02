@@ -36,6 +36,8 @@ export interface TextBox {
   width: number
   /** In points; older files without it use the default size. */
   fontSize?: number
+  /** Hex like ink colours; without it the box uses the normal text colour. */
+  color?: string
   markdown: string
   author: Author
 }

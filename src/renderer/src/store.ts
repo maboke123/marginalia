@@ -19,6 +19,8 @@ export interface Ink {
   eraserMode: 'partial' | 'stroke'
   eraserSize: number
   textSize: number
+  /** Colour for new text boxes; null is the normal text colour. */
+  textColor: string | null
 }
 
 /** What the slide viewer shows right now; read by the slide-link hotkey and (later) Claude. */
@@ -314,7 +316,8 @@ export const useApp = create<AppState>((set, get) => {
       highlightColor: DEFAULT_SETTINGS.highlightColors[0],
       eraserMode: 'partial',
       eraserSize: ERASER_SIZES[1].value,
-      textSize: TEXT_SIZES[1].value
+      textSize: TEXT_SIZES[1].value,
+      textColor: null
     },
 
     async init() {

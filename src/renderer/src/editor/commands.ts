@@ -2,6 +2,8 @@ import type { Completion, CompletionContext, CompletionResult } from '@codemirro
 import { EditorSelection, type EditorState } from '@codemirror/state'
 import type { Command, EditorView, KeyBinding } from '@codemirror/view'
 import { useApp } from '../store'
+import { TEXT_COLORS } from '../../../shared/textColor'
+import { setTextColor } from './colorBar'
 import { claudeEnter } from './inlineClaude'
 import { slideLink } from './links'
 import { notePath } from './livePreview'
@@ -118,14 +120,23 @@ const tableEnter: Command = (view) => {
   return true
 }
 
+/**
+ * Where a new block goes: in place of a blank cursor line, else under the cursor line. The
+ * prefix keeps a blank line above, so the block does not join the paragraph before it.
+ */
+function blockSpot(view: EditorView): { from: number; to: number; prefix: string } {
+  const { doc } = view.state
+  const line = doc.lineAt(view.state.selection.main.head)
+  if (line.text.trim() !== '') return { from: line.to, to: line.to, prefix: '\n\n' }
+  const above = line.number > 1 && doc.line(line.number - 1).text.trim() !== ''
+  return { from: line.from, to: line.to, prefix: above ? '\n' : '' }
+}
+
 export function insertTable(view: EditorView): void {
-  const line = view.state.doc.lineAt(view.state.selection.main.head)
-  const blank = line.text.trim() === ''
-  const prefix = blank ? '' : '\n\n'
+  const { from, to, prefix } = blockSpot(view)
   const text = prefix + NEW_TABLE.join('\n') + '\n'
-  const from = blank ? line.from : line.to
   view.dispatch({
-    changes: { from, to: blank ? line.to : line.to, insert: text },
+    changes: { from, to, insert: text },
     selection: { anchor: from + prefix.length + 2, head: from + prefix.length + 10 },
     userEvent: 'input'
   })
@@ -154,27 +165,37 @@ const mathBlockEnter: Command = (view) => {
   return true
 }
 
-export function insertMathBlock(view: EditorView): void {
-  const line = view.state.doc.lineAt(view.state.selection.main.head)
-  const blank = line.text.trim() === ''
-  const prefix = blank ? '' : '\n\n'
-  const from = blank ? line.from : line.to
+/** A block with an empty line inside for the cursor: math ($$) or code (```). */
+function insertFenced(view: EditorView, fence: string): void {
+  const { from, to, prefix } = blockSpot(view)
   view.dispatch({
-    changes: { from, to: blank ? line.to : from, insert: `${prefix}$$\n\n$$` },
-    selection: { anchor: from + prefix.length + 3 },
+    changes: { from, to, insert: `${prefix}${fence}\n\n${fence}` },
+    selection: { anchor: from + prefix.length + fence.length + 1 },
     userEvent: 'input'
   })
 }
 
-function wrap(marker: string): Command {
+export const insertMathBlock = (view: EditorView): void => insertFenced(view, '$$')
+
+function insertDivider(view: EditorView): void {
+  const { from, to, prefix } = blockSpot(view)
+  const text = `${prefix}---\n\n`
+  view.dispatch({
+    changes: { from, to, insert: text },
+    selection: { anchor: from + text.length },
+    userEvent: 'input'
+  })
+}
+
+function wrap(before: string, after = before): Command {
   return (view) => {
     view.dispatch(
       view.state.changeByRange((range) => ({
         changes: [
-          { from: range.from, insert: marker },
-          { from: range.to, insert: marker }
+          { from: range.from, insert: before },
+          { from: range.to, insert: after }
         ],
-        range: EditorSelection.range(range.from + marker.length, range.to + marker.length)
+        range: EditorSelection.range(range.from + before.length, range.to + before.length)
       })),
       { userEvent: 'input' }
     )
@@ -182,14 +203,19 @@ function wrap(marker: string): Command {
   }
 }
 
-function setHeading(view: EditorView, level: number): void {
+/** A heading, list, task or quote mark at the start of a line. */
+const LINE_MARK = /^(#{1,6}[ \t]+|>[ \t]?|[-*+][ \t]+\[[ xX]\][ \t]+|[-*+][ \t]+|\d+[.)][ \t]+)/
+
+/** Turns the cursor line into a heading, list item or quote ("" makes it plain text). */
+function setLineMark(view: EditorView, mark: string): void {
   const line = view.state.doc.lineAt(view.state.selection.main.head)
-  const existing = /^#{1,6}\s+/.exec(line.text)?.[0].length ?? 0
-  const marks = '#'.repeat(level) + ' '
+  const indent = /^[ \t]*/.exec(line.text)![0]
+  const existing = LINE_MARK.exec(line.text.slice(indent.length))?.[0].length ?? 0
+  const from = line.from + indent.length
   view.dispatch({
-    changes: { from: line.from, to: line.from + existing, insert: marks },
+    changes: { from, to: from + existing, insert: mark },
     // A cursor at the insert point would otherwise stay in front of the new "## ".
-    selection: { anchor: line.to - existing + marks.length },
+    selection: { anchor: line.to - existing + mark.length },
     userEvent: 'input'
   })
 }
@@ -222,7 +248,9 @@ export const editorKeymap: KeyBinding[] = [
   { key: 'Shift-Tab', run: moveCell(-1) },
   { key: 'Enter', run: (view) => tableEnter(view) || mathBlockEnter(view) || claudeEnter(view) },
   { key: 'Mod-b', run: wrap('**') },
-  { key: 'Mod-i', run: wrap('*') }
+  { key: 'Mod-i', run: wrap('*') },
+  // Replaces CodeMirror's "undo selection", which nobody misses; text boxes use Ctrl+U too.
+  { key: 'Mod-u', run: wrap('<u>', '</u>') }
 ]
 
 // ---------------------------------------------------------------------------------------------
@@ -233,30 +261,95 @@ const hotkeyHint = (detail: string | undefined): string | undefined => {
   return detail && detail in hotkeys ? hotkeys[detail as keyof typeof hotkeys] : detail
 }
 
+/** Puts `before` and `after` around the cursor, for formatting picked from the menu. */
+function insertAround(view: EditorView, before: string, after: string): void {
+  const at = view.state.selection.main.head
+  view.dispatch({
+    changes: { from: at, insert: before + after },
+    selection: { anchor: at + before.length },
+    userEvent: 'input'
+  })
+}
+
 interface SlashCommand {
   label: string
+  /** What it writes, or a hotkey action whose current keys are shown instead. */
   detail?: string
   run(view: EditorView): void
 }
 
-const SLASH_COMMANDS: SlashCommand[] = [
-  { label: 'Heading 1', run: (v) => setHeading(v, 1) },
-  { label: 'Heading 2', run: (v) => setHeading(v, 2) },
-  { label: 'Heading 3', run: (v) => setHeading(v, 3) },
-  { label: 'Table', run: insertTable },
-  { label: 'Math block', detail: '$$', run: insertMathBlock },
-  { label: 'Image', detail: 'from a file', run: (v) => void insertImages(v) },
-  {
-    label: 'Ask Claude',
-    detail: 'write here, then Enter',
-    run: (v) => insertText(v, '/claude ')
-  },
-  { label: 'Slide link', detail: 'slideLink', run: (v) => void insertSlideLink(v) },
-  {
-    label: 'Slide snapshot',
-    detail: 'snapshot',
-    run: () => useApp.getState().startSnapshot()
-  }
+const label = (name: string): string => name[0].toUpperCase() + name.slice(1)
+
+// Sections in menu order; the commands keep their order within a section.
+const SLASH_SECTIONS: [string, SlashCommand[]][] = [
+  [
+    'Headings',
+    [
+      ...[1, 2, 3, 4, 5, 6].map((level) => ({
+        label: `Heading ${level}`,
+        detail: '#'.repeat(level),
+        run: (v: EditorView) => setLineMark(v, '#'.repeat(level) + ' ')
+      })),
+      { label: 'Plain text', detail: 'no heading or list', run: (v) => setLineMark(v, '') }
+    ]
+  ],
+  [
+    'Lists and blocks',
+    [
+      { label: 'Bullet list', detail: '-', run: (v) => setLineMark(v, '- ') },
+      { label: 'Numbered list', detail: '1.', run: (v) => setLineMark(v, '1. ') },
+      { label: 'Task list', detail: '- [ ]', run: (v) => setLineMark(v, '- [ ] ') },
+      { label: 'Quote', detail: '>', run: (v) => setLineMark(v, '> ') },
+      { label: 'Table', detail: '| |', run: insertTable },
+      { label: 'Math block', detail: '$$', run: insertMathBlock },
+      { label: 'Code block', detail: '```', run: (v) => insertFenced(v, '```') },
+      { label: 'Divider', detail: '---', run: insertDivider }
+    ]
+  ],
+  [
+    'Text',
+    [
+      { label: 'Bold', detail: 'Ctrl+B', run: (v) => insertAround(v, '**', '**') },
+      { label: 'Italic', detail: 'Ctrl+I', run: (v) => insertAround(v, '*', '*') },
+      { label: 'Underline', detail: 'Ctrl+U', run: (v) => insertAround(v, '<u>', '</u>') },
+      { label: 'Strikethrough', detail: '~~', run: (v) => insertAround(v, '~~', '~~') },
+      { label: 'Inline math', detail: '$', run: (v) => insertAround(v, '$', '$') },
+      { label: 'Inline code', detail: '`', run: (v) => insertAround(v, '`', '`') },
+      { label: 'Link', detail: '[text](url)', run: (v) => insertAround(v, '[', ']()') }
+    ]
+  ],
+  [
+    'Text colour',
+    [
+      ...TEXT_COLORS.map((color) => ({
+        label: `${label(color)} text`,
+        run: (v: EditorView) => void setTextColor(v, color)
+      })),
+      { label: 'Normal colour', detail: 'remove colour', run: (v) => void setTextColor(v, null) }
+    ]
+  ],
+  [
+    'Slides',
+    [
+      { label: 'Slide link', detail: 'slideLink', run: (v) => void insertSlideLink(v) },
+      {
+        label: 'Slide snapshot',
+        detail: 'snapshot',
+        run: () => useApp.getState().startSnapshot()
+      },
+      { label: 'Image', detail: 'from a file', run: (v) => void insertImages(v) }
+    ]
+  ],
+  [
+    'Claude',
+    [
+      {
+        label: 'Ask Claude',
+        detail: 'write here, then Enter',
+        run: (v) => insertText(v, '/claude ')
+      }
+    ]
+  ]
 ]
 
 /** "/" at the start of a line or after a space opens the command list. */
@@ -266,15 +359,21 @@ export function slashCommands(context: CompletionContext): CompletionResult | nu
   const slash = match.from + match.text.indexOf('/')
   // "/claude what to write" is a request (Enter sends it), not a menu search.
   if (/^\/claude\s/i.test(context.state.sliceDoc(slash, context.pos))) return null
-  const options: Completion[] = SLASH_COMMANDS.map((command) => ({
-    label: command.label,
-    // Hotkey hints follow the settings.
-    detail: hotkeyHint(command.detail),
-    apply: (view, _completion, _from, to) => {
-      view.dispatch({ changes: { from: slash, to, insert: '' } })
-      command.run(view)
-    }
-  }))
+  let order = 0
+  const options: Completion[] = SLASH_SECTIONS.flatMap(([name, commands], rank) =>
+    commands.map((command) => ({
+      label: command.label,
+      // Hotkey hints follow the settings.
+      detail: hotkeyHint(command.detail),
+      section: { name, rank },
+      // Without a query the list is sorted by this; keep the order above.
+      sortText: String(order++).padStart(3, '0'),
+      apply: (view: EditorView, _completion: Completion, _from: number, to: number) => {
+        view.dispatch({ changes: { from: slash, to, insert: '' } })
+        command.run(view)
+      }
+    }))
+  )
   return {
     from: slash + 1,
     options,

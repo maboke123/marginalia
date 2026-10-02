@@ -36,7 +36,13 @@ export const TextBoxView = memo(function TextBoxView(props: Props): React.JSX.El
     <div
       className={classes.join(' ')}
       data-id={box.id}
-      style={{ left: box.x, top: box.y, width: box.width, fontSize: box.fontSize }}
+      style={{
+        left: box.x,
+        top: box.y,
+        width: box.width,
+        fontSize: box.fontSize,
+        color: box.color
+      }}
       onPointerDown={editing ? undefined : props.onPointerDown}
       onDoubleClick={editing ? undefined : props.onDoubleClick}
     >

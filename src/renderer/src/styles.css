@@ -905,7 +905,8 @@ h2 {
   border: 0;
   outline: none;
   background: transparent;
-  color: var(--paper-text);
+  /* The box's colour: --paper-text unless one was picked. */
+  color: inherit;
   font:
     0.92em/1.35 'Cascadia Mono',
     Consolas,
@@ -1179,10 +1180,105 @@ h2 {
   font-size: 1.2em;
 }
 
-.cm-h4,
-.cm-h5,
+.cm-h4 {
+  padding-top: 0.3em;
+  font-size: 1.1em;
+}
+
+.cm-h5 {
+  padding-top: 0.3em;
+  font-size: 1em;
+}
+
 .cm-h6 {
-  font-size: 1.05em;
+  padding-top: 0.3em;
+  color: var(--text-muted);
+  font-size: 0.95em;
+}
+
+/* Text colours in notes, text boxes and chat: <span style="color: red"> */
+.tc-red {
+  color: var(--nb-red);
+}
+
+.tc-orange {
+  color: var(--nb-orange);
+}
+
+.tc-yellow {
+  color: var(--nb-yellow);
+}
+
+.tc-green {
+  color: var(--nb-green);
+}
+
+.tc-teal {
+  color: var(--nb-teal);
+}
+
+.tc-blue {
+  color: var(--nb-blue);
+}
+
+.tc-pink {
+  color: var(--nb-pink);
+}
+
+.tc-gray {
+  color: var(--nb-gray);
+}
+
+.cm-underline {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.cm-task {
+  margin: 0 0.4em 0 0;
+  vertical-align: -0.1em;
+  cursor: pointer;
+}
+
+.cm-tooltip.cm-color-bar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-menu);
+  box-shadow: var(--shadow-menu);
+}
+
+.cm-color-swatch {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+.cm-color-swatch:hover {
+  border-color: var(--text);
+}
+
+.cm-color-clear {
+  margin-left: 2px;
+  padding: 1px 6px;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.cm-color-clear:hover {
+  border-color: var(--border-strong);
+  color: var(--text);
 }
 
 .cm-md-mark {
@@ -1321,6 +1417,19 @@ h2 {
   margin-left: 12px;
   color: var(--text-muted);
   font-style: normal;
+}
+
+.md-editor .cm-editor .cm-tooltip.cm-tooltip-autocomplete > ul > completion-section {
+  padding: 8px 10px 2px;
+  border-bottom: 0;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  opacity: 1;
+}
+
+.md-editor .cm-editor .cm-tooltip.cm-tooltip-autocomplete > ul {
+  max-height: 22em;
 }
 
 /* Claude: proposed edits */

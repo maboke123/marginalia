@@ -25,5 +25,6 @@ describe('markdownToText', () => {
       markdownToText('## **Weighted** average! $\\frac{a}{b}$\n- see [slide 3](s.pdf#page=3)')
     ).toBe('Weighted average! a/b\n• see slide 3')
     expect(markdownToText('<u>key</u> idea, `code` and *stress*')).toBe('key idea, code and stress')
+    expect(markdownToText('<span style="color: red">overfits</span> fast')).toBe('overfits fast')
   })
 })

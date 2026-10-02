@@ -164,6 +164,28 @@ test('text boxes can be resized, change text size and use bold', async () => {
     .toBeGreaterThan(fontBefore * 1.4)
 })
 
+test('text boxes take a colour from the toolbar', async () => {
+  await openSlides()
+  await page.keyboard.press('t')
+  await page.getByRole('button', { name: 'Red', exact: true }).click()
+  await drawOnPage([0.7, 0.2], [0.7, 0.2])
+  await page.keyboard.type('Overfits')
+  await page.keyboard.press('Escape')
+  const box = firstPage().locator('.text-box')
+  await expect(box).toHaveCSS('color', 'rgb(207, 34, 46)')
+
+  // Changing the colour of a selected box is one undo step.
+  await page.keyboard.press('Escape')
+  await box.click()
+  await page.getByRole('button', { name: 'Blue', exact: true }).click()
+  await expect(box).toHaveCSS('color', 'rgb(31, 111, 235)')
+  await expect
+    .poll(async () => (await readSidecar().catch(() => null))?.pages['1']?.textBoxes[0])
+    .toMatchObject({ color: '#1f6feb', markdown: 'Overfits' })
+  await page.getByRole('button', { name: 'Undo' }).click()
+  await expect(box).toHaveCSS('color', 'rgb(207, 34, 46)')
+})
+
 test('selected slide text becomes a highlight', async () => {
   await openSlides()
   const span = firstPage().locator('.textLayer span', { hasText: 'Information gain' })

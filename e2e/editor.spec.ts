@@ -198,6 +198,34 @@ test('a heading from the slash menu leaves the cursor after the hashes', async (
   await expect.poll(readSummary).toBe('## Pruning')
 })
 
+test('tasks tick, selected text takes a colour, and the menu has deeper headings', async () => {
+  await fs.writeFile(summaryFile(), '- [ ] Revise entropy\n\nGain is high')
+  await openSection()
+  await row('Summary').click()
+  await expect(editor()).toBeFocused()
+
+  await page.locator('.cm-task').click()
+  await expect.poll(readSummary).toContain('- [x] Revise entropy')
+
+  await page.keyboard.press('Control+End')
+  for (let i = 0; i < 4; i++) await page.keyboard.press('Shift+ArrowLeft')
+  await page.getByRole('button', { name: 'Red text' }).click()
+  await expect
+    .poll(readSummary)
+    .toBe('- [x] Revise entropy\n\nGain is <span style="color: red">high</span>')
+  // The tags stay hidden; only the colour shows.
+  await expect(editor().locator('.tc-red')).toHaveText('high')
+  await expect(editor()).not.toContainText('<span')
+
+  await page.keyboard.press('Control+End')
+  await page.keyboard.type('\n\n/heading 5')
+  await expect(page.locator('.cm-tooltip-autocomplete')).toContainText('Heading 5')
+  await page.waitForTimeout(150)
+  await page.keyboard.press('Enter')
+  await page.keyboard.type('Details')
+  await expect.poll(readSummary).toMatch(/\n\n##### Details$/)
+})
+
 test('picks up changes made outside the app', async () => {
   await fs.writeFile(summaryFile(), '# Before\n')
   await openSection()

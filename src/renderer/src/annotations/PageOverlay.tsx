@@ -259,6 +259,7 @@ function AnnotatedOverlay({
         y: start[1],
         width: boxWidth,
         fontSize: round(ink.textSize * unit),
+        ...(ink.textColor && { color: ink.textColor }),
         markdown: '',
         author: 'me'
       }

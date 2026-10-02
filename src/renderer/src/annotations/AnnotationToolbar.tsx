@@ -113,7 +113,7 @@ export function AnnotationToolbar({ doc, pageWidth }: Props): React.JSX.Element 
           ))}
         </>
       )}
-      {doc && <TextSizes doc={doc} pageWidth={pageWidth} />}
+      {doc && <TextStyle doc={doc} pageWidth={pageWidth} />}
 
       {doc && (
         <>
@@ -126,7 +126,7 @@ export function AnnotationToolbar({ doc, pageWidth }: Props): React.JSX.Element 
 }
 
 /** Shown for the text tool and when a text box is selected; changes that box right away. */
-function TextSizes({
+function TextStyle({
   doc,
   pageWidth
 }: {
@@ -135,27 +135,41 @@ function TextSizes({
 }): React.JSX.Element | null {
   const tool = useApp((s) => s.tool)
   const textSize = useApp((s) => s.ink.textSize)
+  const textColor = useApp((s) => s.ink.textColor)
+  const colors = useApp((s) => s.settings.penColors)
   const setInk = useApp((s) => s.setInk)
   const selection = useStore(doc, (s) => (s.selection?.kind === 'textBoxes' ? s.selection : null))
+  // Subscribed so the pressed swatch and size follow undo and Claude's edits.
+  const box = useStore(doc, (s) =>
+    selection ? findItem(s.pages, { ...selection, kind: 'textBoxes' }) : null
+  )
   if (tool !== 'text' && !selection) return null
 
-  const box = selection && findItem(doc.getState().pages, { ...selection, kind: 'textBoxes' })
   const unit = selection ? pageUnit(pageWidth(selection.page)) : 1
   const current = box?.fontSize ? box.fontSize / unit : textSize
+  const currentColor = (box ? box.color : textColor) ?? colors[0]
 
-  function pick(size: number): void {
-    setInk({ textSize: size })
+  function changeBox(changes: { fontSize?: number; color?: string }): void {
     if (!selection || !box) return
     doc
       .getState()
-      .change((p) =>
-        replaceItem(p, selection.page, 'textBoxes', { ...box, fontSize: round(size * unit) })
-      )
+      .change((p) => replaceItem(p, selection.page, 'textBoxes', { ...box, ...changes }))
+  }
+
+  function pick(size: number): void {
+    setInk({ textSize: size })
+    changeBox({ fontSize: round(size * unit) })
+  }
+
+  function pickColor(color: string): void {
+    setInk({ textColor: color })
+    changeBox({ color })
   }
 
   return (
     <>
       <span className="toolbar-divider" />
+      <Swatches colors={colors} value={currentColor} onPick={pickColor} />
       {TEXT_SIZES.map((size) => (
         <button
           key={size.value}

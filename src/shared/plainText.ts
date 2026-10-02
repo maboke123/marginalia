@@ -179,6 +179,7 @@ export function markdownToText(md: string): string {
         .replace(/!\[[^\]]*\]\([^)]*\)/g, '')
         .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
         .replace(/<\/?u>/gi, '')
+        .replace(/<\/?span[^>]*>/gi, '')
         .replace(/(\*\*|__)(.+?)\1/g, '$2')
         .replace(/(\*|_)(\S(?:.*?\S)?)\1/g, '$2')
         .replace(/`([^`]*)`/g, '$1')

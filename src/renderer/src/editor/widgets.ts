@@ -112,3 +112,27 @@ export class RuleWidget extends WidgetType {
     return el
   }
 }
+
+/** "[ ]" or "[x]" of a task list item; a click toggles it (see livePreview). */
+export class CheckboxWidget extends WidgetType {
+  constructor(readonly checked: boolean) {
+    super()
+  }
+
+  eq(other: CheckboxWidget): boolean {
+    return other.checked === this.checked
+  }
+
+  toDOM(): HTMLElement {
+    const box = document.createElement('input')
+    box.type = 'checkbox'
+    box.className = 'cm-task'
+    box.checked = this.checked
+    box.setAttribute('aria-label', this.checked ? 'Done' : 'To do')
+    return box
+  }
+
+  ignoreEvent(): boolean {
+    return false
+  }
+}

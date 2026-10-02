@@ -25,7 +25,13 @@ export function GhostView({ ghost, scale }: { ghost: Ghost; scale: number }): Re
       {box && (
         <div
           className="text-box by-claude ghost passive"
-          style={{ left: box.x, top: box.y, width: box.width, fontSize: box.fontSize }}
+          style={{
+            left: box.x,
+            top: box.y,
+            width: box.width,
+            fontSize: box.fontSize,
+            color: box.color
+          }}
         >
           <div className="text-box-content" dangerouslySetInnerHTML={{ __html: html }} />
         </div>

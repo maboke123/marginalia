@@ -1,6 +1,7 @@
 import { promises as fs } from 'fs'
 import path from 'path'
 import { fold } from '../../shared/text'
+import { blankColorTags } from '../../shared/textColor'
 import type { PdfToIndex, SearchHit, SearchResult, VaultNode } from '../../shared/types'
 import { writeFileAtomic } from '../vault/atomic'
 import type { Vault } from '../vault/vault'
@@ -134,7 +135,8 @@ export class SearchIndex {
     const cached = this.notes.get(rel)
     if (cached?.stamp === stamp) return cached
     try {
-      const text = await fs.readFile(this.vault.resolve(rel), 'utf8')
+      // Without the colour tags, "red" finds red things rather than every coloured word.
+      const text = blankColorTags(await fs.readFile(this.vault.resolve(rel), 'utf8'))
       const entry = { stamp, text, folded: fold(text) }
       this.notes.set(rel, entry)
       return entry
