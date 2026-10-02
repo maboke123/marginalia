@@ -2,6 +2,7 @@ import type { Completion, CompletionContext, CompletionResult } from '@codemirro
 import { EditorSelection, type EditorState } from '@codemirror/state'
 import type { Command, EditorView, KeyBinding } from '@codemirror/view'
 import { useApp } from '../store'
+import { claudeEnter } from './inlineClaude'
 import { slideLink } from './links'
 import { notePath } from './livePreview'
 import {
@@ -219,7 +220,7 @@ async function insertImages(view: EditorView): Promise<void> {
 export const editorKeymap: KeyBinding[] = [
   { key: 'Tab', run: moveCell(1) },
   { key: 'Shift-Tab', run: moveCell(-1) },
-  { key: 'Enter', run: (view) => tableEnter(view) || mathBlockEnter(view) },
+  { key: 'Enter', run: (view) => tableEnter(view) || mathBlockEnter(view) || claudeEnter(view) },
   { key: 'Mod-b', run: wrap('**') },
   { key: 'Mod-i', run: wrap('*') }
 ]
@@ -245,6 +246,11 @@ const SLASH_COMMANDS: SlashCommand[] = [
   { label: 'Table', run: insertTable },
   { label: 'Math block', detail: '$$', run: insertMathBlock },
   { label: 'Image', detail: 'from a file', run: (v) => void insertImages(v) },
+  {
+    label: 'Ask Claude',
+    detail: 'write here, then Enter',
+    run: (v) => insertText(v, '/claude ')
+  },
   { label: 'Slide link', detail: 'slideLink', run: (v) => void insertSlideLink(v) },
   {
     label: 'Slide snapshot',
@@ -258,6 +264,8 @@ export function slashCommands(context: CompletionContext): CompletionResult | nu
   const match = context.matchBefore(/(?:^|\s)\/[\w ]*$/)
   if (!match) return null
   const slash = match.from + match.text.indexOf('/')
+  // "/claude what to write" is a request (Enter sends it), not a menu search.
+  if (/^\/claude\s/i.test(context.state.sliceDoc(slash, context.pos))) return null
   const options: Completion[] = SLASH_COMMANDS.map((command) => ({
     label: command.label,
     // Hotkey hints follow the settings.
@@ -267,7 +275,12 @@ export function slashCommands(context: CompletionContext): CompletionResult | nu
       command.run(view)
     }
   }))
-  return { from: slash + 1, options, validFor: /^[\w ]*$/ }
+  return {
+    from: slash + 1,
+    options,
+    // Without this the open list would keep matching while a /claude request is typed.
+    validFor: (text) => /^[\w ]*$/.test(text) && !/^claude\s/i.test(text)
+  }
 }
 
 // ---------------------------------------------------------------------------------------------

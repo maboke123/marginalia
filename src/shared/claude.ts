@@ -42,6 +42,11 @@ export interface ChatRequest {
   images: ChatImage[]
 }
 
+export interface CompleteRequest {
+  text: string
+  images: ChatImage[]
+}
+
 export type ChatEvent =
   | { type: 'text'; text: string }
   | { type: 'tool'; name: string; input: Record<string, unknown> }

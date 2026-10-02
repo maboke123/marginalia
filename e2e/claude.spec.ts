@@ -79,6 +79,7 @@ async function openSlides(pageNumber = 1): Promise<void> {
   if (pageNumber > 1) {
     await page.getByRole('textbox', { name: 'Page' }).fill(String(pageNumber))
     await page.getByRole('textbox', { name: 'Page' }).press('Enter')
+    await expect(page.getByRole('textbox', { name: 'Page' })).toHaveValue(String(pageNumber))
   }
 }
 
@@ -198,4 +199,39 @@ test('keeps one conversation per lesson across restarts', async () => {
   await expect(page.locator('.claude-question')).toHaveCount(1)
   await page.getByRole('button', { name: 'New chat' }).click()
   await expect(page.locator('.claude-question')).toHaveCount(0)
+})
+
+test('/claude in a note writes at that spot; one undo brings the request back', async () => {
+  await openSlides(2)
+  await page.keyboard.press('Control+Shift+M')
+  // The slides pane loads the PDF again in lecture mode; it must be there to be sent along.
+  await expect(page.locator('.lecture-pane .pdf-page[data-page="2"] canvas')).toBeAttached()
+  await page.locator('.md-editor .cm-content').click()
+  await page.keyboard.press('Control+End')
+  await page.keyboard.type('The best step size: /claude insert the formula for the optimal alpha')
+  await page.keyboard.press('Enter')
+  await expect(page.locator('.cm-claude-writing')).toBeVisible()
+
+  const answer = 'The best step size: $\\alpha^* = \\arg\\min_\\alpha L(\\alpha)$'
+  await expect.poll(readSummary).toBe(SUMMARY + answer)
+  const [sent] = await readLog()
+  expect(sent.images).toBe(1)
+  expect(sent.text).toContain(`Slides: ${pdfRel}, page 2 of 8.`)
+  expect(sent.text).toContain('Later.\nThe best step size: ⟦here⟧')
+  expect(sent.text).toContain('What to write at ⟦here⟧: insert the formula for the optimal alpha')
+
+  await page.keyboard.press('Control+Z')
+  await expect
+    .poll(readSummary)
+    .toBe(SUMMARY + 'The best step size: /claude insert the formula for the optimal alpha')
+
+  // Esc cancels a request and leaves the text as it was.
+  await page.keyboard.press('Control+End')
+  await page.keyboard.type(' /claude slow')
+  await page.keyboard.press('Enter')
+  await expect(page.locator('.cm-claude-writing')).toBeVisible()
+  await page.keyboard.press('Escape')
+  await expect(page.locator('.cm-claude-writing')).toHaveCount(0)
+  await expect.poll(readSummary).toContain('/claude slow')
+  await expect(page.getByRole('alert')).toHaveCount(0)
 })

@@ -76,3 +76,17 @@ export async function history(sessionId) {
     { role: 'assistant', text: `Earlier answer to: ${entry.question}` }
   ])
 }
+
+/** The one-off request behind /claude in a note. "slow" waits until it is cancelled. */
+export async function complete(input) {
+  await record('complete', { text: input.text, images: input.images.length, question: 'complete' })
+  const wait = /What to write at ⟦here⟧: slow/.test(input.text) ? 60_000 : 400
+  await new Promise((resolve, reject) => {
+    const timer = setTimeout(resolve, wait)
+    input.signal.addEventListener('abort', () => {
+      clearTimeout(timer)
+      reject(new Error('aborted'))
+    })
+  })
+  return '$\\alpha^* = \\arg\\min_\\alpha L(\\alpha)$'
+}

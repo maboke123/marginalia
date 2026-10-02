@@ -3,6 +3,7 @@ export type NodeKind = 'notebook' | 'section' | 'markdown' | 'pdf'
 import type { AnnotationFile, LoadedAnnotations } from './annotations'
 import type { AppSettings } from './settings'
 import type {
+  CompleteRequest,
   ChatEvent,
   ChatHistoryItem,
   ChatRequest,
@@ -116,6 +117,9 @@ export interface MarginaliaApi {
     /** Resolves when Claude has finished answering; the answer arrives through onEvent. */
     send(request: ChatRequest): Promise<void>
     stop(): Promise<void>
+    /** One request, one answer: text to put into a note (/claude in the editor). */
+    complete(request: CompleteRequest): Promise<string>
+    cancelComplete(): Promise<void>
     history(chat: string): Promise<ChatHistoryItem[]>
     /** Forgets the section's conversation, so the next message starts a new one. */
     newChat(chat: string): Promise<void>

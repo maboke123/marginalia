@@ -103,3 +103,55 @@ export const claudeAgent: Agent = async function* (input) {
     query.close()
   }
 }
+
+export interface CompleteInput {
+  cwd: string
+  text: string
+  images: ChatImage[]
+  settings: StoredClaudeSettings
+  apiKey: string | null
+  signal: AbortSignal
+}
+
+/** One question, one answer, no conversation: text Claude writes straight into a note. */
+export type Complete = (input: CompleteInput) => Promise<string>
+
+const WRITER_PROMPT = `You write text that goes straight into my lecture notes.
+- The notes are Markdown that Obsidian reads: $...$ for inline math, $$ on its own lines for display math.
+- Reply with only the text to put at the marked spot: no introduction, no explanation, no code fence around it.
+- Fit it into the sentence or paragraph around the spot, in the language and style of my notes.
+- Keep it as short as the request allows.`
+
+export const claudeComplete: Complete = async (input) => {
+  const sdk = await import('@anthropic-ai/claude-agent-sdk')
+  const abortController = new AbortController()
+  input.signal.addEventListener('abort', () => abortController.abort(), { once: true })
+  const query = sdk.query({
+    prompt: oneMessage(input.text, input.images),
+    options: {
+      cwd: input.cwd,
+      model: input.settings.model === 'default' ? undefined : input.settings.model,
+      effort: input.settings.effort === 'default' ? undefined : input.settings.effort,
+      // Everything it needs is in the message; no tools keeps it to one quick answer.
+      systemPrompt: WRITER_PROMPT,
+      tools: [],
+      settingSources: [],
+      persistSession: false,
+      abortController,
+      env: claudeEnvironment(input.apiKey),
+      pathToClaudeCodeExecutable: claudeExecutable()
+    }
+  })
+  try {
+    for await (const message of query) {
+      if (message.type !== 'result') continue
+      if (message.subtype !== 'success')
+        throw new Error(message.errors.join('\n') || 'Claude stopped early')
+      if (message.is_error) throw new Error(message.result)
+      return message.result
+    }
+    throw new Error('No answer')
+  } finally {
+    query.close()
+  }
+}

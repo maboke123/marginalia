@@ -8,6 +8,7 @@ import { tags } from '@lezer/highlight'
 import { editorKeymap, insertImageFiles, slashCommands } from './commands'
 import { livePreview, notePath } from './livePreview'
 import { mathSyntax } from './mathSyntax'
+import { claudeEscape, inlineRequest } from './inlineClaude'
 import { pendingEdit } from './proposal'
 
 const highlight = HighlightStyle.define([
@@ -29,6 +30,9 @@ export interface EditorOptions {
 
 export function editorExtensions({ path, onOpenLink }: EditorOptions): Extension[] {
   return [
+    // First of all: autocomplete also binds Esc at the highest precedence and would take it
+    // while it holds a stale result, so a running /claude request could not be cancelled.
+    Prec.highest(keymap.of([{ key: 'Escape', run: claudeEscape }])),
     notePath.of(path),
     history(),
     drawSelection(),
@@ -38,8 +42,9 @@ export function editorExtensions({ path, onOpenLink }: EditorOptions): Extension
     syntaxHighlighting(highlight),
     livePreview,
     pendingEdit,
+    inlineRequest,
     autocompletion({ override: [slashCommands], icons: false }),
-    placeholder('Type / for headings, tables, math and slides'),
+    placeholder('Type / for headings, tables, math, slides and Claude'),
     // Before the Markdown keymap, whose Enter continues lists.
     Prec.high(keymap.of(editorKeymap)),
     keymap.of([...defaultKeymap, ...historyKeymap, indentWithTab]),

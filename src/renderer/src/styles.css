@@ -2050,3 +2050,18 @@ h2 {
   gap: 12px;
   padding: 8px 4px 2px;
 }
+
+/* /claude in a note */
+
+.cm-claude-request {
+  color: var(--text-muted);
+  text-decoration: underline dashed var(--claude-ink);
+  text-underline-offset: 3px;
+}
+
+.cm-claude-writing {
+  margin-left: 8px;
+  color: var(--claude-ink);
+  font-family: var(--font);
+  font-size: 12px;
+}

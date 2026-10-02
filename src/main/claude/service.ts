@@ -2,6 +2,7 @@ import { randomUUID } from 'crypto'
 import { BrowserWindow, ipcMain, safeStorage } from 'electron'
 import { pathToFileURL } from 'url'
 import type {
+  CompleteRequest,
   ChatEvent,
   ChatHistoryItem,
   ChatRequest,
@@ -13,7 +14,7 @@ import { claudeSettings, type ConfigStore } from '../config'
 import { VaultError } from '../vault/names'
 import type { Handle } from '../ipc'
 import type { Vault } from '../vault/vault'
-import { claudeAgent, type Agent } from './agent'
+import { claudeAgent, claudeComplete, type Agent, type Complete } from './agent'
 import { storedApiKey } from './cli'
 import { toHistory } from './events'
 import type { CallTool } from './tools'
@@ -21,6 +22,7 @@ import type { CallTool } from './tools'
 /** UI tests load a scripted agent instead, so they never use the real Claude. */
 interface AgentModule {
   agent: Agent
+  complete?: Complete
   history?(sessionId: string, vaultRoot: string): Promise<ChatHistoryItem[]>
 }
 
@@ -29,6 +31,7 @@ async function loadAgent(): Promise<AgentModule> {
   if (fake) return import(/* @vite-ignore */ pathToFileURL(fake).href)
   return {
     agent: claudeAgent,
+    complete: claudeComplete,
     history: async (sessionId, dir) => {
       const sdk = await import('@anthropic-ai/claude-agent-sdk')
       return toHistory(await sdk.getSessionMessages(sessionId, { dir }))
@@ -151,6 +154,38 @@ export function registerClaude(
       for (const [id, resolve] of pendingTools) resolve({ id, ok: false, text: 'Stopped' })
       pendingTools.clear()
     }
+  })
+
+  let completing: AbortController | null = null
+
+  handle('claude:complete', async (request: CompleteRequest) => {
+    if (completing) throw new VaultError('Claude is still writing in your note')
+    const v = vault()
+    const { complete } = await agentModule
+    if (!complete) throw new VaultError('Writing in notes is not available')
+    const controller = new AbortController()
+    completing = controller
+    try {
+      const text = await complete({
+        cwd: v.root,
+        text: request.text,
+        images: request.images,
+        settings: (await config.read()).claude,
+        apiKey: await storedApiKey(config),
+        signal: controller.signal
+      })
+      if (controller.signal.aborted) throw new VaultError('Cancelled')
+      return text
+    } catch (err) {
+      if (controller.signal.aborted) throw new VaultError('Cancelled')
+      throw err
+    } finally {
+      completing = null
+    }
+  })
+
+  handle('claude:cancelComplete', () => {
+    completing?.abort()
   })
 
   handle('claude:stop', () => {
