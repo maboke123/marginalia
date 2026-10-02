@@ -1,6 +1,12 @@
 import { create } from 'zustand'
 import type { NotebookColor, Position, VaultInfo, VaultNode } from '../../shared/types'
-import { HIGHLIGHT_COLORS, PEN_COLORS, PEN_WIDTHS } from './annotations/palette'
+import {
+  ERASER_SIZES,
+  HIGHLIGHT_COLORS,
+  PEN_COLORS,
+  PEN_WIDTHS,
+  TEXT_SIZES
+} from './annotations/palette'
 import { findNode, isFolder, parentOf, remap } from './lib/tree'
 
 const api = window.api.vault
@@ -13,6 +19,10 @@ export interface Ink {
   penColor: string
   penWidth: number
   highlightColor: string
+  /** "partial" cuts out only what is under the eraser, "stroke" removes whole strokes. */
+  eraserMode: 'partial' | 'stroke'
+  eraserSize: number
+  textSize: number
 }
 
 /** What the slide viewer shows right now; read by the slide-link hotkey and (later) Claude. */
@@ -161,7 +171,10 @@ export const useApp = create<AppState>((set, get) => {
     ink: {
       penColor: PEN_COLORS[1].value,
       penWidth: PEN_WIDTHS[0].value,
-      highlightColor: HIGHLIGHT_COLORS[0].value
+      highlightColor: HIGHLIGHT_COLORS[0].value,
+      eraserMode: 'partial',
+      eraserSize: ERASER_SIZES[1].value,
+      textSize: TEXT_SIZES[1].value
     },
 
     async init() {

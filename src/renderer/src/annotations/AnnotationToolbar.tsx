@@ -1,8 +1,16 @@
 import { useStore } from 'zustand'
 import { Icon, type IconName } from '../components/Icon'
 import { useApp, type Tool } from '../store'
-import type { AnnotationDoc } from './doc'
-import { HIGHLIGHT_COLORS, PEN_COLORS, PEN_WIDTHS } from './palette'
+import { findItem, replaceItem, type AnnotationDoc } from './doc'
+import { round } from './geometry'
+import {
+  ERASER_SIZES,
+  HIGHLIGHT_COLORS,
+  PEN_COLORS,
+  PEN_WIDTHS,
+  pageUnit,
+  TEXT_SIZES
+} from './palette'
 
 const TOOLS: { tool: Tool; label: string; key: string; icon: IconName }[] = [
   { tool: 'select', label: 'Select', key: 'Esc', icon: 'cursor' },
@@ -12,7 +20,13 @@ const TOOLS: { tool: Tool; label: string; key: string; icon: IconName }[] = [
   { tool: 'text', label: 'Text box', key: 'T', icon: 'text' }
 ]
 
-export function AnnotationToolbar({ doc }: { doc: AnnotationDoc | null }): React.JSX.Element {
+interface Props {
+  doc: AnnotationDoc | null
+  /** Width in points of a page, for sizes that scale with the page. */
+  pageWidth(page: number): number
+}
+
+export function AnnotationToolbar({ doc, pageWidth }: Props): React.JSX.Element {
   const tool = useApp((s) => s.tool)
   const ink = useApp((s) => s.ink)
   const setTool = useApp((s) => s.setTool)
@@ -67,6 +81,41 @@ export function AnnotationToolbar({ doc }: { doc: AnnotationDoc | null }): React
         </>
       )}
 
+      {doc && tool === 'eraser' && (
+        <>
+          <span className="toolbar-divider" />
+          <button
+            className={ink.eraserMode === 'partial' ? 'text-button pressed' : 'text-button'}
+            title="Erase only what is under the eraser"
+            aria-pressed={ink.eraserMode === 'partial'}
+            onClick={() => setInk({ eraserMode: 'partial' })}
+          >
+            Partial
+          </button>
+          <button
+            className={ink.eraserMode === 'stroke' ? 'text-button pressed' : 'text-button'}
+            title="Erase whole strokes and highlights"
+            aria-pressed={ink.eraserMode === 'stroke'}
+            onClick={() => setInk({ eraserMode: 'stroke' })}
+          >
+            Whole
+          </button>
+          {ERASER_SIZES.map((size) => (
+            <button
+              key={size.value}
+              className={ink.eraserSize === size.value ? 'icon-button pressed' : 'icon-button'}
+              title={`${size.name} eraser`}
+              aria-label={`${size.name} eraser`}
+              aria-pressed={ink.eraserSize === size.value}
+              onClick={() => setInk({ eraserSize: size.value })}
+            >
+              <span className="eraser-size" style={{ width: size.value, height: size.value }} />
+            </button>
+          ))}
+        </>
+      )}
+      {doc && <TextSizes doc={doc} pageWidth={pageWidth} />}
+
       {doc && (
         <>
           <span className="toolbar-divider" />
@@ -74,6 +123,55 @@ export function AnnotationToolbar({ doc }: { doc: AnnotationDoc | null }): React
         </>
       )}
     </div>
+  )
+}
+
+/** Shown for the text tool and when a text box is selected; changes that box right away. */
+function TextSizes({
+  doc,
+  pageWidth
+}: {
+  doc: AnnotationDoc
+  pageWidth: Props['pageWidth']
+}): React.JSX.Element | null {
+  const tool = useApp((s) => s.tool)
+  const textSize = useApp((s) => s.ink.textSize)
+  const setInk = useApp((s) => s.setInk)
+  const selection = useStore(doc, (s) => (s.selection?.kind === 'textBoxes' ? s.selection : null))
+  if (tool !== 'text' && !selection) return null
+
+  const box = selection && findItem(doc.getState().pages, { ...selection, kind: 'textBoxes' })
+  const unit = selection ? pageUnit(pageWidth(selection.page)) : 1
+  const current = box?.fontSize ? box.fontSize / unit : textSize
+
+  function pick(size: number): void {
+    setInk({ textSize: size })
+    if (!selection || !box) return
+    doc
+      .getState()
+      .change((p) =>
+        replaceItem(p, selection.page, 'textBoxes', { ...box, fontSize: round(size * unit) })
+      )
+  }
+
+  return (
+    <>
+      <span className="toolbar-divider" />
+      {TEXT_SIZES.map((size) => (
+        <button
+          key={size.value}
+          className={Math.abs(current - size.value) < 0.5 ? 'icon-button pressed' : 'icon-button'}
+          title={`${size.name} text`}
+          aria-label={`${size.name} text`}
+          aria-pressed={Math.abs(current - size.value) < 0.5}
+          onClick={() => pick(size.value)}
+        >
+          <span className="text-size" style={{ fontSize: size.value }}>
+            A
+          </span>
+        </button>
+      ))}
+    </>
   )
 }
 

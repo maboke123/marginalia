@@ -1,4 +1,4 @@
-import type { Highlight } from '../../../shared/annotations'
+import type { Highlight, TextMarkup } from '../../../shared/annotations'
 import { newId } from './doc'
 import { mergeLineRects, type Rect } from './geometry'
 
@@ -16,7 +16,8 @@ export function selectedTextLayer(): HTMLElement | null {
  * several pages is cut off at the end of the page where it starts.
  */
 export function highlightFromSelection(
-  color: string
+  color: string,
+  style: TextMarkup = 'highlight'
 ): { page: number; highlight: Highlight } | null {
   const layer = selectedTextLayer()
   const selection = window.getSelection()
@@ -49,6 +50,7 @@ export function highlightFromSelection(
     highlight: {
       id: newId('h'),
       color,
+      ...(style === 'highlight' ? {} : { style }),
       text: selection.toString().replace(/\s+/g, ' ').trim(),
       rects: mergeLineRects(rects),
       author: 'me'

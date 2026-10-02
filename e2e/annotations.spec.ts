@@ -122,11 +122,46 @@ test('undo, redo and the eraser', async () => {
   await page.keyboard.press('Control+y')
   await expect(strokes()).toHaveCount(2)
 
+  // The partial eraser cuts the top line in two.
   await page.keyboard.press('e')
   await drawOnPage([0.25, 0.2], [0.25, 0.4])
-  await expect(strokes()).toHaveCount(1)
+  await expect(strokes()).toHaveCount(3)
   await page.keyboard.press('Control+z')
   await expect(strokes()).toHaveCount(2)
+
+  await page.getByRole('button', { name: 'Whole' }).click()
+  await drawOnPage([0.25, 0.2], [0.25, 0.4])
+  await expect(strokes()).toHaveCount(1)
+})
+
+test('text boxes can be resized, change text size and use bold', async () => {
+  await openSlides()
+  await page.keyboard.press('t')
+  await drawOnPage([0.7, 0.2], [0.7, 0.2])
+  await page.keyboard.type('Entropy ')
+  await page.keyboard.type('max')
+  await page.keyboard.press('Shift+Home')
+  await page.keyboard.press('Control+b')
+  await page.keyboard.press('Escape')
+  const box = firstPage().locator('.text-box')
+  await expect(box.locator('strong')).toHaveText('Entropy max')
+
+  await page.keyboard.press('Escape')
+  await box.click()
+  const before = (await box.boundingBox())!
+  const grip = box.locator('.text-box-resize')
+  const g = (await grip.boundingBox())!
+  await page.mouse.move(g.x + g.width / 2, g.y + g.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(g.x + 80, g.y + g.height / 2, { steps: 6 })
+  await page.mouse.up()
+  await expect.poll(async () => (await box.boundingBox())!.width).toBeGreaterThan(before.width + 60)
+
+  const fontBefore = await box.evaluate((el) => parseFloat(getComputedStyle(el).fontSize))
+  await page.getByRole('button', { name: 'Huge text' }).click()
+  await expect
+    .poll(() => box.evaluate((el) => parseFloat(getComputedStyle(el).fontSize)))
+    .toBeGreaterThan(fontBefore * 1.4)
 })
 
 test('selected slide text becomes a highlight', async () => {
@@ -145,6 +180,23 @@ test('selected slide text becomes a highlight', async () => {
   await expect
     .poll(async () => (await readSidecar().catch(() => null))?.pages['1']?.highlights)
     .toMatchObject([{ text: expect.stringContaining('Information'), author: 'me' }])
+})
+
+test('selected slide text can be underlined', async () => {
+  await openSlides()
+  const span = firstPage().locator('.textLayer span', { hasText: 'Information gain' })
+  const box = (await span.boundingBox())!
+
+  await page.mouse.move(box.x + 1, box.y + box.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(box.x + box.width * 0.45, box.y + box.height / 2, { steps: 8 })
+  await page.mouse.up()
+  await page.getByRole('button', { name: /Underline/ }).click()
+
+  await expect(firstPage().locator('.hl.underline')).toHaveCount(1)
+  await expect
+    .poll(async () => (await readSidecar().catch(() => null))?.pages['1']?.highlights)
+    .toMatchObject([{ style: 'underline', color: '#1f6feb' }])
 })
 
 test('hides annotations when the PDF was replaced', async () => {

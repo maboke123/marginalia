@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { PDFDocumentLoadingTask, PDFDocumentProxy } from 'pdfjs-dist'
-import { DEFAULT_MARGIN_WIDTH, type LoadedAnnotations } from '../../../shared/annotations'
+import {
+  DEFAULT_MARGIN_WIDTH,
+  type LoadedAnnotations,
+  type TextMarkup
+} from '../../../shared/annotations'
 import { AnnotationToolbar } from '../annotations/AnnotationToolbar'
 import { AnnotationContext } from '../annotations/context'
 import { addItem, createAnnotationDoc, removeItems, type AnnotationDoc } from '../annotations/doc'
@@ -103,7 +107,7 @@ function Document({
   const activeDoc = pdfChanged ? null : doc
   const tool = useApp((s) => s.tool)
   const setTool = useApp((s) => s.setTool)
-  const highlightColor = useApp((s) => s.ink.highlightColor)
+  const ink = useApp((s) => s.ink)
   const showError = useApp((s) => s.showError)
   const [selectionAt, setSelectionAt] = useState<{ x: number; y: number } | null>(null)
   const [viewport, setViewport] = useState({ width: 0, height: 0 })
@@ -208,14 +212,20 @@ function Document({
     }
   }, [activeDoc, annotations, path, margin, showError])
 
-  const highlightSelection = useCallback((): boolean => {
-    const result = activeDoc && highlightFromSelection(highlightColor)
-    if (!result) return false
-    activeDoc.getState().change((p) => addItem(p, result.page, 'highlights', result.highlight))
-    window.getSelection()?.removeAllRanges()
-    setSelectionAt(null)
-    return true
-  }, [activeDoc, highlightColor])
+  // Highlights use the highlighter colour; lines under or through text use the pen colour,
+  // because a yellow line is hard to see.
+  const markSelection = useCallback(
+    (style: TextMarkup): boolean => {
+      const color = style === 'highlight' ? ink.highlightColor : ink.penColor
+      const result = activeDoc && highlightFromSelection(color, style)
+      if (!result) return false
+      activeDoc.getState().change((p) => addItem(p, result.page, 'highlights', result.highlight))
+      window.getSelection()?.removeAllRanges()
+      setSelectionAt(null)
+      return true
+    },
+    [activeDoc, ink.highlightColor, ink.penColor]
+  )
 
   // Offer a "Highlight" button at the end of a text selection on a slide.
   const updateSelectionAction = useCallback(() => {
@@ -283,7 +293,8 @@ function Document({
 
     if (state && ctrl && key === 'z' && !e.shiftKey) state.undo()
     else if (state && ctrl && (key === 'y' || (key === 'z' && e.shiftKey))) state.redo()
-    else if (state && !ctrl && key === 'h' && selectedTextLayer()) highlightSelection()
+    else if (state && !ctrl && key === 'h' && selectedTextLayer()) markSelection('highlight')
+    else if (state && !ctrl && key === 'u' && selectedTextLayer()) markSelection('underline')
     else if (state && !ctrl && !e.altKey && TOOL_KEYS[key]) setTool(TOOL_KEYS[key])
     else if (e.key === 'Escape') {
       setTool('select')
@@ -311,7 +322,7 @@ function Document({
   return (
     <div className="pdf-viewer" ref={viewerRef}>
       <div className="pdf-toolbar">
-        <AnnotationToolbar doc={activeDoc} />
+        <AnnotationToolbar doc={activeDoc} pageWidth={(n) => sizes[n - 1].width} />
         <span className="pdf-title">{title}</span>
         <PageInput page={page} count={sizes.length} onGo={goTo} />
         <div className="pdf-zoom">
@@ -389,14 +400,23 @@ function Document({
       </AnnotationContext.Provider>
 
       {selectionAt && (
-        <button
-          className="button selection-action"
+        <div
+          className="selection-action"
+          role="toolbar"
+          aria-label="Mark selected text"
           style={{ left: selectionAt.x, top: selectionAt.y }}
           onPointerDown={(e) => e.preventDefault()}
-          onClick={highlightSelection}
         >
-          Highlight <span className="muted">H</span>
-        </button>
+          <button className="text-button" onClick={() => markSelection('highlight')}>
+            Highlight <span className="muted">H</span>
+          </button>
+          <button className="text-button" onClick={() => markSelection('underline')}>
+            Underline <span className="muted">U</span>
+          </button>
+          <button className="text-button" onClick={() => markSelection('strikethrough')}>
+            Strikethrough
+          </button>
+        </div>
       )}
     </div>
   )

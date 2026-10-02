@@ -663,10 +663,18 @@ h2 {
   position: absolute;
   z-index: 5;
   display: flex;
-  align-items: center;
-  gap: 8px;
-  height: 28px;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-menu);
   box-shadow: var(--shadow-menu);
+}
+
+.selection-action .text-button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
 /* Annotation toolbar */
@@ -725,9 +733,31 @@ h2 {
 
 .hl {
   position: absolute;
+  pointer-events: none;
+}
+
+.hl.highlight {
+  background: currentColor;
   opacity: 0.4;
   mix-blend-mode: multiply;
-  pointer-events: none;
+}
+
+.hl.underline::after,
+.hl.strikethrough::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: var(--line);
+  background: currentColor;
+}
+
+.hl.underline::after {
+  bottom: 0;
+}
+
+.hl.strikethrough::after {
+  top: 55%;
 }
 
 .hl.selected {
@@ -861,10 +891,33 @@ h2 {
 .text-box-resize {
   position: absolute;
   top: 0;
-  right: -5px;
+  right: -6px;
   bottom: 0;
-  width: 9px;
+  width: 11px;
   cursor: ew-resize;
+}
+
+/* A grip on the right edge, visible on hover and when the box is selected. */
+.text-box-resize::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 4px;
+  width: 3px;
+  height: min(1.4em, 80%);
+  border-radius: 2px;
+  background: var(--paper-rule);
+  transform: translateY(-50%);
+  opacity: 0;
+}
+
+.text-box:hover .text-box-resize::after,
+.text-box.selected .text-box-resize::after {
+  opacity: 1;
+}
+
+.text-box.selected .text-box-resize::after {
+  background: var(--accent);
 }
 
 /* PDF text layer, from pdfjs-dist/web/pdf_viewer.css (only the parts this app uses) */
@@ -929,4 +982,15 @@ h2 {
 .pdf-message {
   padding: 24px 32px;
   color: var(--text-muted);
+}
+
+.eraser-size {
+  display: block;
+  border: 1.25px solid currentColor;
+  border-radius: 50%;
+}
+
+.text-size {
+  font-weight: 600;
+  line-height: 1;
 }

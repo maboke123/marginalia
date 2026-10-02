@@ -10,12 +10,13 @@ import {
   pageOf,
   removeItems,
   replaceItem,
+  updatePage,
   type AnnotationDoc,
   type Kind
 } from './doc'
 import {
-  erasedHighlights,
-  erasedStrokes,
+  erasePartial,
+  eraseWhole,
   hitsRects,
   round,
   strokeBounds,
@@ -24,7 +25,7 @@ import {
   type Point
 } from './geometry'
 import { strokePath } from './ink'
-import { HIGHLIGHT_OPACITY, HIGHLIGHTER_WIDTH } from './palette'
+import { HIGHLIGHT_OPACITY, HIGHLIGHTER_WIDTH, pageUnit, TEXT_SIZES } from './palette'
 import { TextBoxView } from './TextBoxView'
 import { TextLayerView } from './TextLayerView'
 
@@ -60,8 +61,6 @@ export const PageOverlay = memo(function PageOverlay(props: Props): React.JSX.El
   return <AnnotatedOverlay {...props} doc={doc} style={style} />
 })
 
-const ERASER_RADIUS_PX = 8
-
 /**
  * A text box being typed in saves when it loses focus. Blurring it first makes that save
  * happen before the next action starts, so their undo steps do not get mixed up.
@@ -72,15 +71,11 @@ function finishTyping(): void {
     active.blur()
   }
 }
+
 const DRAG_THRESHOLD_PX = 3
 const DEFAULT_BOX_WIDTH = 180
-const TEXT_SIZE = 13
-
-/**
- * Slides range from 364 points wide (Beamer) to 960 (PowerPoint). Sizes are chosen in screen
- * pixels at "fit width" on a laptop and multiplied by this, so they look the same in every deck.
- */
-const pageUnit = (pageWidth: number): number => pageWidth / 625
+// Boxes from before text sizes existed have no fontSize.
+const DEFAULT_TEXT_SIZE = TEXT_SIZES[1].value
 
 function AnnotatedOverlay({
   pdf,
@@ -245,6 +240,7 @@ function AnnotatedOverlay({
         x: Math.min(start[0], totalWidth - boxWidth),
         y: start[1],
         width: boxWidth,
+        fontSize: round(ink.textSize * unit),
         markdown: '',
         author: 'me'
       }
@@ -255,23 +251,15 @@ function AnnotatedOverlay({
     }
 
     if (tool === 'eraser') {
-      const radius = ERASER_RADIUS_PX / scale
+      const radius = ink.eraserSize / scale
       let last = start
       const erase = (path: Point[]): void => {
         const current = pageOf(doc.getState().pages, number)
-        const strokes = erasedStrokes(current.strokes, path, radius)
-        const highlights = erasedHighlights(current.highlights, path)
-        if (!strokes.length && !highlights.length) return
-        doc
-          .getState()
-          .update((p) =>
-            removeItems(
-              removeItems(p, number, 'strokes', strokes),
-              number,
-              'highlights',
-              highlights
-            )
-          )
+        const next =
+          ink.eraserMode === 'stroke'
+            ? eraseWhole(current, path, radius)
+            : erasePartial(current, path, radius, () => newId('s'))
+        if (next) doc.getState().update((p) => updatePage(p, number, () => next))
       }
       doc.getState().begin()
       erase([start])
@@ -346,7 +334,7 @@ function AnnotatedOverlay({
     <div
       ref={rootRef}
       className={`page-overlay tool-${tool}`}
-      style={{ ...style, fontSize: TEXT_SIZE * unit }}
+      style={{ ...style, fontSize: DEFAULT_TEXT_SIZE * unit }}
       onPointerDown={() => {
         if (tool === 'select') doc.getState().select(null)
       }}
@@ -356,11 +344,21 @@ function AnnotatedOverlay({
         h.rects.map(([x, y, w, rh], i) => (
           <div
             key={`${h.id}-${i}`}
-            className={
-              selection?.kind === 'highlights' && selection.id === h.id ? 'hl selected' : 'hl'
-            }
+            className={[
+              'hl',
+              h.style ?? 'highlight',
+              selection?.kind === 'highlights' && selection.id === h.id ? 'selected' : ''
+            ].join(' ')}
             data-author={h.author}
-            style={{ left: x, top: y, width: w, height: rh, background: h.color }}
+            style={{
+              left: x,
+              top: y,
+              width: w,
+              height: rh,
+              color: h.color,
+              // Line thickness for underline and strikethrough grows with the text.
+              ['--line' as string]: `${Math.max(0.75, rh * 0.08)}px`
+            }}
           />
         ))
       )}
@@ -392,12 +390,7 @@ function AnnotatedOverlay({
 
         {selectedStroke && <SelectionBox stroke={selectedStroke} scale={scale} />}
         {tool === 'eraser' && eraserAt && (
-          <circle
-            className="eraser"
-            cx={eraserAt[0]}
-            cy={eraserAt[1]}
-            r={ERASER_RADIUS_PX / scale}
-          />
+          <circle className="eraser" cx={eraserAt[0]} cy={eraserAt[1]} r={ink.eraserSize / scale} />
         )}
       </svg>
 
@@ -417,6 +410,7 @@ function AnnotatedOverlay({
           selected={selection?.kind === 'textBoxes' && selection.id === box.id}
           editing={editing?.id === box.id}
           interactive={tool === 'select' || tool === 'text'}
+          resizable={tool === 'select'}
           onPointerDown={(e) => onBoxPointerDown(e, box)}
           onDoubleClick={() => startEditing(box)}
           onResizeStart={(e) => resizeBox(e, box)}
