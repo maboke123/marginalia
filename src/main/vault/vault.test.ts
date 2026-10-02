@@ -342,6 +342,30 @@ describe('last page', () => {
   })
 })
 
+describe('chat sessions', () => {
+  it('keeps one conversation per section that follows renames, moves and trash', async () => {
+    await fs.mkdir(path.join(root, 'ML/B2/Entropy'), { recursive: true })
+    await fs.mkdir(path.join(root, 'ML/B3'), { recursive: true })
+    await fs.mkdir(path.join(root, 'Stats'))
+
+    await vault.setChatSession('ML/B2', 'session-b2')
+    await vault.setChatSession('ML/B2/Entropy', 'session-entropy')
+    await vault.setChatSession('ML/B3', 'session-b3')
+    expect(await vault.chatSession('ML/B2')).toBe('session-b2')
+    expect(await vault.chatSession('ML')).toBeNull()
+
+    await vault.rename('ML/B2', 'B2 Trees')
+    await vault.move('ML/B2 Trees', 'Stats')
+    expect(await vault.chatSession('Stats/B2 Trees')).toBe('session-b2')
+    expect(await vault.chatSession('Stats/B2 Trees/Entropy')).toBe('session-entropy')
+
+    await vault.trash('ML/B3')
+    await vault.setChatSession('Stats/B2 Trees/Entropy', null)
+    const state = JSON.parse(await fs.readFile(path.join(root, '.marginalia/state.json'), 'utf8'))
+    expect(state).toEqual({ chats: { 'Stats/B2 Trees': 'session-b2' } })
+  })
+})
+
 describe('annotations', () => {
   const file: AnnotationFile = {
     version: 1,

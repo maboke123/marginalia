@@ -1,6 +1,15 @@
 export type NodeKind = 'notebook' | 'section' | 'markdown' | 'pdf'
 
 import type { AnnotationFile, LoadedAnnotations } from './annotations'
+import type {
+  ChatEvent,
+  ChatHistoryItem,
+  ChatRequest,
+  ClaudeSettings,
+  ClaudeSettingsUpdate,
+  ToolCall,
+  ToolReply
+} from './claude'
 
 export interface VaultNode {
   /** File or folder name on disk, including extension. */
@@ -73,6 +82,19 @@ export interface MarginaliaApi {
     readAnnotations(pdf: string): Promise<LoadedAnnotations>
     writeAnnotations(pdf: string, file: AnnotationFile): Promise<void>
     onChanged(listener: () => void): () => void
+  }
+  claude: {
+    settings(): Promise<ClaudeSettings>
+    setSettings(update: ClaudeSettingsUpdate): Promise<ClaudeSettings>
+    /** Resolves when Claude has finished answering; the answer arrives through onEvent. */
+    send(request: ChatRequest): Promise<void>
+    stop(): Promise<void>
+    history(chat: string): Promise<ChatHistoryItem[]>
+    /** Forgets the section's conversation, so the next message starts a new one. */
+    newChat(chat: string): Promise<void>
+    onEvent(listener: (chat: string, event: ChatEvent) => void): () => void
+    onToolCall(listener: (call: ToolCall) => void): () => void
+    replyTool(reply: ToolReply): void
   }
   app: {
     /** The window is about to close; save everything, then call readyToClose(). */

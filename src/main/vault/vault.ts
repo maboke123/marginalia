@@ -33,7 +33,28 @@ interface VaultSettings {
 /** Positions that change often; kept apart from settings.json, which people may edit by hand. */
 interface VaultState {
   lastPage?: Record<string, number>
+  /** Section path -> Claude session id, so each lesson keeps its own conversation. */
+  chats?: Record<string, string>
   [key: string]: unknown
+}
+
+/** Re-keys entries for a path that moved (also everything below a moved folder); null drops them. */
+function remapKeys<T>(
+  map: Record<string, T> | undefined,
+  from: string,
+  to: string | null
+): Record<string, T> | null {
+  if (!map) return null
+  let changed = false
+  const out: Record<string, T> = {}
+  for (const [p, value] of Object.entries(map)) {
+    if (p !== from && !p.startsWith(from + '/')) out[p] = value
+    else {
+      changed = true
+      if (to !== null) out[to + p.slice(from.length)] = value
+    }
+  }
+  return changed ? out : null
 }
 
 const SETTINGS_FILE = 'settings.json'
@@ -270,6 +291,21 @@ export class Vault {
     )
   }
 
+  async chatSession(section: string): Promise<string | null> {
+    const state = await this.readData<VaultState>(STATE_FILE)
+    return state.chats?.[section] ?? null
+  }
+
+  setChatSession(section: string, sessionId: string | null): Promise<void> {
+    return this.updateData<VaultState>(STATE_FILE, (state) => {
+      if ((state.chats?.[section] ?? null) === sessionId) return null
+      const chats = { ...state.chats }
+      if (sessionId) chats[section] = sessionId
+      else delete chats[section]
+      return { ...state, chats }
+    })
+  }
+
   async rename(rel: string, newName: string): Promise<string> {
     const abs = this.resolveItem(rel)
     const isDir = (await fs.stat(abs)).isDirectory()
@@ -284,7 +320,7 @@ export class Vault {
     await this.moveEntry(abs, target, isDir)
     await updateOrder(dir, (names) => names.map((n) => (n === oldName ? name : n)))
     if (isDir && dir === this.root) await this.renameColor(oldName, name)
-    await this.remapLastPages(toRel(this.root, abs), toRel(this.root, target))
+    await this.remapState(toRel(this.root, abs), toRel(this.root, target))
     return toRel(this.root, target)
   }
 
@@ -306,7 +342,7 @@ export class Vault {
       await this.moveEntry(abs, target, isDir)
       await updateOrder(oldParent, (names) => names.filter((n) => n !== name))
       if (isDir && oldParent === this.root) await this.renameColor(name, null)
-      await this.remapLastPages(toRel(this.root, abs), toRel(this.root, target))
+      await this.remapState(toRel(this.root, abs), toRel(this.root, target))
     }
 
     if (before !== undefined) {
@@ -329,7 +365,7 @@ export class Vault {
     }
     await updateOrder(parent, (names) => names.filter((n) => n !== name))
     if (isDir && parent === this.root) await this.renameColor(name, null)
-    await this.remapLastPages(toRel(this.root, abs), null)
+    await this.remapState(toRel(this.root, abs), null)
   }
 
   async setColor(notebook: string, color: NotebookColor | null): Promise<void> {
@@ -397,20 +433,16 @@ export class Vault {
     })
   }
 
-  /** Keeps remembered pages attached to PDFs that were renamed, moved (also via a folder) or trashed. */
-  private remapLastPages(from: string, to: string | null): Promise<void> {
+  /**
+   * Keeps remembered pages and conversations attached to PDFs and sections that were
+   * renamed, moved (also via a parent folder) or trashed.
+   */
+  private remapState(from: string, to: string | null): Promise<void> {
     return this.updateData<VaultState>(STATE_FILE, (state) => {
-      if (!state.lastPage) return null
-      let changed = false
-      const pages: Record<string, number> = {}
-      for (const [p, page] of Object.entries(state.lastPage)) {
-        if (p !== from && !p.startsWith(from + '/')) pages[p] = page
-        else {
-          changed = true
-          if (to !== null) pages[to + p.slice(from.length)] = page
-        }
-      }
-      return changed ? { ...state, lastPage: pages } : null
+      const lastPage = remapKeys(state.lastPage, from, to)
+      const chats = remapKeys(state.chats, from, to)
+      if (!lastPage && !chats) return null
+      return { ...state, ...(lastPage && { lastPage }), ...(chats && { chats }) }
     })
   }
 

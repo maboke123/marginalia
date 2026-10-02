@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
+import type { ChatEvent, ToolCall } from '../shared/claude'
 import type { IpcResult, MarginaliaApi } from '../shared/types'
 
 async function invoke<T>(channel: string, ...args: unknown[]): Promise<T> {
@@ -37,6 +38,25 @@ const api: MarginaliaApi = {
       ipcRenderer.on('vault:changed', handler)
       return () => ipcRenderer.removeListener('vault:changed', handler)
     }
+  },
+  claude: {
+    settings: () => invoke('claude:settings'),
+    setSettings: (update) => invoke('claude:setSettings', update),
+    send: (request) => invoke('claude:send', request),
+    stop: () => invoke('claude:stop'),
+    history: (chat) => invoke('claude:history', chat),
+    newChat: (chat) => invoke('claude:newChat', chat),
+    onEvent: (listener) => {
+      const handler = (_e: unknown, chat: string, event: ChatEvent): void => listener(chat, event)
+      ipcRenderer.on('claude:event', handler)
+      return () => ipcRenderer.removeListener('claude:event', handler)
+    },
+    onToolCall: (listener) => {
+      const handler = (_e: unknown, call: ToolCall): void => listener(call)
+      ipcRenderer.on('claude:tool', handler)
+      return () => ipcRenderer.removeListener('claude:tool', handler)
+    },
+    replyTool: (reply) => ipcRenderer.send('claude:tool-reply', reply)
   },
   app: {
     onBeforeClose: (listener) => {

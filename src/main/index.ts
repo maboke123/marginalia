@@ -2,7 +2,8 @@ import { app, BrowserWindow, ipcMain, Menu, nativeTheme, net, protocol, shell } 
 import path from 'path'
 import { pathToFileURL } from 'url'
 import { ConfigStore } from './config'
-import { registerIpc } from './ipc'
+import { registerClaude } from './claude/service'
+import { handle, registerIpc } from './ipc'
 
 let mainWindow: BrowserWindow | null = null
 
@@ -83,10 +84,9 @@ Menu.setApplicationMenu(null)
 
 app.whenReady().then(() => {
   app.setAppUserModelId('be.kuleuven.mathiasbk.marginalia-poc')
-  const currentVault = registerIpc(
-    () => mainWindow,
-    new ConfigStore(path.join(app.getPath('userData'), 'config.json'))
-  )
+  const config = new ConfigStore(path.join(app.getPath('userData'), 'config.json'))
+  const currentVault = registerIpc(() => mainWindow, config)
+  registerClaude(handle, () => mainWindow, config, currentVault)
   protocol.handle('vault', (request) => {
     const vault = currentVault()
     if (!vault) return new Response('No vault open', { status: 404 })

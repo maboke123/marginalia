@@ -10,7 +10,10 @@ import { watchVault } from './vault/watcher'
 
 // ipcMain.handle mangles thrown errors into "Error invoking remote method ...",
 // so errors travel as plain values and the preload rethrows them.
-function handle<A extends unknown[], R>(channel: string, fn: (...args: A) => R | Promise<R>): void {
+export function handle<A extends unknown[], R>(
+  channel: string,
+  fn: (...args: A) => R | Promise<R>
+): void {
   ipcMain.handle(channel, async (_event, ...args): Promise<IpcResult<R>> => {
     try {
       return { ok: true, value: await fn(...(args as A)) }
