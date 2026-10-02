@@ -1,45 +1,28 @@
-import {
-  _electron as electron,
-  expect,
-  test,
-  type ElectronApplication,
-  type Locator,
-  type Page
-} from '@playwright/test'
+import { expect, test, type ElectronApplication, type Locator, type Page } from '@playwright/test'
 import { promises as fs } from 'fs'
-import os from 'os'
 import path from 'path'
+import { createEnv, launch, type TestEnv } from './helpers'
 
+let env: TestEnv
 let vault: string
-let userData: string
 let app: ElectronApplication
 let page: Page
 
 const row = (name: string): Locator => page.locator('.tree-row', { hasText: name })
 
 test.beforeEach(async () => {
-  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'marginalia-e2e-'))
-  vault = path.join(tmp, 'Notes')
-  userData = path.join(tmp, 'profile')
-  await fs.mkdir(path.join(vault, 'Machine Learning', 'B2 Decision trees'), { recursive: true })
-  await fs.writeFile(path.join(vault, 'Machine Learning', 'B2 Decision trees', 'Summary.md'), '')
-  await fs.writeFile(path.join(vault, 'Machine Learning', 'B2 Decision trees', 'slides.pdf'), '')
-  await fs.mkdir(userData)
-  await fs.writeFile(path.join(userData, 'config.json'), JSON.stringify({ recentVaults: [vault] }))
-
-  // ELECTRON_RUN_AS_NODE is set when this runs from inside VS Code; it would start Electron as plain Node.
-  const env = Object.fromEntries(
-    Object.entries({ ...process.env, MARGINALIA_USER_DATA: userData }).filter(
-      (e): e is [string, string] => e[0] !== 'ELECTRON_RUN_AS_NODE' && e[1] !== undefined
-    )
-  )
-  app = await electron.launch({ args: ['.'], env })
-  page = await app.firstWindow()
+  env = await createEnv()
+  vault = env.vault
+  const section = path.join(vault, 'Machine Learning', 'B2 Decision trees')
+  await fs.mkdir(section, { recursive: true })
+  await fs.writeFile(path.join(section, 'Summary.md'), '')
+  await fs.writeFile(path.join(section, 'slides.pdf'), '')
+  ;({ app, page } = await launch(env))
 })
 
 test.afterEach(async () => {
   await app.close()
-  await fs.rm(path.dirname(vault), { recursive: true, force: true })
+  await fs.rm(env.dir, { recursive: true, force: true })
 })
 
 test('reopens the last vault and shows its notebooks', async () => {
