@@ -19,7 +19,6 @@
     "format": "prettier --write ."
   },
   "dependencies": {
-    "chokidar": "5.0.0",
     "zustand": "5.0.15"
   },
   "devDependencies": {

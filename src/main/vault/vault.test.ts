@@ -297,6 +297,18 @@ describe('watchVault', () => {
     expect(calls).toBeGreaterThan(0)
   })
 
+  it('does not lock folders, so they can still be renamed', async () => {
+    await write('ML/B2 Trees/x.md')
+    const stop = watchVault(root, () => {})
+    await new Promise((r) => setTimeout(r, 300))
+
+    await expect(vault.rename('ML/B2 Trees', 'B2 Decision trees')).resolves.toBe(
+      'ML/B2 Decision trees'
+    )
+    await expect(vault.rename('ML', 'Machine Learning')).resolves.toBe('Machine Learning')
+    await stop()
+  })
+
   it('ignores changes inside hidden folders', async () => {
     let calls = 0
     const stop = watchVault(root, () => calls++)
