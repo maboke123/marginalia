@@ -7,6 +7,7 @@ interface Props {
   selected: boolean
   editing: boolean
   interactive: boolean
+  resizable: boolean
   onPointerDown(e: React.PointerEvent): void
   onDoubleClick(): void
   onResizeStart(e: React.PointerEvent): void
@@ -15,7 +16,7 @@ interface Props {
 }
 
 export const TextBoxView = memo(function TextBoxView(props: Props): React.JSX.Element {
-  const { box, selected, editing, interactive } = props
+  const { box, selected, editing, interactive, resizable } = props
   const html = useMemo(() => renderMarkdown(box.markdown), [box.markdown])
 
   const classes = ['text-box']
@@ -28,7 +29,7 @@ export const TextBoxView = memo(function TextBoxView(props: Props): React.JSX.El
     <div
       className={classes.join(' ')}
       data-id={box.id}
-      style={{ left: box.x, top: box.y, width: box.width }}
+      style={{ left: box.x, top: box.y, width: box.width, fontSize: box.fontSize }}
       onPointerDown={editing ? undefined : props.onPointerDown}
       onDoubleClick={editing ? undefined : props.onDoubleClick}
     >
@@ -37,12 +38,31 @@ export const TextBoxView = memo(function TextBoxView(props: Props): React.JSX.El
       ) : (
         <div className="text-box-content" dangerouslySetInnerHTML={{ __html: html }} />
       )}
-      {selected && !editing && (
-        <div className="text-box-resize" onPointerDown={props.onResizeStart} />
+      {resizable && !editing && (
+        <div
+          className="text-box-resize"
+          title="Drag to change the width"
+          onPointerDown={props.onResizeStart}
+        />
       )}
     </div>
   )
 })
+
+const FORMAT_KEYS: Record<string, [string, string]> = {
+  b: ['**', '**'],
+  i: ['*', '*'],
+  u: ['<u>', '</u>']
+}
+
+/** Ctrl+B / Ctrl+I / Ctrl+U: puts Markdown markers around the selection, keeping native undo. */
+function wrapSelection(el: HTMLTextAreaElement, before: string, after: string): void {
+  const { selectionStart: start, selectionEnd: end, value } = el
+  el.focus()
+  // execCommand keeps Ctrl+Z working inside the text box, unlike setting value directly.
+  document.execCommand('insertText', false, before + value.slice(start, end) + after)
+  el.setSelectionRange(start + before.length, end + before.length)
+}
 
 function Editor({
   initial,
@@ -85,6 +105,12 @@ function Editor({
       onKeyDown={(e) => {
         e.stopPropagation()
         if (e.key === 'Escape' || (e.key === 'Enter' && e.ctrlKey)) e.currentTarget.blur()
+        const wrap = e.ctrlKey && FORMAT_KEYS[e.key.toLowerCase()]
+        if (wrap) {
+          e.preventDefault()
+          wrapSelection(e.currentTarget, ...wrap)
+          grow(e.currentTarget)
+        }
       }}
     />
   )

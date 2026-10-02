@@ -16,9 +16,13 @@ export interface Stroke {
   author: Author
 }
 
+export type TextMarkup = 'highlight' | 'underline' | 'strikethrough'
+
+/** Marked-up PDF text. Without `style` it is a highlight, like in SPEC section 4. */
 export interface Highlight {
   id: string
   color: string
+  style?: TextMarkup
   text: string
   /** [x, y, width, height] */
   rects: [number, number, number, number][]
@@ -30,6 +34,8 @@ export interface TextBox {
   x: number
   y: number
   width: number
+  /** In points; older files without it use the default size. */
+  fontSize?: number
   markdown: string
   author: Author
 }
