@@ -1,0 +1,78 @@
+// A scripted stand-in for Claude, loaded by the app when MARGINALIA_FAKE_CLAUDE points here.
+// It follows the same contract as the real agent (src/main/claude/agent.ts) and logs what it
+// received to MARGINALIA_FAKE_LOG, so tests can check the context packet.
+import { promises as fs } from 'fs'
+
+const LOG = process.env.MARGINALIA_FAKE_LOG
+
+async function readLog() {
+  try {
+    return JSON.parse(await fs.readFile(LOG, 'utf8'))
+  } catch {
+    return {}
+  }
+}
+
+async function record(sessionId, entry) {
+  const log = await readLog()
+  log[sessionId] = [...(log[sessionId] ?? []), entry]
+  await fs.writeFile(LOG, JSON.stringify(log, null, 2))
+}
+
+const match = (text, re) => re.exec(text)?.[1]
+
+export async function* agent(input) {
+  const sessionId = input.sessionId ?? `fake-${Date.now()}`
+  input.onSession(sessionId)
+  const question = input.text.split('</context>').pop().trim()
+  const slides = match(input.text, /^Slides: (.+), page \d+ of/m)
+  const page = Number(match(input.text, /^Slides: .+, page (\d+) of/m) ?? 1)
+  const summary = match(input.text, /^Summary: (.+)$/m)
+
+  if (/explain/i.test(question)) {
+    yield { type: 'text', text: 'This is the **information gain** ' }
+    yield { type: 'text', text: 'formula: $IG(S,t) = H(S) - \\sum_v \\frac{|S_v|}{|S|} H(S_v)$.' }
+  } else if (/short version/i.test(question)) {
+    yield { type: 'tool', name: 'insert_into_summary', input: { file: summary } }
+    const reply = await input.callTool('insert_into_summary', {
+      file: summary,
+      position: 'heading',
+      heading: 'Information gain',
+      markdown: 'Short version: pick the split that lowers entropy the most.'
+    })
+    yield { type: 'text', text: reply.ok ? 'Added it under Information gain.' : reply.text }
+  } else if (/note next to/i.test(question)) {
+    yield { type: 'tool', name: 'add_text_annotation', input: { file: slides, page } }
+    const reply = await input.callTool('add_text_annotation', {
+      file: slides,
+      page,
+      markdown: 'Gain = drop in entropy, $\\Delta H$'
+    })
+    yield { type: 'text', text: reply.ok ? 'Put a note in the margin.' : reply.text }
+  } else if (/highlight/i.test(question)) {
+    const reply = await input.callTool('add_highlight', {
+      file: slides,
+      page,
+      text: 'Information gain'
+    })
+    yield { type: 'text', text: reply.ok ? 'Highlighted it.' : reply.text }
+  } else {
+    yield { type: 'text', text: `You asked: ${question}` }
+  }
+
+  await record(sessionId, {
+    text: input.text,
+    images: input.images.length,
+    question
+  })
+  yield { type: 'done' }
+}
+
+/** Earlier messages of a session, like the real agent reads them from Claude Code's transcripts. */
+export async function history(sessionId) {
+  const log = await readLog()
+  return (log[sessionId] ?? []).flatMap((entry) => [
+    { role: 'user', text: entry.question },
+    { role: 'assistant', text: `Earlier answer to: ${entry.question}` }
+  ])
+}
