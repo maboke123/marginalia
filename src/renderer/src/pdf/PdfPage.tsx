@@ -1,20 +1,22 @@
 import { memo, useEffect, useRef } from 'react'
 import { RenderingCancelledException, type PDFDocumentProxy, type RenderTask } from 'pdfjs-dist'
+import { PageOverlay } from '../annotations/PageOverlay'
+import type { PageSize } from './layout'
 
 interface Props {
   pdf: PDFDocumentProxy
   number: number
+  size: PageSize
+  margin: number
   top: number
   left: number
-  width: number
-  height: number
   scale: number
   /** Only pages near the viewport get a canvas; the rest are empty placeholders. */
   rendered: boolean
 }
 
 export const PdfPage = memo(function PdfPage(props: Props): React.JSX.Element {
-  const { pdf, number, top, left, width, height, scale, rendered } = props
+  const { pdf, number, size, margin, top, left, scale, rendered } = props
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const renderedScale = useRef<number | null>(null)
 
@@ -60,14 +62,30 @@ export const PdfPage = memo(function PdfPage(props: Props): React.JSX.Element {
     }
   }, [pdf, number, scale, rendered])
 
+  const sheetWidth = Math.round(size.width * scale)
+  const height = Math.round(size.height * scale)
+
   return (
     <div
       className="pdf-page"
       data-page={number}
-      style={{ top, left, width, height }}
+      style={{ top, left, width: Math.round(size.width * (1 + margin) * scale), height }}
       aria-label={`Page ${number}`}
     >
-      {rendered && <canvas ref={canvasRef} />}
+      <div className="pdf-sheet" style={{ width: sheetWidth, height }}>
+        {rendered && <canvas ref={canvasRef} />}
+      </div>
+      {margin > 0 && <div className="pdf-margin" style={{ left: sheetWidth, height }} />}
+      {rendered && (
+        <PageOverlay
+          pdf={pdf}
+          number={number}
+          width={size.width}
+          height={size.height}
+          margin={margin}
+          scale={scale}
+        />
+      )}
     </div>
   )
 })

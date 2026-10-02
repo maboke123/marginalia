@@ -7,7 +7,14 @@ const PATHS = {
   plus: 'M8 3v10M3 8h10',
   minus: 'M3 8h10',
   import: 'M8 2.5v7.5M5 7l3 3 3-3M3 11v2.5h10V11',
-  vault: 'M2.5 3h11v10h-11zM2.5 6h11'
+  vault: 'M2.5 3h11v10h-11zM2.5 6h11',
+  cursor: 'M4 2.5l8 5.5-3.5.75L10.5 13l-1.5.75-2-4.25L4 12z',
+  pen: 'M10.5 2.5l3 3-7.5 7.5-3.75.75.75-3.75zM9 4l3 3',
+  highlighter: 'M9.5 2.5l4 4-5 5-4-4zM4.5 7.5l-2 4 2 2 4-2M2.5 13.5h4',
+  eraser: 'M6 13.5h7.5M2.75 9.75l6-6.25a1 1 0 0 1 1.4 0l3.1 3.1a1 1 0 0 1 0 1.4L7.5 13.5H5.25z',
+  text: 'M3 3.5h10M8 3.5v9.5M6 13h4',
+  undo: 'M5.5 3.5L2.5 6.5l3 3M2.5 6.5H10a3.5 3.5 0 0 1 0 7H7',
+  redo: 'M10.5 3.5l3 3-3 3M13.5 6.5H6a3.5 3.5 0 0 0 0 7h3'
 } as const
 
 export type IconName = keyof typeof PATHS

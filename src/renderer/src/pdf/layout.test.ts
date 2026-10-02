@@ -47,6 +47,13 @@ describe('fitWidthScale', () => {
   })
 })
 
+describe('margin', () => {
+  it('makes every page wider and is included when fitting the width', () => {
+    expect(layoutPages(slides.slice(0, 1), 1, 0.6).widths).toEqual([1536])
+    expect(fitWidthScale(slides, 1536 + 2 * VIEW_PADDING, 0.6)).toBe(1)
+  })
+})
+
 describe('pagesBetween', () => {
   it('finds the pages overlapping a band', () => {
     const layout = layoutPages(slides, 1)

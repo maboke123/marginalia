@@ -7,6 +7,7 @@ export interface PageSize {
 export interface Layout {
   tops: number[]
   heights: number[]
+  /** Width of each page including its margin, in screen pixels. */
   widths: number[]
   totalHeight: number
   maxWidth: number
@@ -32,13 +33,14 @@ export function stepZoom(scale: number, direction: 1 | -1): number {
   return next ?? clampScale(scale)
 }
 
-export function fitWidthScale(sizes: PageSize[], containerWidth: number): number {
-  const widest = Math.max(...sizes.map((s) => s.width))
+/** `margin` is the margin next to each page as a fraction of the page width (0.6 = 60%). */
+export function fitWidthScale(sizes: PageSize[], containerWidth: number, margin = 0): number {
+  const widest = Math.max(...sizes.map((s) => s.width)) * (1 + margin)
   if (!Number.isFinite(widest) || widest <= 0) return 1
   return clampScale((containerWidth - 2 * VIEW_PADDING) / widest)
 }
 
-export function layoutPages(sizes: PageSize[], scale: number): Layout {
+export function layoutPages(sizes: PageSize[], scale: number, margin = 0): Layout {
   const tops: number[] = []
   const heights: number[] = []
   const widths: number[] = []
@@ -47,7 +49,7 @@ export function layoutPages(sizes: PageSize[], scale: number): Layout {
     const height = Math.round(size.height * scale)
     tops.push(y)
     heights.push(height)
-    widths.push(Math.round(size.width * scale))
+    widths.push(Math.round(size.width * (1 + margin) * scale))
     y += height + PAGE_GAP
   }
   return {

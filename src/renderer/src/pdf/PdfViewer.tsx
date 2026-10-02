@@ -1,7 +1,13 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { PDFDocumentLoadingTask, PDFDocumentProxy } from 'pdfjs-dist'
+import { DEFAULT_MARGIN_WIDTH, type LoadedAnnotations } from '../../../shared/annotations'
+import { AnnotationToolbar } from '../annotations/AnnotationToolbar'
+import { AnnotationContext } from '../annotations/context'
+import { addItem, createAnnotationDoc, removeItems, type AnnotationDoc } from '../annotations/doc'
+import { highlightFromSelection, selectedTextLayer } from '../annotations/selection'
 import { Icon } from '../components/Icon'
-import { useApp } from '../store'
+import { registerFlush } from '../lib/flush'
+import { useApp, type Tool } from '../store'
 import {
   VIEW_PADDING,
   clampScale,
@@ -19,6 +25,8 @@ interface Loaded {
   pdf: PDFDocumentProxy
   sizes: PageSize[]
   startPage: number
+  /** An error message when the sidecar could not be read; annotations are then off. */
+  annotations: LoadedAnnotations | string
 }
 
 /** Where the view is pinned while the scale changes: a point on a page at some height in the view. */
@@ -36,9 +44,10 @@ export function PdfViewer({ path, title }: { path: string; title: string }): Rea
     let cancelled = false
     let task: PDFDocumentLoadingTask | null = null
     ;(async () => {
-      const [data, lastPage] = await Promise.all([
+      const [data, lastPage, annotations] = await Promise.all([
         window.api.vault.readFile(path),
-        window.api.vault.lastPage(path).catch(() => null)
+        window.api.vault.lastPage(path).catch(() => null),
+        window.api.vault.readAnnotations(path).catch((err: Error): string => err.message)
       ])
       if (cancelled) return
       task = loadPdf(data)
@@ -47,7 +56,7 @@ export function PdfViewer({ path, title }: { path: string; title: string }): Rea
       const sizes = await pageSizes(pdf)
       if (cancelled) return
       const startPage = Math.min(Math.max(1, lastPage ?? 1), sizes.length)
-      setLoaded({ pdf, sizes, startPage })
+      setLoaded({ pdf, sizes, startPage, annotations })
     })().catch((err) => {
       if (!cancelled) setError(err instanceof Error ? err.message : String(err))
     })
@@ -68,22 +77,43 @@ export function PdfViewer({ path, title }: { path: string; title: string }): Rea
   return <Document path={path} title={title} {...loaded} />
 }
 
+const TOOL_KEYS: Record<string, Tool> = { p: 'pen', h: 'highlighter', e: 'eraser', t: 'text' }
+
 function Document({
   path,
   title,
   pdf,
   sizes,
-  startPage
+  startPage,
+  annotations
 }: Loaded & { path: string; title: string }): React.JSX.Element {
   const scrollRef = useRef<HTMLDivElement>(null)
+  const viewerRef = useRef<HTMLDivElement>(null)
+  const loadedFile = typeof annotations === 'string' ? null : annotations.file
+  const margin = loadedFile?.marginWidth ?? DEFAULT_MARGIN_WIDTH
+  const [doc] = useState<AnnotationDoc | null>(() =>
+    typeof annotations === 'string' ? null : createAnnotationDoc(loadedFile?.pages ?? {})
+  )
+  // A replaced PDF would put the annotations on the wrong slides, so they wait for a decision.
+  const [pdfChanged, setPdfChanged] = useState(
+    typeof annotations !== 'string' &&
+      !!loadedFile?.pdfSha256 &&
+      loadedFile.pdfSha256 !== annotations.pdfSha256
+  )
+  const activeDoc = pdfChanged ? null : doc
+  const tool = useApp((s) => s.tool)
+  const setTool = useApp((s) => s.setTool)
+  const highlightColor = useApp((s) => s.ink.highlightColor)
+  const showError = useApp((s) => s.showError)
+  const [selectionAt, setSelectionAt] = useState<{ x: number; y: number } | null>(null)
   const [viewport, setViewport] = useState({ width: 0, height: 0 })
   const [zoom, setZoom] = useState<'fit' | number>('fit')
   const [scrollTop, setScrollTop] = useState(0)
   const anchor = useRef<Anchor>({ page: startPage, fraction: 0, viewY: VIEW_PADDING })
   const setPdfView = useApp((s) => s.setPdfView)
 
-  const scale = zoom === 'fit' ? fitWidthScale(sizes, viewport.width) : zoom
-  const layout = useMemo(() => layoutPages(sizes, scale), [sizes, scale])
+  const scale = zoom === 'fit' ? fitWidthScale(sizes, viewport.width, margin) : zoom
+  const layout = useMemo(() => layoutPages(sizes, scale, margin), [sizes, scale, margin])
   const contentWidth = Math.max(viewport.width, layout.maxWidth + 2 * VIEW_PADDING)
 
   useLayoutEffect(() => {
@@ -94,6 +124,9 @@ function Document({
     observer.observe(el)
     return () => observer.disconnect()
   }, [])
+
+  // Opening a PDF moves the keyboard to it, so P/H/E/T and the arrow keys work right away.
+  useEffect(() => scrollRef.current!.focus({ preventScroll: true }), [])
 
   // After any change of scale (zoom, fit width, window resize) put the anchored point back.
   // The first run, once the width is known, restores the last page.
@@ -108,6 +141,7 @@ function Document({
   const onScroll = useCallback(() => {
     const el = scrollRef.current!
     setScrollTop(el.scrollTop)
+    setSelectionAt(null)
     const [first] = pagesBetween(layout, el.scrollTop, el.scrollTop + 1)
     anchor.current = {
       page: first + 1,
@@ -138,6 +172,74 @@ function Document({
     },
     [path, setPdfView]
   )
+
+  // Autosave a second after the last change. Also saved when the viewer closes and,
+  // through registerFlush, when the window closes.
+  useEffect(() => {
+    if (!activeDoc || typeof annotations === 'string') return
+    const pdfSha256 = annotations.pdfSha256
+    let timer: ReturnType<typeof setTimeout> | undefined
+    let dirty = false
+    const save = async (): Promise<void> => {
+      clearTimeout(timer)
+      if (!dirty) return
+      dirty = false
+      await window.api.vault
+        .writeAnnotations(path, {
+          version: 1,
+          pdf: path.split('/').pop()!,
+          pdfSha256,
+          marginWidth: margin,
+          pages: activeDoc.getState().pages
+        })
+        .catch((err: Error) => showError(`Annotations not saved: ${err.message}`))
+    }
+    const unsubscribe = activeDoc.subscribe((state, previous) => {
+      if (state.pages === previous.pages) return
+      dirty = true
+      clearTimeout(timer)
+      timer = setTimeout(save, 1000)
+    })
+    const unregister = registerFlush(save)
+    return () => {
+      unsubscribe()
+      unregister()
+      save()
+    }
+  }, [activeDoc, annotations, path, margin, showError])
+
+  const highlightSelection = useCallback((): boolean => {
+    const result = activeDoc && highlightFromSelection(highlightColor)
+    if (!result) return false
+    activeDoc.getState().change((p) => addItem(p, result.page, 'highlights', result.highlight))
+    window.getSelection()?.removeAllRanges()
+    setSelectionAt(null)
+    return true
+  }, [activeDoc, highlightColor])
+
+  // Offer a "Highlight" button at the end of a text selection on a slide.
+  const updateSelectionAction = useCallback(() => {
+    const layer = selectedTextLayer()
+    if (!activeDoc || !layer || !viewerRef.current?.contains(layer)) {
+      setSelectionAt(null)
+      return
+    }
+    const rects = [...window.getSelection()!.getRangeAt(0).getClientRects()].filter(
+      (r) => r.width > 0 && r.height > 0 && r.height < layer.getBoundingClientRect().height / 2
+    )
+    const last = rects[rects.length - 1]
+    if (!last) return
+    const host = viewerRef.current.getBoundingClientRect()
+    setSelectionAt({ x: last.right - host.left, y: last.bottom - host.top + 6 })
+  }, [activeDoc])
+
+  useEffect(() => {
+    const onChange = (): void => {
+      if (window.getSelection()?.isCollapsed) setSelectionAt(null)
+    }
+    document.addEventListener('selectionchange', onChange)
+    return () => document.removeEventListener('selectionchange', onChange)
+  }, [])
 
   const zoomTo = useCallback(
     (next: number, viewY = 0) => {
@@ -173,8 +275,24 @@ function Document({
   )
 
   function onKeyDown(e: React.KeyboardEvent): void {
+    const target = e.target as HTMLElement
+    if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return
     const ctrl = e.ctrlKey || e.metaKey
-    if (ctrl && (e.key === '=' || e.key === '+')) zoomTo(stepZoom(scale, 1))
+    const key = e.key.toLowerCase()
+    const state = activeDoc?.getState()
+
+    if (state && ctrl && key === 'z' && !e.shiftKey) state.undo()
+    else if (state && ctrl && (key === 'y' || (key === 'z' && e.shiftKey))) state.redo()
+    else if (state && !ctrl && key === 'h' && selectedTextLayer()) highlightSelection()
+    else if (state && !ctrl && !e.altKey && TOOL_KEYS[key]) setTool(TOOL_KEYS[key])
+    else if (e.key === 'Escape') {
+      setTool('select')
+      state?.select(null)
+    } else if (state?.selection && (e.key === 'Delete' || e.key === 'Backspace')) {
+      const { page, kind, id } = state.selection
+      state.change((p) => removeItems(p, page, kind, [id]))
+      state.select(null)
+    } else if (ctrl && (e.key === '=' || e.key === '+')) zoomTo(stepZoom(scale, 1))
     else if (ctrl && e.key === '-') zoomTo(stepZoom(scale, -1))
     else if (ctrl && e.key === '0') setZoom('fit')
     else if (!ctrl && e.key === 'ArrowRight') goTo(page + 1)
@@ -191,8 +309,9 @@ function Document({
   )
 
   return (
-    <div className="pdf-viewer">
+    <div className="pdf-viewer" ref={viewerRef}>
       <div className="pdf-toolbar">
+        <AnnotationToolbar doc={activeDoc} />
         <span className="pdf-title">{title}</span>
         <PageInput page={page} count={sizes.length} onGo={goTo} />
         <div className="pdf-zoom">
@@ -224,30 +343,61 @@ function Document({
         </div>
       </div>
 
-      <div
-        ref={scrollRef}
-        className="pdf-scroll"
-        tabIndex={0}
-        onScroll={onScroll}
-        onKeyDown={onKeyDown}
-      >
-        <div className="pdf-content" style={{ height: layout.totalHeight, width: contentWidth }}>
-          {viewport.width > 0 &&
-            sizes.map((_, i) => (
-              <PdfPage
-                key={i}
-                pdf={pdf}
-                number={i + 1}
-                top={layout.tops[i]}
-                left={(contentWidth - layout.widths[i]) / 2}
-                width={layout.widths[i]}
-                height={layout.heights[i]}
-                scale={scale}
-                rendered={i >= first && i <= last}
-              />
-            ))}
+      {typeof annotations === 'string' && (
+        <div className="pdf-banner" role="status">
+          {annotations}. The file was left untouched; fix or remove it to annotate again.
         </div>
-      </div>
+      )}
+      {pdfChanged && (
+        <div className="pdf-banner" role="status">
+          <span>
+            This PDF changed since you annotated it, so your annotations are hidden to keep them off
+            the wrong slides.
+          </span>
+          <button className="button" onClick={() => setPdfChanged(false)}>
+            Show annotations anyway
+          </button>
+        </div>
+      )}
+
+      <AnnotationContext.Provider value={activeDoc}>
+        <div
+          ref={scrollRef}
+          className={`pdf-scroll tool-${tool}`}
+          tabIndex={0}
+          onScroll={onScroll}
+          onKeyDown={onKeyDown}
+          onPointerUp={() => setTimeout(updateSelectionAction)}
+        >
+          <div className="pdf-content" style={{ height: layout.totalHeight, width: contentWidth }}>
+            {viewport.width > 0 &&
+              sizes.map((size, i) => (
+                <PdfPage
+                  key={i}
+                  pdf={pdf}
+                  number={i + 1}
+                  size={size}
+                  margin={margin}
+                  top={layout.tops[i]}
+                  left={(contentWidth - layout.widths[i]) / 2}
+                  scale={scale}
+                  rendered={i >= first && i <= last}
+                />
+              ))}
+          </div>
+        </div>
+      </AnnotationContext.Provider>
+
+      {selectionAt && (
+        <button
+          className="button selection-action"
+          style={{ left: selectionAt.x, top: selectionAt.y }}
+          onPointerDown={(e) => e.preventDefault()}
+          onClick={highlightSelection}
+        >
+          Highlight <span className="muted">H</span>
+        </button>
+      )}
     </div>
   )
 }

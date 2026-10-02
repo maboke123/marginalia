@@ -1,10 +1,19 @@
 import { create } from 'zustand'
 import type { NotebookColor, Position, VaultInfo, VaultNode } from '../../shared/types'
+import { HIGHLIGHT_COLORS, PEN_COLORS, PEN_WIDTHS } from './annotations/palette'
 import { findNode, isFolder, parentOf, remap } from './lib/tree'
 
 const api = window.api.vault
 
 type NewItem = 'notebook' | 'section' | 'page'
+
+export type Tool = 'select' | 'pen' | 'highlighter' | 'eraser' | 'text'
+
+export interface Ink {
+  penColor: string
+  penWidth: number
+  highlightColor: string
+}
 
 /** What the slide viewer shows right now; read by the slide-link hotkey and (later) Claude. */
 export interface PdfView {
@@ -31,6 +40,8 @@ interface AppState {
   renaming: string | null
   error: string | null
   pdfView: PdfView | null
+  tool: Tool
+  ink: Ink
 
   init(): Promise<void>
   openVault(root?: string): Promise<void>
@@ -41,6 +52,8 @@ interface AppState {
   startRename(path: string | null): void
   showError(message: string | null): void
   setPdfView(view: PdfView | null): void
+  setTool(tool: Tool): void
+  setInk(ink: Partial<Ink>): void
 
   create(item: NewItem, parent: string): Promise<void>
   rename(path: string, name: string): Promise<void>
@@ -144,6 +157,12 @@ export const useApp = create<AppState>((set, get) => {
     renaming: null,
     error: null,
     pdfView: null,
+    tool: 'select',
+    ink: {
+      penColor: PEN_COLORS[1].value,
+      penWidth: PEN_WIDTHS[0].value,
+      highlightColor: HIGHLIGHT_COLORS[0].value
+    },
 
     async init() {
       // React's StrictMode runs effects twice in development.
@@ -190,6 +209,8 @@ export const useApp = create<AppState>((set, get) => {
     },
 
     setPdfView: (view) => set({ pdfView: view }),
+    setTool: (tool) => set({ tool }),
+    setInk: (ink) => set({ ink: { ...get().ink, ...ink } }),
 
     async importPdfs(sources, parent) {
       const target = parent ?? currentFolder()

@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { Sidebar } from './components/Sidebar'
 import { Welcome } from './components/Welcome'
 import { Workspace } from './components/Workspace'
+import { flushAll } from './lib/flush'
 import { useApp } from './store'
 
 export function App(): React.JSX.Element | null {
@@ -14,6 +15,15 @@ export function App(): React.JSX.Element | null {
     useApp.getState().init()
     return window.api.vault.onChanged(() => useApp.getState().refresh())
   }, [])
+
+  useEffect(
+    () =>
+      window.api.app.onBeforeClose(async () => {
+        await flushAll()
+        window.api.app.readyToClose()
+      }),
+    []
+  )
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent): void => {

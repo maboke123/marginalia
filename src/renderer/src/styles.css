@@ -9,6 +9,11 @@
   --bg-canvas: #e9e9e6;
   --page-bg: #ffffff;
   --page-border: #d6d6d2;
+  --margin-bg: #fafaf7;
+  --paper-text: #1f2328;
+  --paper-rule: #d9d9d3;
+  --claude-ink: #1b7c83;
+  --bg-warning: #fff6dc;
   --text: #1f1f1e;
   --text-muted: #6e6e6b;
   --border: #e3e3e0;
@@ -49,6 +54,11 @@
     --bg-canvas: #141416;
     --page-bg: #ffffff;
     --page-border: #000000;
+    --margin-bg: #f3f3ef;
+    --paper-text: #1f2328;
+    --paper-rule: #c9c9c2;
+    --claude-ink: #1b7c83;
+    --bg-warning: #3a321f;
     --text: #e8e8e6;
     --text-muted: #9a9a96;
     --border: #333336;
@@ -609,16 +619,311 @@ h2 {
   position: relative;
 }
 
+.pdf-viewer {
+  position: relative;
+}
+
 .pdf-page {
   position: absolute;
+}
+
+.pdf-sheet,
+.pdf-margin {
+  position: absolute;
+  top: 0;
   outline: 1px solid var(--page-border);
+}
+
+.pdf-sheet {
+  left: 0;
   background: var(--page-bg);
 }
 
-.pdf-page canvas {
+.pdf-margin {
+  right: 0;
+  background: var(--margin-bg);
+}
+
+.pdf-sheet canvas {
   display: block;
   width: 100%;
   height: 100%;
+}
+
+.pdf-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-warning);
+}
+
+.selection-action {
+  position: absolute;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 28px;
+  box-shadow: var(--shadow-menu);
+}
+
+/* Annotation toolbar */
+
+.annotation-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.icon-button.pressed {
+  background: var(--bg-selected);
+  color: var(--text);
+}
+
+.icon-button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.icon-button:disabled:hover {
+  background: transparent;
+}
+
+.toolbar-divider {
+  width: 1px;
+  height: 18px;
+  margin: 0 6px;
+  background: var(--border);
+}
+
+.ink-swatches {
+  display: flex;
+  gap: 4px;
+  margin-right: 4px;
+}
+
+.pen-width {
+  display: block;
+  width: 14px;
+  border-radius: 1px;
+  background: currentColor;
+}
+
+/* Annotation overlay. Everything inside is in PDF points and scaled as a whole. */
+
+.page-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform-origin: 0 0;
+  --total-scale-factor: 1;
+  --scale-round-x: 1px;
+  --scale-round-y: 1px;
+}
+
+.hl {
+  position: absolute;
+  opacity: 0.4;
+  mix-blend-mode: multiply;
+  pointer-events: none;
+}
+
+.hl.selected {
+  outline: 1px solid var(--accent);
+}
+
+.ink {
+  position: absolute;
+  top: 0;
+  left: 0;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.ink .highlighter {
+  mix-blend-mode: multiply;
+}
+
+.ink .hit {
+  fill: none;
+  stroke: transparent;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  pointer-events: stroke;
+  cursor: move;
+}
+
+.ink .selection-box {
+  fill: none;
+  stroke: var(--accent);
+}
+
+.ink .eraser {
+  fill: none;
+  stroke: var(--text-muted);
+}
+
+.capture {
+  position: absolute;
+  inset: 0;
+  cursor: crosshair;
+  touch-action: none;
+}
+
+.tool-eraser .capture {
+  cursor: none;
+}
+
+.tool-text .capture {
+  cursor: text;
+}
+
+.pdf-scroll:not(.tool-select) .textLayer {
+  pointer-events: none;
+}
+
+/* Text boxes */
+
+.text-box {
+  position: absolute;
+  padding: 3px 6px;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  color: var(--paper-text);
+  font-size: 1em;
+  line-height: 1.35;
+  cursor: move;
+}
+
+.tool-text .text-box {
+  cursor: text;
+}
+
+.text-box:hover {
+  border-color: var(--paper-rule);
+}
+
+.text-box.selected,
+.text-box.editing {
+  border-color: var(--accent);
+}
+
+.text-box.editing {
+  background: var(--margin-bg);
+}
+
+.text-box.passive {
+  pointer-events: none;
+}
+
+.text-box.by-claude {
+  border-left: 2px solid var(--claude-ink);
+}
+
+.text-box-content > :first-child {
+  margin-top: 0;
+}
+
+.text-box-content > :last-child {
+  margin-bottom: 0;
+}
+
+.text-box-content p,
+.text-box-content ul,
+.text-box-content ol {
+  margin: 0 0 0.4em;
+}
+
+.text-box-content ul,
+.text-box-content ol {
+  padding-left: 1.2em;
+}
+
+.text-box-editor {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--paper-text);
+  font:
+    0.92em/1.35 'Cascadia Mono',
+    Consolas,
+    monospace;
+  resize: none;
+  overflow: hidden;
+  user-select: text;
+}
+
+.text-box-resize {
+  position: absolute;
+  top: 0;
+  right: -5px;
+  bottom: 0;
+  width: 9px;
+  cursor: ew-resize;
+}
+
+/* PDF text layer, from pdfjs-dist/web/pdf_viewer.css (only the parts this app uses) */
+
+.textLayer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  overflow: clip;
+  line-height: 1;
+  text-align: initial;
+  text-size-adjust: none;
+  forced-color-adjust: none;
+  transform-origin: 0 0;
+  caret-color: CanvasText;
+  --min-font-size: 1;
+  --text-scale-factor: calc(var(--total-scale-factor) * var(--min-font-size));
+  --min-font-size-inv: calc(1 / var(--min-font-size));
+}
+
+.textLayer :is(span, br) {
+  position: absolute;
+  color: transparent;
+  white-space: pre;
+  cursor: text;
+  transform-origin: 0% 0%;
+  user-select: text;
+}
+
+.textLayer > :not(.markedContent),
+.textLayer .markedContent span:not(.markedContent) {
+  z-index: 1;
+  --font-height: 0;
+  font-size: calc(var(--text-scale-factor) * var(--font-height));
+  --scale-x: 1;
+  --rotate: 0deg;
+  transform: rotate(var(--rotate)) scaleX(var(--scale-x)) scale(var(--min-font-size-inv));
+}
+
+.textLayer .markedContent {
+  display: contents;
+}
+
+.textLayer ::selection {
+  background: color-mix(in srgb, var(--accent), transparent 70%);
+  color: transparent;
+}
+
+.textLayer .endOfContent {
+  position: absolute;
+  inset: 100% 0 0;
+  z-index: 0;
+  display: block;
+  cursor: default;
+  user-select: none;
+}
+
+.textLayer.selecting .endOfContent {
+  top: 0;
 }
 
 .pdf-message {
