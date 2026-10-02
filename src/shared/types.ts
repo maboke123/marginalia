@@ -64,6 +64,12 @@ export interface MarginaliaApi {
     readFile(path: string): Promise<Uint8Array>
     lastPage(path: string): Promise<number | null>
     setLastPage(path: string, page: number): Promise<void>
+    readText(note: string): Promise<string>
+    writeText(note: string, text: string): Promise<void>
+    /** Saves image bytes into the note's assets folder; returns the link relative to the note. */
+    saveAsset(note: string, data: Uint8Array, extension: string): Promise<string>
+    /** Asks for image files and copies them into the note's assets folder. */
+    importImages(note: string): Promise<string[]>
     readAnnotations(pdf: string): Promise<LoadedAnnotations>
     writeAnnotations(pdf: string, file: AnnotationFile): Promise<void>
     onChanged(listener: () => void): () => void

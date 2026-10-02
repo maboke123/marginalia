@@ -5,6 +5,7 @@ import type { NotebookColor, Position, VaultNode, VaultTree } from '../../shared
 import { formatAnnotations, isAnnotationFile, sha256File } from './annotations'
 import { renameWithRetry, tempPathFor, writeFileAtomic } from './atomic'
 import {
+  ASSETS_DIR,
   DATA_DIR,
   ORDER_FILE,
   SIDECAR_SUFFIX,
@@ -81,6 +82,18 @@ async function visibleEntries(dir: string): Promise<Entry[]> {
 }
 
 const isPdf = (p: string): boolean => /\.pdf$/i.test(p)
+const isMarkdown = (p: string): boolean => /\.md$/i.test(p)
+
+const IMAGE_TYPES = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'])
+
+/** 2026-10-02_14-31-05, the asset naming from SPEC section 4. */
+export function timestamp(date = new Date()): string {
+  const p = (n: number): string => String(n).padStart(2, '0')
+  return (
+    `${date.getFullYear()}-${p(date.getMonth() + 1)}-${p(date.getDate())}_` +
+    `${p(date.getHours())}-${p(date.getMinutes())}-${p(date.getSeconds())}`
+  )
+}
 
 export type TrashFn = (absPath: string) => Promise<void>
 
@@ -165,6 +178,44 @@ export class Vault {
       throw err
     }
     return toRel(this.root, target)
+  }
+
+  async readText(rel: string): Promise<string> {
+    const abs = this.resolveItem(rel)
+    if (!isMarkdown(abs)) throw new VaultError(`"${rel}" is not a Markdown file`)
+    return fs.readFile(abs, 'utf8').catch(() => {
+      throw new VaultError(`"${rel}" does not exist`)
+    })
+  }
+
+  async writeText(rel: string, text: string): Promise<void> {
+    const abs = this.resolveItem(rel)
+    if (!isMarkdown(abs)) throw new VaultError(`"${rel}" is not a Markdown file`)
+    // Refuse to resurrect a note that was deleted or moved while it was open.
+    if (!(await exists(abs))) throw new VaultError(`"${rel}" no longer exists`)
+    await writeFileAtomic(abs, text)
+  }
+
+  /**
+   * Stores an image in the assets folder next to a note, named after the current time.
+   * Returns the path to put in the note's Markdown, relative to the note.
+   */
+  async saveAsset(noteRel: string, data: Uint8Array, extension: string): Promise<string> {
+    const note = this.resolveItem(noteRel)
+    const ext = extension.toLowerCase().replace(/^\./, '')
+    if (!IMAGE_TYPES.has(ext)) throw new VaultError(`.${ext} files are not images`)
+    const dir = path.join(path.dirname(note), ASSETS_DIR)
+    await fs.mkdir(dir, { recursive: true })
+    const stamp = timestamp()
+    for (let n = 1; ; n++) {
+      const name = n === 1 ? `${stamp}.${ext}` : `${stamp}-${n}.${ext}`
+      try {
+        await fs.writeFile(path.join(dir, name), data, { flag: 'wx' })
+        return `${ASSETS_DIR}/${name}`
+      } catch (err) {
+        if ((err as NodeJS.ErrnoException).code !== 'EEXIST') throw err
+      }
+    }
   }
 
   async readFile(rel: string): Promise<Uint8Array> {

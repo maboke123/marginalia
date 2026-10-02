@@ -1,5 +1,6 @@
-import { app, BrowserWindow, ipcMain, Menu, nativeTheme, shell } from 'electron'
+import { app, BrowserWindow, ipcMain, Menu, nativeTheme, net, protocol, shell } from 'electron'
 import path from 'path'
+import { pathToFileURL } from 'url'
 import { ConfigStore } from './config'
 import { registerIpc } from './ipc'
 
@@ -72,12 +73,30 @@ if (process.env['MARGINALIA_USER_DATA']) {
   app.setPath('userData', process.env['MARGINALIA_USER_DATA'])
 }
 
+// vault://local/<path in vault> serves images in notes. Only files inside the open vault.
+protocol.registerSchemesAsPrivileged([
+  { scheme: 'vault', privileges: { standard: true, secure: true, supportFetchAPI: true } }
+])
+
 // The default menu binds Ctrl+Shift+I and Ctrl+R, which the app needs for its own hotkeys.
 Menu.setApplicationMenu(null)
 
 app.whenReady().then(() => {
   app.setAppUserModelId('be.kuleuven.mathiasbk.marginalia-poc')
-  registerIpc(() => mainWindow, new ConfigStore(path.join(app.getPath('userData'), 'config.json')))
+  const currentVault = registerIpc(
+    () => mainWindow,
+    new ConfigStore(path.join(app.getPath('userData'), 'config.json'))
+  )
+  protocol.handle('vault', (request) => {
+    const vault = currentVault()
+    if (!vault) return new Response('No vault open', { status: 404 })
+    try {
+      const rel = decodeURIComponent(new URL(request.url).pathname.slice(1))
+      return net.fetch(pathToFileURL(vault.resolve(rel)).toString())
+    } catch {
+      return new Response('Outside the vault', { status: 403 })
+    }
+  })
   createWindow()
 })
 

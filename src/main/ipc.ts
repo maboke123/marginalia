@@ -23,7 +23,11 @@ function handle<A extends unknown[], R>(channel: string, fn: (...args: A) => R |
 
 const info = (root: string): VaultInfo => ({ root, name: path.basename(root) })
 
-export function registerIpc(getWindow: () => BrowserWindow | null, config: ConfigStore): void {
+/** Returns a getter for the open vault, for the vault:// protocol. */
+export function registerIpc(
+  getWindow: () => BrowserWindow | null,
+  config: ConfigStore
+): () => Vault | null {
   let vault: Vault | null = null
   let stopWatching: (() => Promise<void>) | null = null
 
@@ -74,6 +78,29 @@ export function registerIpc(getWindow: () => BrowserWindow | null, config: Confi
   handle('vault:readFile', (p: string) => current().readFile(p))
   handle('vault:lastPage', (p: string) => current().lastPage(p))
   handle('vault:setLastPage', (p: string, page: number) => current().setLastPage(p, page))
+  handle('vault:readText', (p: string) => current().readText(p))
+  handle('vault:writeText', (p: string, text: string) => current().writeText(p, text))
+  handle('vault:saveAsset', (p: string, data: Uint8Array, ext: string) =>
+    current().saveAsset(p, data, ext)
+  )
+  handle('vault:importImages', async (note: string) => {
+    const win = getWindow()
+    const options: Electron.OpenDialogOptions = {
+      title: 'Insert image',
+      properties: ['openFile', 'multiSelections'],
+      filters: [{ name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'] }]
+    }
+    const result = win
+      ? await dialog.showOpenDialog(win, options)
+      : await dialog.showOpenDialog(options)
+    if (result.canceled) return []
+    const v = current()
+    const links: string[] = []
+    for (const file of result.filePaths) {
+      links.push(await v.saveAsset(note, await fs.readFile(file), path.extname(file)))
+    }
+    return links
+  })
   handle('vault:readAnnotations', (p: string) => current().readAnnotations(p))
   handle('vault:writeAnnotations', (p: string, file: AnnotationFile) =>
     current().writeAnnotations(p, file)
@@ -122,4 +149,6 @@ export function registerIpc(getWindow: () => BrowserWindow | null, config: Confi
     await v.trash(p)
     return true
   })
+
+  return () => vault
 }

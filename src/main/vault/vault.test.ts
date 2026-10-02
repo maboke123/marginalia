@@ -6,7 +6,7 @@ import type { AnnotationFile } from '../../shared/annotations'
 import type { VaultNode } from '../../shared/types'
 import { writeFileAtomic } from './atomic'
 import { resolveInVault, validateName } from './names'
-import { Vault } from './vault'
+import { timestamp, Vault } from './vault'
 import { watchVault } from './watcher'
 
 let root: string
@@ -418,6 +418,42 @@ describe('annotations', () => {
     expect(await fs.readFile(path.join(root, 'ML/slides.pdf.annotations.json'), 'utf8')).toBe(
       '{"version":1,"pages":'
     )
+  })
+})
+
+describe('notes and assets', () => {
+  it('reads and writes Markdown only', async () => {
+    await write('ML/Summary.md', '# Decision trees\n')
+    await write('ML/slides.pdf', 'pdf')
+
+    expect(await vault.readText('ML/Summary.md')).toBe('# Decision trees\n')
+    await vault.writeText('ML/Summary.md', '# Decision trees\n\n## Entropy\n')
+    expect(await fs.readFile(path.join(root, 'ML/Summary.md'), 'utf8')).toContain('## Entropy')
+    await expect(vault.writeText('ML/slides.pdf', 'oops')).rejects.toThrow('not a Markdown')
+    expect(await fs.readFile(path.join(root, 'ML/slides.pdf'), 'utf8')).toBe('pdf')
+  })
+
+  it('does not recreate a note that was deleted while open', async () => {
+    await expect(vault.writeText('ML/Gone.md', 'text')).rejects.toThrow('no longer exists')
+    expect(await list()).toEqual([])
+  })
+
+  it('saves images in assets with a timestamp name and never overwrites', async () => {
+    await write('ML/B2/Summary.md')
+
+    const first = await vault.saveAsset('ML/B2/Summary.md', new Uint8Array([1]), 'png')
+    const second = await vault.saveAsset('ML/B2/Summary.md', new Uint8Array([2]), '.PNG')
+
+    expect(first).toMatch(/^assets\/\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}(-\d+)?\.png$/)
+    expect(second).not.toBe(first)
+    expect(await list('ML/B2/assets')).toHaveLength(2)
+    await expect(vault.saveAsset('ML/B2/Summary.md', new Uint8Array(), 'exe')).rejects.toThrow(
+      'not images'
+    )
+  })
+
+  it('formats timestamps like the spec', () => {
+    expect(timestamp(new Date(2026, 9, 2, 14, 31, 5))).toBe('2026-10-02_14-31-05')
   })
 })
 
