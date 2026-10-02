@@ -19,9 +19,6 @@
     "format": "prettier --write .",
     "test:e2e": "electron-vite build && playwright test"
   },
-  "dependencies": {
-    "zustand": "5.0.15"
-  },
   "devDependencies": {
     "@electron-toolkit/eslint-config-prettier": "3.0.1",
     "@electron-toolkit/eslint-config-ts": "3.1.0",
@@ -38,11 +35,15 @@
     "eslint-plugin-react": "7.37.5",
     "eslint-plugin-react-hooks": "7.1.1",
     "eslint-plugin-react-refresh": "0.4.26",
+    "pdf-lib": "1.17.1",
+    "pdfjs-dist": "6.3.289",
     "prettier": "3.9.9",
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "typescript": "5.9.3",
     "vite": "7.3.6",
-    "vitest": "5.0.3"
+    "vite-plugin-static-copy": "4.1.1",
+    "vitest": "5.0.3",
+    "zustand": "5.0.15"
   }
 }
