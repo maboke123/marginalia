@@ -323,6 +323,14 @@ describe('last page', () => {
     expect(state).toEqual({ lastPage: { 'Stats/B2/trees.pdf': 12 } })
   })
 
+  it('reads back a page saved a moment before', async () => {
+    await write('ML/a.pdf')
+    await vault.setLastPage('ML/a.pdf', 3)
+    // Not awaited: lecture mode saves the old viewer's page and the new viewer reads it at once.
+    void vault.setLastPage('ML/a.pdf', 12)
+    expect(await vault.lastPage('ML/a.pdf')).toBe(12)
+  })
+
   it('does not lose updates made at the same time', async () => {
     await write('ML/a.pdf')
     await write('ML/b.pdf')

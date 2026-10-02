@@ -304,7 +304,7 @@ export class Vault {
   }
 
   async lastPage(rel: string): Promise<number | null> {
-    const state = await this.readData<VaultState>(STATE_FILE)
+    const state = await this.readState()
     return state.lastPage?.[toRel(this.root, this.resolveItem(rel))] ?? null
   }
 
@@ -318,7 +318,7 @@ export class Vault {
   }
 
   async chatSession(section: string): Promise<string | null> {
-    const state = await this.readData<VaultState>(STATE_FILE)
+    const state = await this.readState()
     return state.chats?.[section] ?? null
   }
 
@@ -334,14 +334,14 @@ export class Vault {
 
   /** The note linked to a PDF for lecture mode, if it still exists. */
   async linkedNote(pdf: string): Promise<string | null> {
-    const state = await this.readData<VaultState>(STATE_FILE)
+    const state = await this.readState()
     const note = state.notes?.[pdf]
     return note && (await exists(this.resolve(note))) ? note : null
   }
 
   /** The PDF a note is linked to, if any. */
   async linkedPdf(note: string): Promise<string | null> {
-    const state = await this.readData<VaultState>(STATE_FILE)
+    const state = await this.readState()
     for (const [pdf, linked] of Object.entries(state.notes ?? {})) {
       if (linked === note && (await exists(this.resolve(pdf)))) return pdf
     }
@@ -504,6 +504,15 @@ export class Vault {
         ...(notes && { notes })
       }
     })
+  }
+
+  /**
+   * state.json after any write still in the queue, so a page saved a moment ago is read back
+   * (lecture mode reopens a PDF right after the old viewer saved its page).
+   */
+  private async readState(): Promise<VaultState> {
+    await this.dataQueue
+    return this.readData<VaultState>(STATE_FILE)
   }
 
   private async readData<T extends object>(file: string): Promise<T> {
