@@ -5,7 +5,7 @@ import { Icon, type IconName } from '../components/Icon'
 import { useApp, type Tool } from '../store'
 import { findItem, replaceItem, type AnnotationDoc } from './doc'
 import { round } from './geometry'
-import { ERASER_SIZES, PEN_WIDTHS, pageUnit, TEXT_SIZES } from './palette'
+import { ERASER_SIZES, PEN_WIDTHS, pageUnit, TEXT_SIZES } from '../../../shared/palette'
 
 const TOOLS: { tool: Tool; label: string; icon: IconName }[] = [
   { tool: 'select', label: 'Select', icon: 'cursor' },

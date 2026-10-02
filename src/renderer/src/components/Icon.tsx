@@ -22,7 +22,8 @@ const PATHS = {
   send: 'M8 13V3.5M4 7.5l4-4 4 4',
   stop: 'M4.5 4.5h7v7h-7z',
   chat: 'M2.5 3.5h11v7.5H7l-3 2.5v-2.5H2.5z',
-  search: 'M7 2.75a4.25 4.25 0 1 0 0 8.5 4.25 4.25 0 0 0 0-8.5zM10.1 10.1l3.4 3.4'
+  search: 'M7 2.75a4.25 4.25 0 1 0 0 8.5 4.25 4.25 0 0 0 0-8.5zM10.1 10.1l3.4 3.4',
+  export: 'M8 10V2.5M5 5.5l3-3 3 3M3 9v4.5h10V9'
 } as const
 
 export type IconName = keyof typeof PATHS

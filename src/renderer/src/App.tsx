@@ -57,6 +57,7 @@ export function App(): React.JSX.Element | null {
   const lectureMode = useApp((s) => s.lectureMode)
   const overlay = useApp((s) => s.overlay)
   const error = useApp((s) => s.error)
+  const notice = useApp((s) => s.notice)
   const showError = useApp((s) => s.showError)
   const claudeOpen = useChat((s) => s.open)
 
@@ -134,9 +135,9 @@ export function App(): React.JSX.Element | null {
       ) : (
         <Welcome />
       )}
-      {error && (
-        <div className="toast" role="alert">
-          <span>{error}</span>
+      {(error || notice) && (
+        <div className="toast" role={error ? 'alert' : 'status'}>
+          <span>{error ?? notice}</span>
           <button className="toast-close" aria-label="Dismiss" onClick={() => showError(null)}>
             Dismiss
           </button>

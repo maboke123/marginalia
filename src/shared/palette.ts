@@ -1,4 +1,4 @@
-// The ink colours are settings: see src/shared/settings.ts.
+// Sizes shared by the screen and the PDF export. The ink colours are settings: see settings.ts.
 
 // Widths in screen pixels at "fit width"; see pageUnit in PageOverlay.
 export const PEN_WIDTHS = [

@@ -6,6 +6,8 @@ import type { AnnotationFile } from '../shared/annotations'
 import { settingsFrom, type AppSettings } from '../shared/settings'
 import type { IpcResult, NotebookColor, Position, VaultInfo } from '../shared/types'
 import { ConfigStore } from './config'
+import { exportAnnotated } from './export/exportPdf'
+import { writeFileAtomic } from './vault/atomic'
 import { SearchIndex } from './search/searchIndex'
 import { VaultError } from './vault/names'
 import { Vault } from './vault/vault'
@@ -139,6 +141,32 @@ export function registerIpc(
   handle('vault:writeAnnotations', (p: string, file: AnnotationFile) =>
     current().writeAnnotations(p, file)
   )
+
+  handle('vault:exportPdf', async (p: string) => {
+    const v = current()
+    const source = v.resolve(p)
+    const loaded = await v.readAnnotations(p)
+    const win = getWindow()
+    const options: Electron.SaveDialogOptions = {
+      title: 'Export annotated PDF',
+      defaultPath: source.replace(/\.pdf$/i, ' (annotated).pdf'),
+      filters: [{ name: 'PDF', extensions: ['pdf'] }]
+    }
+    const choice = win
+      ? await dialog.showSaveDialog(win, options)
+      : await dialog.showSaveDialog(options)
+    if (choice.canceled || !choice.filePath) return null
+    if (path.resolve(choice.filePath).toLowerCase() === source.toLowerCase()) {
+      throw new VaultError('Choose another name: the original PDF is never overwritten')
+    }
+    const result = await exportAnnotated(await v.readFile(p), loaded.file)
+    await writeFileAtomic(choice.filePath, result.bytes)
+    return {
+      path: choice.filePath,
+      skippedPages: result.skippedPages,
+      pdfChanged: !!loaded.file && loaded.file.pdfSha256 !== loaded.pdfSha256
+    }
+  })
 
   handle('vault:pickPdfs', async () => {
     const win = getWindow()

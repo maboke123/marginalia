@@ -32,6 +32,7 @@
     "@lezer/common": "1.5.3",
     "@lezer/highlight": "1.2.5",
     "@lezer/markdown": "1.7.2",
+    "@pdf-lib/fontkit": "1.1.1",
     "@playwright/test": "1.63.0",
     "@types/markdown-it": "14.2.0",
     "@types/node": "24.19.1",

@@ -33,6 +33,7 @@ const api: MarginaliaApi = {
     importImages: (note) => invoke('vault:importImages', note),
     readAnnotations: (pdf) => invoke('vault:readAnnotations', pdf),
     writeAnnotations: (pdf, file) => invoke('vault:writeAnnotations', pdf, file),
+    exportPdf: (pdf) => invoke('vault:exportPdf', pdf),
     onChanged: (listener) => {
       const handler = (): void => listener()
       ipcRenderer.on('vault:changed', handler)

@@ -111,7 +111,11 @@ export function Sidebar(): React.JSX.Element {
         { separator: true }
       )
     } else {
-      items.push({ label: 'Open', onSelect: () => app.openFile(node.path) }, { separator: true })
+      items.push({ label: 'Open', onSelect: () => app.openFile(node.path) })
+      if (node.kind === 'pdf') {
+        items.push({ label: 'Export annotated PDF...', onSelect: () => app.exportPdf(node.path) })
+      }
+      items.push({ separator: true })
     }
     items.push({ label: 'Rename', hint: 'F2', onSelect: () => app.startRename(node.path) })
     if (node.kind === 'notebook') {

@@ -82,6 +82,8 @@ export interface MarginaliaApi {
     importImages(note: string): Promise<string[]>
     readAnnotations(pdf: string): Promise<LoadedAnnotations>
     writeAnnotations(pdf: string, file: AnnotationFile): Promise<void>
+    /** Asks where to save, then writes a copy with the annotations drawn in. Null when cancelled. */
+    exportPdf(pdf: string): Promise<ExportedPdf | null>
     onChanged(listener: () => void): () => void
   }
   settings: {
@@ -117,6 +119,15 @@ export interface MarginaliaApi {
     /** Absolute path of a file dropped from Explorer. */
     pathFor(file: File): string
   }
+}
+
+export interface ExportedPdf {
+  /** Absolute path of the new file. */
+  path: string
+  /** Rotated pages, copied without their annotations. */
+  skippedPages: number
+  /** The PDF changed since it was annotated, so annotations may sit on the wrong slides. */
+  pdfChanged: boolean
 }
 
 export interface SearchHit {

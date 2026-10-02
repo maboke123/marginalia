@@ -1,6 +1,6 @@
 import type { PageAnnotations, TextBox } from '../../../shared/annotations'
 import { round } from './geometry'
-import { pageUnit, TEXT_SIZES } from './palette'
+import { pageUnit, TEXT_SIZES } from '../../../shared/palette'
 
 /** Rough height of a rendered text box: wrapped lines at about half an em per character. */
 export function estimateHeight(box: Pick<TextBox, 'markdown' | 'width'>, fontSize: number): number {

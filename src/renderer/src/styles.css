@@ -520,6 +520,10 @@ h2 {
   box-shadow: var(--shadow-menu);
 }
 
+.toast[role='status'] {
+  border-left-color: var(--accent);
+}
+
 .toast-close {
   padding: 2px 6px;
   border: 0;

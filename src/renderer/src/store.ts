@@ -1,7 +1,8 @@
 import { create } from 'zustand'
 import { DEFAULT_SETTINGS, type AppSettings } from '../../shared/settings'
 import type { NotebookColor, Position, VaultInfo, VaultNode } from '../../shared/types'
-import { ERASER_SIZES, PEN_WIDTHS, TEXT_SIZES } from './annotations/palette'
+import { ERASER_SIZES, PEN_WIDTHS, TEXT_SIZES } from '../../shared/palette'
+import { flushAll } from './lib/flush'
 import { findNode, isFolder, parentOf, remap } from './lib/tree'
 
 const api = window.api.vault
@@ -93,6 +94,8 @@ interface AppState {
   snapshotting: boolean
   renaming: string | null
   error: string | null
+  /** A short confirmation, shown like an error but not as one. */
+  notice: string | null
   pdfView: PdfView | null
   pdfSelection: PdfSelection | null
   noteCursor: NoteCursor | null
@@ -115,6 +118,9 @@ interface AppState {
   setSnapshotting(on: boolean): void
   startRename(path: string | null): void
   showError(message: string | null): void
+  showNotice(message: string | null): void
+  /** Saves pending annotations, then writes a flattened copy where I choose. */
+  exportPdf(path: string): Promise<void>
   setPdfView(view: PdfView | null): void
   setPdfSelection(selection: PdfSelection | null): void
   setNoteCursor(cursor: NoteCursor | null): void
@@ -263,6 +269,7 @@ export const useApp = create<AppState>((set, get) => {
     snapshotting: false,
     renaming: null,
     error: null,
+    notice: null,
     pdfView: null,
     pdfSelection: null,
     noteCursor: null,
@@ -386,8 +393,29 @@ export const useApp = create<AppState>((set, get) => {
 
     showError(message) {
       clearTimeout(errorTimer)
-      set({ error: message })
+      set({ error: message, notice: null })
       if (message) errorTimer = setTimeout(() => set({ error: null }), 6000)
+    },
+
+    showNotice(message) {
+      clearTimeout(errorTimer)
+      set({ notice: message, error: null })
+      if (message) errorTimer = setTimeout(() => set({ notice: null }), 6000)
+    },
+
+    async exportPdf(path) {
+      await flushAll()
+      const done = await attempt(() => api.exportPdf(path))
+      if (!done) return
+      const notes = [
+        done.pdfChanged ? 'the PDF changed since you annotated it, so check the result' : '',
+        done.skippedPages
+          ? `${done.skippedPages} rotated ${done.skippedPages === 1 ? 'page was' : 'pages were'} copied without annotations`
+          : ''
+      ].filter(Boolean)
+      get().showNotice(
+        `Exported to ${done.path}${notes.length ? `. Note: ${notes.join('; ')}.` : ''}`
+      )
     },
 
     setPdfView: (view) => set({ pdfView: view }),

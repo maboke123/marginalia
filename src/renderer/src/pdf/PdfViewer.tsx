@@ -415,6 +415,14 @@ function Document({
           </button>
         </div>
         <button
+          className="icon-button"
+          title="Export a copy with the annotations drawn in"
+          aria-label="Export annotated PDF"
+          onClick={() => useApp.getState().exportPdf(path)}
+        >
+          <Icon name="export" />
+        </button>
+        <button
           className={lectureMode ? 'icon-button pressed' : 'icon-button'}
           title={`Lecture mode (${useApp.getState().settings.hotkeys.lecture})`}
           aria-label="Lecture mode"

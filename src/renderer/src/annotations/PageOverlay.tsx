@@ -26,7 +26,7 @@ import {
 } from './geometry'
 import { GhostView } from './GhostView'
 import { strokePath } from './ink'
-import { HIGHLIGHT_OPACITY, HIGHLIGHTER_WIDTH, pageUnit, TEXT_SIZES } from './palette'
+import { HIGHLIGHT_OPACITY, HIGHLIGHTER_WIDTH, pageUnit, TEXT_SIZES } from '../../../shared/palette'
 import { TextBoxView } from './TextBoxView'
 import { TextLayerView } from './TextLayerView'
 
