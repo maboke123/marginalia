@@ -3,12 +3,16 @@ import type { Stroke } from '../../../shared/annotations'
 import { addItem, createAnnotationDoc, removeItems } from './doc'
 import {
   distanceToSegment,
+  erasePartial,
+  eraseWhole,
   erasedStrokes,
   hitsStroke,
   mergeLineRects,
+  splitStroke,
   strokeBounds,
   sweep,
-  translateStroke
+  translateStroke,
+  type Rect
 } from './geometry'
 
 const stroke = (id: string, points: [number, number][]): Stroke => ({
@@ -46,6 +50,54 @@ describe('geometry', () => {
     ])
     const path = sweep([0, 50], [120, 50], 4)
     expect(erasedStrokes([vertical, far], path, 3)).toEqual(['v'])
+  })
+
+  it('cuts a stroke in two where the partial eraser crosses it', () => {
+    const line = stroke(
+      'line',
+      Array.from({ length: 11 }, (_, i): [number, number] => [i * 10, 0])
+    )
+    let n = 0
+    const pieces = splitStroke(line, sweep([50, -20], [50, 20], 2), 3, () => `new${++n}`)
+
+    expect(pieces?.map((p) => p.id)).toEqual(['line', 'new1'])
+    expect(pieces?.[0].points.map((p) => p[0])).toEqual([0, 10, 20, 30, 40])
+    expect(pieces?.[1].points.map((p) => p[0])).toEqual([60, 70, 80, 90, 100])
+    expect(splitStroke(line, [[50, 40]], 3, () => 'x')).toBeNull()
+  })
+
+  it('cuts between two far apart points too', () => {
+    const line = stroke('line', [
+      [0, 0],
+      [100, 0],
+      [110, 0]
+    ])
+    const pieces = splitStroke(line, [[50, 0]], 2, () => 'b')
+    expect(pieces?.map((p) => p.points.length)).toEqual([2])
+    expect(pieces?.[0].points[0][0]).toBe(100)
+  })
+
+  it('removes only the touched lines of a text highlight', () => {
+    const page = {
+      strokes: [],
+      textBoxes: [],
+      highlights: [
+        {
+          id: 'h',
+          color: '#ffd33d',
+          text: 'two lines',
+          rects: [
+            [72, 140, 100, 14],
+            [72, 160, 100, 14]
+          ] as Rect[],
+          author: 'me' as const
+        }
+      ]
+    }
+    const partial = erasePartial(page, [[100, 165]], 2, () => 'x')
+    expect(partial?.highlights[0].rects).toEqual([[72, 140, 100, 14]])
+    expect(eraseWhole(page, [[100, 165]], 2)?.highlights).toEqual([])
+    expect(erasePartial(page, [[400, 400]], 2, () => 'x')).toBeNull()
   })
 
   it('moves and measures strokes', () => {

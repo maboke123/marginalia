@@ -1,4 +1,4 @@
-import type { Highlight, Stroke } from '../../../shared/annotations'
+import type { Highlight, PageAnnotations, Stroke } from '../../../shared/annotations'
 
 export type Point = [number, number]
 export type Rect = [number, number, number, number]
@@ -47,8 +47,105 @@ export function erasedStrokes(strokes: Stroke[], path: Point[], radius: number):
   return strokes.filter((s) => path.some((p) => hitsStroke(s, p, radius))).map((s) => s.id)
 }
 
-export function erasedHighlights(highlights: Highlight[], path: Point[]): string[] {
-  return highlights.filter((h) => path.some((p) => hitsRects(h.rects, p))).map((h) => h.id)
+export function erasedHighlights(highlights: Highlight[], path: Point[], radius = 0): string[] {
+  return highlights
+    .filter((h) =>
+      path.some((p) =>
+        hitsRects(
+          h.rects.map((r) => grow(r, radius)),
+          p
+        )
+      )
+    )
+    .map((h) => h.id)
+}
+
+function grow([x, y, w, h]: Rect, by: number): Rect {
+  return [x - by, y - by, w + 2 * by, h + 2 * by]
+}
+
+/** Eraser that removes every stroke and text markup it touches, as a whole. */
+export function eraseWhole(
+  page: PageAnnotations,
+  path: Point[],
+  radius: number
+): PageAnnotations | null {
+  const strokes = new Set(erasedStrokes(page.strokes, path, radius))
+  const highlights = new Set(erasedHighlights(page.highlights, path, radius))
+  if (!strokes.size && !highlights.size) return null
+  return {
+    ...page,
+    strokes: page.strokes.filter((s) => !strokes.has(s.id)),
+    highlights: page.highlights.filter((h) => !highlights.has(h.id))
+  }
+}
+
+/**
+ * Cuts the parts of a stroke near the eraser path out of it. Returns null when the eraser
+ * missed, otherwise the remaining pieces (the first keeps the stroke's id).
+ */
+export function splitStroke(
+  stroke: Stroke,
+  path: Point[],
+  radius: number,
+  makeId: () => string
+): Stroke[] | null {
+  const reach = radius + stroke.width / 2
+  const near = (x: number, y: number): boolean =>
+    path.some((e) => Math.hypot(e[0] - x, e[1] - y) <= reach)
+  const pieces: Stroke['points'][] = []
+  let current: Stroke['points'] = []
+  let changed = false
+
+  for (const point of stroke.points) {
+    if (near(point[0], point[1])) {
+      changed = true
+      if (current.length) pieces.push(current)
+      current = []
+      continue
+    }
+    const previous = current[current.length - 1]
+    // Two points far apart can have the eraser pass between them.
+    if (
+      previous &&
+      path.some(
+        (e) => distanceToSegment(e, [previous[0], previous[1]], [point[0], point[1]]) <= reach
+      )
+    ) {
+      changed = true
+      pieces.push(current)
+      current = []
+    }
+    current.push(point)
+  }
+  if (current.length) pieces.push(current)
+  if (!changed) return null
+  return pieces
+    .filter((points) => points.length >= 2)
+    .map((points, i) => ({ ...stroke, id: i === 0 ? stroke.id : makeId(), points }))
+}
+
+/** Eraser that only removes what is under it: strokes are cut, text markup loses the lines touched. */
+export function erasePartial(
+  page: PageAnnotations,
+  path: Point[],
+  radius: number,
+  makeId: () => string
+): PageAnnotations | null {
+  let changed = false
+  const strokes = page.strokes.flatMap((s) => {
+    const pieces = splitStroke(s, path, radius, makeId)
+    if (!pieces) return [s]
+    changed = true
+    return pieces
+  })
+  const highlights = page.highlights.flatMap((h) => {
+    const rects = h.rects.filter((r) => !path.some((p) => hitsRects([grow(r, radius)], p)))
+    if (rects.length === h.rects.length) return [h]
+    changed = true
+    return rects.length ? [{ ...h, rects }] : []
+  })
+  return changed ? { ...page, strokes, highlights } : null
 }
 
 export function strokeBounds(stroke: Stroke): Rect {
