@@ -3,3 +3,5 @@ dist
 out
 .eslintcache
 *.log*
+test-results
+playwright-report
