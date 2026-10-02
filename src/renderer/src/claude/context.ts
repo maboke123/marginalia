@@ -80,6 +80,35 @@ function describeAnnotations(page: PageAnnotations): string[] {
 
 const block = (tag: string, text: string): string => `<${tag}>\n${text}\n</${tag}>`
 
+/**
+ * One slide of an open PDF for Claude: where it is, its text, an image (unless the same page
+ * was sent before) and my annotations on it.
+ */
+export async function slideContext(
+  path: string,
+  page: number,
+  lastImage: string | null
+): Promise<{ lines: string[]; images: ChatImage[]; imageKey: string | null }> {
+  const open = openPdf(path)
+  const lines = [`Slides: ${path}, page ${page} of ${open?.pdf.numPages ?? '?'}.`]
+  const images: ChatImage[] = []
+  let imageKey: string | null = null
+  if (!open) return { lines, images, imageKey }
+  const key = `${path}#${page}`
+  if (key !== lastImage) {
+    images.push({ mediaType: 'image/png', data: await renderPage(open.pdf, page) })
+    imageKey = key
+    lines.push('An image of this page is attached.')
+  } else {
+    lines.push('The image of this page is in an earlier message.')
+  }
+  const text = await pageText(open.pdf, page)
+  lines.push(block('page-text', text || '(this page has no text layer; use the image)'))
+  const notes = open.doc ? describeAnnotations(pageOf(open.doc.getState().pages, page)) : []
+  if (notes.length) lines.push('My annotations on this page:', ...notes)
+  return { lines, images, imageKey }
+}
+
 export interface Packet {
   text: string
   images: ChatImage[]
@@ -104,23 +133,10 @@ export async function buildPacket(
   let imageKey: string | null = null
 
   if (ids.has('slides') && pdfView) {
-    const { path, page, pageCount } = pdfView
-    lines.push(`Slides: ${path}, page ${page} of ${pageCount}.`)
-    const open = openPdf(path)
-    if (open) {
-      const key = `${path}#${page}`
-      if (key !== lastImage) {
-        images.push({ mediaType: 'image/png', data: await renderPage(open.pdf, page) })
-        imageKey = key
-        lines.push('An image of this page is attached.')
-      } else {
-        lines.push('The image of this page is in an earlier message.')
-      }
-      const text = await pageText(open.pdf, page)
-      lines.push(block('page-text', text || '(this page has no text layer; use the image)'))
-      const notes = open.doc ? describeAnnotations(pageOf(open.doc.getState().pages, page)) : []
-      if (notes.length) lines.push('My annotations on this page:', ...notes)
-    }
+    const slide = await slideContext(pdfView.path, pdfView.page, lastImage)
+    lines.push(...slide.lines)
+    images.push(...slide.images)
+    imageKey = slide.imageKey
   }
   if (ids.has('slide-selection') && pdfSelection) {
     lines.push(`Selected on page ${pdfSelection.page}: "${pdfSelection.text}"`)

@@ -1,6 +1,8 @@
-import { memo, useEffect, useMemo, useRef } from 'react'
+import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import type { TextBox } from '../../../shared/annotations'
+import { Cancelled, cancelWrite, findRequest, newRequestId, writeWithClaude } from '../claude/write'
 import { renderMarkdown } from '../lib/markdown'
+import { useApp } from '../store'
 
 interface Props {
   box: TextBox
@@ -13,6 +15,10 @@ interface Props {
   onResizeStart(e: React.PointerEvent): void
   /** Called once with the final text when editing ends. */
   onCommit(markdown: string): void
+  /** Page the box is on, sent to Claude with a /claude request. */
+  page: number
+  /** A /claude answer that arrived after editing ended: replace `original` in the box. */
+  onLateAnswer(original: string, answer: string): void
 }
 
 export const TextBoxView = memo(function TextBoxView(props: Props): React.JSX.Element {
@@ -34,7 +40,12 @@ export const TextBoxView = memo(function TextBoxView(props: Props): React.JSX.El
       onDoubleClick={editing ? undefined : props.onDoubleClick}
     >
       {editing ? (
-        <Editor initial={box.markdown} onCommit={props.onCommit} />
+        <Editor
+          initial={box.markdown}
+          page={props.page}
+          onCommit={props.onCommit}
+          onLateAnswer={props.onLateAnswer}
+        />
       ) : (
         <div className="text-box-content" dangerouslySetInnerHTML={{ __html: html }} />
       )}
@@ -64,15 +75,82 @@ function wrapSelection(el: HTMLTextAreaElement, before: string, after: string): 
   el.setSelectionRange(start + before.length, end + before.length)
 }
 
+/** Puts Claude's answer where the request was, keeping my cursor and the box's own undo. */
+function replaceInEditor(el: HTMLTextAreaElement, original: string, answer: string): boolean {
+  const at = el.value.indexOf(original)
+  if (at === -1) return false
+  const [start, end] = [el.selectionStart, el.selectionEnd]
+  const shift = (pos: number): number =>
+    pos >= at + original.length ? pos + answer.length - original.length : Math.min(pos, at)
+  el.focus()
+  el.setSelectionRange(at, at + original.length)
+  document.execCommand('insertText', false, answer)
+  el.setSelectionRange(shift(start), shift(end))
+  return true
+}
+
 function Editor({
   initial,
-  onCommit
+  page,
+  onCommit,
+  onLateAnswer
 }: {
   initial: string
+  page: number
   onCommit(markdown: string): void
+  onLateAnswer(original: string, answer: string): void
 }): React.JSX.Element {
   const ref = useRef<HTMLTextAreaElement>(null)
   const done = useRef(false)
+  const [writing, setWriting] = useState<string[]>([])
+
+  /** "/claude ..." + Enter in a text box: the slide it is on goes along. */
+  const ask = (value: string, from: number, to: number, question: string): void => {
+    const id = newRequestId()
+    const original = value.slice(from, to)
+    const pdf = useApp.getState().pdfView?.path
+    setWriting((w) => [...w, id])
+    writeWithClaude({
+      id,
+      where: `a text box on page ${page}${pdf ? ` of ${pdf}` : ''}, my note on that slide`,
+      around: value.slice(0, from) + '⟦here⟧' + value.slice(to),
+      ask: question,
+      slide: pdf ? { path: pdf, page } : undefined
+    })
+      .then((answer) => {
+        const el = ref.current
+        if (el && !done.current) {
+          if (!replaceInEditor(el, original, answer)) {
+            useApp.getState().showError('The /claude request was changed; nothing was inserted')
+          }
+          grow(el)
+        } else {
+          onLateAnswer(original, answer)
+        }
+      })
+      .catch((err) => {
+        if (!(err instanceof Cancelled)) {
+          useApp.getState().showError(`Claude could not write here: ${(err as Error).message}`)
+        }
+      })
+      .finally(() => setWriting((w) => w.filter((x) => x !== id)))
+  }
+
+  /** Enter at the end of a line with a request sends it. */
+  const onEnter = (el: HTMLTextAreaElement): boolean => {
+    const { value, selectionStart: pos, selectionEnd } = el
+    if (pos !== selectionEnd) return false
+    const lineStart = value.lastIndexOf('\n', pos - 1) + 1
+    const lineEnd = value.indexOf('\n', pos) === -1 ? value.length : value.indexOf('\n', pos)
+    if (pos !== lineEnd) return false
+    const found = findRequest(value.slice(lineStart, lineEnd))
+    if (!found) return false
+    ask(value, lineStart + found.at, lineEnd, found.ask)
+    // Go on to a new line, so I can keep writing while Claude works.
+    document.execCommand('insertText', false, '\n')
+    grow(el)
+    return true
+  }
 
   const grow = (el: HTMLTextAreaElement): void => {
     el.style.height = 'auto'
@@ -93,25 +171,42 @@ function Editor({
   }
 
   return (
-    <textarea
-      ref={ref}
-      className="text-box-editor"
-      defaultValue={initial}
-      placeholder="Markdown, $math$"
-      spellCheck={false}
-      onInput={(e) => grow(e.currentTarget)}
-      onBlur={(e) => finish(e.currentTarget.value)}
-      onPointerDown={(e) => e.stopPropagation()}
-      onKeyDown={(e) => {
-        e.stopPropagation()
-        if (e.key === 'Escape' || (e.key === 'Enter' && e.ctrlKey)) e.currentTarget.blur()
-        const wrap = e.ctrlKey && FORMAT_KEYS[e.key.toLowerCase()]
-        if (wrap) {
-          e.preventDefault()
-          wrapSelection(e.currentTarget, ...wrap)
-          grow(e.currentTarget)
-        }
-      }}
-    />
+    <>
+      <textarea
+        ref={ref}
+        className="text-box-editor"
+        defaultValue={initial}
+        placeholder="Markdown, $math$, /claude"
+        spellCheck={false}
+        onInput={(e) => grow(e.currentTarget)}
+        onBlur={(e) => finish(e.currentTarget.value)}
+        onPointerDown={(e) => e.stopPropagation()}
+        onKeyDown={(e) => {
+          e.stopPropagation()
+          if (e.key === 'Escape' && writing.length) {
+            e.preventDefault()
+            cancelWrite(writing[writing.length - 1])
+            return
+          }
+          if (e.key === 'Enter' && !e.ctrlKey && !e.shiftKey && onEnter(e.currentTarget)) {
+            e.preventDefault()
+            return
+          }
+          if (e.key === 'Escape' || (e.key === 'Enter' && e.ctrlKey)) e.currentTarget.blur()
+          const wrap = e.ctrlKey && FORMAT_KEYS[e.key.toLowerCase()]
+          if (wrap) {
+            e.preventDefault()
+            wrapSelection(e.currentTarget, ...wrap)
+            grow(e.currentTarget)
+          }
+        }}
+      />
+      {writing.length > 0 && (
+        <div className="text-box-claude" onPointerDown={(e) => e.preventDefault()}>
+          Claude is writing...
+          <button onClick={() => writing.forEach(cancelWrite)}>Cancel</button>
+        </div>
+      )}
+    </>
   )
 }

@@ -13,10 +13,16 @@ async function readLog() {
   }
 }
 
-async function record(sessionId, entry) {
-  const log = await readLog()
-  log[sessionId] = [...(log[sessionId] ?? []), entry]
-  await fs.writeFile(LOG, JSON.stringify(log, null, 2))
+// Requests can run at once; one write at a time keeps them from overwriting each other.
+let writing = Promise.resolve()
+
+function record(sessionId, entry) {
+  writing = writing.then(async () => {
+    const log = await readLog()
+    log[sessionId] = [...(log[sessionId] ?? []), entry]
+    await fs.writeFile(LOG, JSON.stringify(log, null, 2))
+  })
+  return writing
 }
 
 const match = (text, re) => re.exec(text)?.[1]
@@ -80,7 +86,8 @@ export async function history(sessionId) {
 /** The one-off request behind /claude in a note. "slow" waits until it is cancelled. */
 export async function complete(input) {
   await record('complete', { text: input.text, images: input.images.length, question: 'complete' })
-  const wait = /What to write at ⟦here⟧: slow/.test(input.text) ? 60_000 : 400
+  const ask = /What to write at ⟦here⟧: (.*)$/.exec(input.text)?.[1] ?? ''
+  const wait = ask.startsWith('slow') ? 60_000 : ask.startsWith('later') ? 1500 : 400
   await new Promise((resolve, reject) => {
     const timer = setTimeout(resolve, wait)
     input.signal.addEventListener('abort', () => {
@@ -88,5 +95,7 @@ export async function complete(input) {
       reject(new Error('aborted'))
     })
   })
+  // Real answers sometimes put display math in the middle of a line.
+  if (ask.startsWith('display')) return '$$x_{k+1} = x_k - \\alpha \\nabla f(x_k)$$'
   return '$\\alpha^* = \\arg\\min_\\alpha L(\\alpha)$'
 }

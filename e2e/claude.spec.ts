@@ -201,37 +201,105 @@ test('keeps one conversation per lesson across restarts', async () => {
   await expect(page.locator('.claude-question')).toHaveCount(0)
 })
 
-test('/claude in a note writes at that spot; one undo brings the request back', async () => {
+test('/claude in a note: several at once, each its own undo step and cancel', async () => {
   await openSlides(2)
   await page.keyboard.press('Control+Shift+M')
   // The slides pane loads the PDF again in lecture mode; it must be there to be sent along.
   await expect(page.locator('.lecture-pane .pdf-page[data-page="2"] canvas')).toBeAttached()
   await page.locator('.md-editor .cm-content').click()
   await page.keyboard.press('Control+End')
-  await page.keyboard.type('The best step size: /claude insert the formula for the optimal alpha')
+
+  // Enter sends a request and starts a new line, so the next one can be written right away.
+  const first = 'The best step size: /claude insert the formula for the optimal alpha'
+  await page.keyboard.type(first)
   await page.keyboard.press('Enter')
-  await expect(page.locator('.cm-claude-writing')).toBeVisible()
+  await page.keyboard.type('Background: /claude slow')
+  await page.keyboard.press('Enter')
+  await expect(page.locator('.cm-claude-writing')).toHaveCount(2)
 
   const answer = 'The best step size: $\\alpha^* = \\arg\\min_\\alpha L(\\alpha)$'
-  await expect.poll(readSummary).toBe(SUMMARY + answer)
-  const [sent] = await readLog()
+  await expect.poll(readSummary).toBe(SUMMARY + answer + '\nBackground: /claude slow\n')
+  await expect(page.locator('.cm-claude-writing')).toHaveCount(1)
+  const sent = (await readLog()).find((e) => e.text.includes('⟦here⟧: insert the formula'))!
   expect(sent.images).toBe(1)
   expect(sent.text).toContain(`Slides: ${pdfRel}, page 2 of 8.`)
   expect(sent.text).toContain('Later.\nThe best step size: ⟦here⟧')
   expect(sent.text).toContain('What to write at ⟦here⟧: insert the formula for the optimal alpha')
 
-  await page.keyboard.press('Control+Z')
-  await expect
-    .poll(readSummary)
-    .toBe(SUMMARY + 'The best step size: /claude insert the formula for the optimal alpha')
+  // Each request has its own Cancel; the text stays as typed.
+  await page.locator('.cm-claude-cancel').click()
+  await expect(page.locator('.cm-claude-writing')).toHaveCount(0)
 
-  // Esc cancels a request and leaves the text as it was.
-  await page.keyboard.press('Control+End')
-  await page.keyboard.type(' /claude slow')
+  // One undo takes the answer out again and brings the request back.
+  await page.keyboard.press('Control+Z')
+  await expect.poll(readSummary).toBe(SUMMARY + first + '\nBackground: /claude slow\n')
+
+  // Esc cancels the request started last.
+  await page.keyboard.type('/claude slow again')
   await page.keyboard.press('Enter')
-  await expect(page.locator('.cm-claude-writing')).toBeVisible()
+  await expect(page.locator('.cm-claude-writing')).toHaveCount(1)
   await page.keyboard.press('Escape')
   await expect(page.locator('.cm-claude-writing')).toHaveCount(0)
-  await expect.poll(readSummary).toContain('/claude slow')
   await expect(page.getByRole('alert')).toHaveCount(0)
+})
+
+test('/claude in a text box on a slide, also after the box is closed', async () => {
+  await openSlides()
+  const sidecar = path.join(env.vault, `${pdfRel}.annotations.json`)
+  const boxes = async (): Promise<string[]> => {
+    const file = JSON.parse(await fs.readFile(sidecar, 'utf8').catch(() => '{}'))
+    return (file.pages?.['1']?.textBoxes ?? []).map((b: { markdown: string }) => b.markdown)
+  }
+  const page1 = (await page.locator('.pdf-page[data-page="1"]').boundingBox())!
+
+  // Answered while the box is open: it lands in the box I am typing in.
+  await page.keyboard.press('KeyT')
+  await page.mouse.click(page1.x + 60, page1.y + 60)
+  await page.keyboard.type('Step: /claude the optimal alpha')
+  await page.keyboard.press('Enter')
+  await expect(page.locator('.text-box-claude')).toBeVisible()
+  const editorBox = page.locator('.text-box-editor')
+  await expect(editorBox).toHaveValue(/Step: \$\\alpha\^\* = /)
+  const sent = (await readLog()).find((e) => e.text.includes('the optimal alpha'))!
+  expect(sent.text).toContain('a text box on page 1 of')
+  expect(sent.images).toBe(1)
+  await page.keyboard.press('Control+Enter')
+  await expect(page.locator('.text-box .katex').first()).toBeVisible()
+  await expect.poll(boxes).toEqual(['Step: $\\alpha^* = \\arg\\min_\\alpha L(\\alpha)$'])
+
+  // Answered after the box was closed: it still goes in, as its own undo step.
+  await page.keyboard.press('KeyT')
+  await page.mouse.click(page1.x + 60, page1.y + 200)
+  await page.keyboard.type('Later: /claude later please')
+  await page.keyboard.press('Enter')
+  await page.keyboard.press('Control+Enter')
+  await expect
+    .poll(boxes, { timeout: 10_000 })
+    .toContain('Later: $\\alpha^* = \\arg\\min_\\alpha L(\\alpha)$')
+  await page.locator('.pdf-scroll').focus()
+  await page.keyboard.press('Control+Z')
+  await expect.poll(boxes).toContain('Later: /claude later please')
+})
+
+test('answers with display math inside a line keep the editor working', async () => {
+  // Once crashed the editor: a $ left over from "$$...$$" paired with a $ on the next line.
+  const errors: string[] = []
+  page.on('console', (m) => m.type() === 'error' && errors.push(m.text()))
+  await row('Machine Learning').click()
+  await row('B2 Decision trees').first().click()
+  await row('Summary').click()
+  await page.locator('.md-editor .cm-content').click()
+  await page.keyboard.press('Control+End')
+  await page.keyboard.type('Rule: /claude display the update rule')
+  await page.keyboard.press('Enter')
+  await page.keyboard.type('Best: /claude later the optimal alpha')
+  await page.keyboard.press('Enter')
+
+  await expect(page.locator('.cm-claude-writing')).toHaveCount(0, { timeout: 10_000 })
+  await expect
+    .poll(readSummary)
+    .toContain('Rule: $$x_{k+1} = x_k - \\alpha \\nabla f(x_k)$$\nBest: $\\alpha^*')
+  // Both answers render, next to $IG(S,t)$ that was already in the note.
+  await expect(page.locator('.cm-math-inline')).toHaveCount(3)
+  expect(errors).toEqual([])
 })

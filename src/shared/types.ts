@@ -119,7 +119,7 @@ export interface MarginaliaApi {
     stop(): Promise<void>
     /** One request, one answer: text to put into a note (/claude in the editor). */
     complete(request: CompleteRequest): Promise<string>
-    cancelComplete(): Promise<void>
+    cancelComplete(id: string): Promise<void>
     history(chat: string): Promise<ChatHistoryItem[]>
     /** Forgets the section's conversation, so the next message starts a new one. */
     newChat(chat: string): Promise<void>

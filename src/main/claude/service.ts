@@ -156,15 +156,15 @@ export function registerClaude(
     }
   })
 
-  let completing: AbortController | null = null
+  // Several /claude requests may run at once, each in its own CLI process.
+  const completing = new Map<string, AbortController>()
 
   handle('claude:complete', async (request: CompleteRequest) => {
-    if (completing) throw new VaultError('Claude is still writing in your note')
     const v = vault()
     const { complete } = await agentModule
     if (!complete) throw new VaultError('Writing in notes is not available')
     const controller = new AbortController()
-    completing = controller
+    completing.set(request.id, controller)
     try {
       const text = await complete({
         cwd: v.root,
@@ -180,12 +180,12 @@ export function registerClaude(
       if (controller.signal.aborted) throw new VaultError('Cancelled')
       throw err
     } finally {
-      completing = null
+      completing.delete(request.id)
     }
   })
 
-  handle('claude:cancelComplete', () => {
-    completing?.abort()
+  handle('claude:cancelComplete', (id: string) => {
+    completing.get(id)?.abort()
   })
 
   handle('claude:stop', () => {

@@ -43,6 +43,8 @@ export interface ChatRequest {
 }
 
 export interface CompleteRequest {
+  /** Chosen by the renderer, to cancel this one request. */
+  id: string
   text: string
   images: ChatImage[]
 }

@@ -6,6 +6,7 @@ import { useApp } from '../store'
 import { AnnotationContext } from './context'
 import {
   addItem,
+  findItem,
   newId,
   pageOf,
   removeItems,
@@ -222,6 +223,19 @@ function AnnotatedOverlay({
     focusViewer()
   }
 
+  /** A /claude answer for a box I already closed: put it in as its own undo step. */
+  function lateAnswer(id: string, original: string, answer: string): void {
+    const current = findItem(doc.getState().pages, { page: number, kind: 'textBoxes', id })
+    const at = current?.markdown.indexOf(original) ?? -1
+    if (!current || at === -1) {
+      useApp.getState().showError('The /claude request was changed; nothing was inserted')
+      return
+    }
+    const markdown =
+      current.markdown.slice(0, at) + answer + current.markdown.slice(at + original.length)
+    doc.getState().change((p) => replaceItem(p, number, 'textBoxes', { ...current, markdown }))
+  }
+
   function onCapturePointerDown(e: React.PointerEvent): void {
     if (e.button !== 0) return
     e.preventDefault()
@@ -417,6 +431,8 @@ function AnnotatedOverlay({
           onDoubleClick={() => startEditing(box)}
           onResizeStart={(e) => resizeBox(e, box)}
           onCommit={(markdown) => commitBox(box, markdown)}
+          page={number}
+          onLateAnswer={(original, answer) => lateAnswer(box.id, original, answer)}
         />
       ))}
 

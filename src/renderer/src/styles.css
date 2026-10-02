@@ -2065,3 +2065,28 @@ h2 {
   font-family: var(--font);
   font-size: 12px;
 }
+
+.cm-claude-cancel,
+.text-box-claude button {
+  padding: 0 4px;
+  border: 0;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.cm-claude-cancel:hover,
+.text-box-claude button:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.text-box-claude {
+  margin-top: 2px;
+  color: var(--claude-ink);
+  font-family: var(--font);
+  font-size: 12px;
+}
