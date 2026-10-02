@@ -24,6 +24,7 @@ import {
 } from './layout'
 import { loadPdf, pageSizes } from './pdfjs'
 import { PdfPage } from './PdfPage'
+import { SnapshotLayer } from './SnapshotLayer'
 
 interface Loaded {
   pdf: PDFDocumentProxy
@@ -59,7 +60,10 @@ export function PdfViewer({ path, title }: { path: string; title: string }): Rea
       if (cancelled) return
       const sizes = await pageSizes(pdf)
       if (cancelled) return
-      const startPage = Math.min(Math.max(1, lastPage ?? 1), sizes.length)
+      // A slide link that opened this PDF wins over the remembered page.
+      const goto = useApp.getState().pdfGoto
+      const wanted = goto?.path === path ? goto.page : lastPage
+      const startPage = Math.min(Math.max(1, wanted ?? 1), sizes.length)
       setLoaded({ pdf, sizes, startPage, annotations })
     })().catch((err) => {
       if (!cancelled) setError(err instanceof Error ? err.message : String(err))
@@ -109,6 +113,9 @@ function Document({
   const setTool = useApp((s) => s.setTool)
   const ink = useApp((s) => s.ink)
   const showError = useApp((s) => s.showError)
+  const lectureMode = useApp((s) => s.lectureMode)
+  const toggleLecture = useApp((s) => s.toggleLecture)
+  const snapshotting = useApp((s) => s.snapshotting)
   const [selectionAt, setSelectionAt] = useState<{ x: number; y: number } | null>(null)
   const [viewport, setViewport] = useState({ width: 0, height: 0 })
   const [zoom, setZoom] = useState<'fit' | number>('fit')
@@ -284,6 +291,16 @@ function Document({
     [layout, sizes.length]
   )
 
+  // Clicking a slide link while this PDF is already open.
+  useEffect(
+    () =>
+      useApp.subscribe((state, previous) => {
+        const goto = state.pdfGoto
+        if (goto && goto !== previous.pdfGoto && goto.path === path) goTo(goto.page)
+      }),
+    [path, goTo]
+  )
+
   function onKeyDown(e: React.KeyboardEvent): void {
     const target = e.target as HTMLElement
     if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return
@@ -352,6 +369,15 @@ function Document({
             Fit width
           </button>
         </div>
+        <button
+          className={lectureMode ? 'icon-button pressed' : 'icon-button'}
+          title="Lecture mode (Ctrl+Shift+M)"
+          aria-label="Lecture mode"
+          aria-pressed={lectureMode}
+          onClick={() => toggleLecture()}
+        >
+          <Icon name="columns" />
+        </button>
       </div>
 
       {typeof annotations === 'string' && (
@@ -395,6 +421,15 @@ function Document({
                   rendered={i >= first && i <= last}
                 />
               ))}
+            {snapshotting && (
+              <SnapshotLayer
+                pdf={pdf}
+                layout={layout}
+                sizes={sizes}
+                scale={scale}
+                contentWidth={contentWidth}
+              />
+            )}
           </div>
         </div>
       </AnnotationContext.Provider>

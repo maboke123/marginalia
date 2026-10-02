@@ -32,6 +32,19 @@ export interface PdfView {
   pageCount: number
 }
 
+/** The open summary editor, so hotkeys elsewhere in the app can write into it. */
+export interface EditorHandle {
+  path: string
+  insert(text: string): void
+}
+
+/** Ask the slide viewer to jump to a page. `nonce` makes repeated clicks on one link work. */
+export interface PdfGoto {
+  path: string
+  page: number
+  nonce: number
+}
+
 const DEFAULT_NAMES: Record<NewItem, string> = {
   notebook: 'New notebook',
   section: 'New section',
@@ -46,7 +59,16 @@ interface AppState {
   colors: Record<string, NotebookColor>
   expanded: Record<string, boolean>
   selected: string | null
+  /** The file shown when not in lecture mode. */
   activeFile: string | null
+  /** The PDF and the note last opened; lecture mode shows them side by side. */
+  slidesFile: string | null
+  summaryFile: string | null
+  lectureMode: boolean
+  pdfGoto: PdfGoto | null
+  editor: EditorHandle | null
+  /** Waiting for a rectangle to be dragged on a slide (Ctrl+Shift+S). */
+  snapshotting: boolean
   renaming: string | null
   error: string | null
   pdfView: PdfView | null
@@ -58,7 +80,12 @@ interface AppState {
   refresh(): Promise<void>
   select(path: string | null): void
   setExpanded(path: string, open: boolean): void
-  openFile(path: string): void
+  openFile(path: string, page?: number): void
+  toggleLecture(): Promise<void>
+  setEditor(editor: EditorHandle | null): void
+  /** Ctrl+Shift+S: drag a rectangle on the slides to put that part into the summary. */
+  startSnapshot(): void
+  setSnapshotting(on: boolean): void
   startRename(path: string | null): void
   showError(message: string | null): void
   setPdfView(view: PdfView | null): void
@@ -112,10 +139,12 @@ export const useApp = create<AppState>((set, get) => {
 
   /** Keeps selection, open file and expanded folders pointing at an item that moved. */
   function followMove(from: string, to: string): void {
-    const { selected, activeFile } = get()
+    const { selected, activeFile, slidesFile, summaryFile } = get()
     set({
       selected: selected && remap(selected, from, to),
-      activeFile: activeFile && remap(activeFile, from, to)
+      activeFile: activeFile && remap(activeFile, from, to),
+      slidesFile: slidesFile && remap(slidesFile, from, to),
+      summaryFile: summaryFile && remap(summaryFile, from, to)
     })
     updateExpanded((e) =>
       Object.fromEntries(Object.entries(e).map(([p, open]) => [remap(p, from, to), open]))
@@ -128,6 +157,9 @@ export const useApp = create<AppState>((set, get) => {
       expanded: loadExpanded(vault.root),
       selected: null,
       activeFile: null,
+      slidesFile: null,
+      summaryFile: null,
+      lectureMode: false,
       renaming: null,
       recent: (await attempt(() => api.recent())) ?? get().recent
     })
@@ -152,7 +184,14 @@ export const useApp = create<AppState>((set, get) => {
     })
   }
 
+  /** First file of a kind in a folder, for pairing slides with a summary in lecture mode. */
+  function firstIn(folder: string, kind: 'pdf' | 'markdown'): string | null {
+    const children = folder ? (findNode(get().nodes, folder)?.children ?? []) : []
+    return children.find((n) => n.kind === kind)?.path ?? null
+  }
+
   let errorTimer: ReturnType<typeof setTimeout> | undefined
+  let gotoNonce = 0
   let initStarted = false
 
   return {
@@ -164,6 +203,12 @@ export const useApp = create<AppState>((set, get) => {
     expanded: {},
     selected: null,
     activeFile: null,
+    slidesFile: null,
+    summaryFile: null,
+    lectureMode: false,
+    pdfGoto: null,
+    editor: null,
+    snapshotting: false,
     renaming: null,
     error: null,
     pdfView: null,
@@ -198,12 +243,16 @@ export const useApp = create<AppState>((set, get) => {
     async refresh() {
       const tree = await attempt(() => api.tree())
       if (!tree) return
-      const { selected, activeFile } = get()
+      const { selected, activeFile, slidesFile, summaryFile } = get()
+      const keep = (path: string | null): string | null =>
+        path && findNode(tree.nodes, path) ? path : null
       set({
         nodes: tree.nodes,
         colors: tree.colors,
-        selected: selected && findNode(tree.nodes, selected) ? selected : null,
-        activeFile: activeFile && findNode(tree.nodes, activeFile) ? activeFile : null
+        selected: keep(selected),
+        activeFile: keep(activeFile),
+        slidesFile: keep(slidesFile),
+        summaryFile: keep(summaryFile)
       })
     },
 
@@ -211,7 +260,53 @@ export const useApp = create<AppState>((set, get) => {
 
     setExpanded: (path, open) => updateExpanded((e) => ({ ...e, [path]: open })),
 
-    openFile: (path) => set({ activeFile: path, selected: path }),
+    openFile(path, page) {
+      const pdf = /\.pdf$/i.test(path)
+      set({
+        activeFile: path,
+        selected: path,
+        ...(pdf ? { slidesFile: path } : { summaryFile: path }),
+        ...(pdf && page ? { pdfGoto: { path, page, nonce: ++gotoNonce } } : {})
+      })
+      expandAncestors(path)
+    },
+
+    async toggleLecture() {
+      if (get().lectureMode) {
+        set({ lectureMode: false })
+        return
+      }
+      let { slidesFile, summaryFile } = get()
+      const { activeFile } = get()
+      // Pair with what is open now, then look in the same section for the other half.
+      if (activeFile?.toLowerCase().endsWith('.pdf')) slidesFile = activeFile
+      if (activeFile?.toLowerCase().endsWith('.md')) summaryFile = activeFile
+      if (slidesFile && !summaryFile) {
+        const folder = parentOf(slidesFile)
+        summaryFile = firstIn(folder, 'markdown')
+        if (!summaryFile && folder) {
+          summaryFile = (await attempt(() => api.createNote(folder, 'Summary'))) ?? null
+          await get().refresh()
+        }
+      }
+      if (summaryFile && !slidesFile) slidesFile = firstIn(parentOf(summaryFile), 'pdf')
+      if (!slidesFile && !summaryFile) {
+        get().showError('Open slides or a summary first')
+        return
+      }
+      set({ lectureMode: true, slidesFile, summaryFile })
+    },
+
+    setEditor: (editor) => set({ editor }),
+    startSnapshot() {
+      const { editor, lectureMode, slidesFile, showError } = get()
+      if (!editor || !lectureMode || !slidesFile) {
+        showError('Open slides and a summary side by side (Ctrl+Shift+M) to take a snapshot')
+        return
+      }
+      set({ snapshotting: true })
+    },
+    setSnapshotting: (snapshotting) => set({ snapshotting }),
 
     startRename: (path) => set({ renaming: path }),
 

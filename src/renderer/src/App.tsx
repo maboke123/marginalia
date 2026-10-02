@@ -2,12 +2,30 @@ import { useEffect } from 'react'
 import { Sidebar } from './components/Sidebar'
 import { Welcome } from './components/Welcome'
 import { Workspace } from './components/Workspace'
+import { slideLink } from './editor/links'
 import { flushAll } from './lib/flush'
 import { useApp } from './store'
+
+/** Ctrl+Shift+L: a link to the slide on screen, typed into the summary wherever focus is. */
+function insertCurrentSlideLink(): void {
+  const { editor, pdfView, showError } = useApp.getState()
+  if (!editor) return showError('Open a summary to insert a slide link')
+  if (!pdfView) return showError('Open slides to link to the current slide')
+  editor.insert(slideLink(editor.path, pdfView.path, pdfView.page))
+}
+
+// Ctrl+Shift+ these keys work everywhere, also while typing in the editor.
+const HOTKEYS: Record<string, () => void> = {
+  KeyI: () => useApp.getState().importPdfs(),
+  KeyM: () => useApp.getState().toggleLecture(),
+  KeyL: insertCurrentSlideLink,
+  KeyS: () => useApp.getState().startSnapshot()
+}
 
 export function App(): React.JSX.Element | null {
   const ready = useApp((s) => s.ready)
   const vault = useApp((s) => s.vault)
+  const lectureMode = useApp((s) => s.lectureMode)
   const error = useApp((s) => s.error)
   const showError = useApp((s) => s.showError)
 
@@ -27,13 +45,15 @@ export function App(): React.JSX.Element | null {
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent): void => {
-      if (e.ctrlKey && e.shiftKey && e.code === 'KeyI') {
-        e.preventDefault()
-        if (useApp.getState().vault) useApp.getState().importPdfs()
-      }
+      const action = e.ctrlKey && e.shiftKey && !e.altKey ? HOTKEYS[e.code] : undefined
+      if (!action || !useApp.getState().vault) return
+      e.preventDefault()
+      e.stopPropagation()
+      action()
     }
-    window.addEventListener('keydown', onKeyDown)
-    return () => window.removeEventListener('keydown', onKeyDown)
+    // Capture phase, so the editor's own key bindings do not see these first.
+    window.addEventListener('keydown', onKeyDown, true)
+    return () => window.removeEventListener('keydown', onKeyDown, true)
   }, [])
 
   if (!ready) return null
@@ -42,7 +62,7 @@ export function App(): React.JSX.Element | null {
     <>
       {vault ? (
         <div className="layout">
-          <Sidebar />
+          {!lectureMode && <Sidebar />}
           <Workspace />
         </div>
       ) : (
