@@ -17,6 +17,7 @@ test.beforeEach(async () => {
   await fs.mkdir(section, { recursive: true })
   await fs.writeFile(path.join(section, 'Summary.md'), '')
   await fs.writeFile(path.join(section, 'slides.pdf'), '')
+  await fs.mkdir(path.join(vault, 'Machine Learning', 'B3 Ensembles'))
   ;({ app, page } = await launch(env))
 })
 
@@ -74,7 +75,6 @@ test('F2 renames and Delete goes through the recycle bin', async () => {
 })
 
 test('dragging a page into another section moves it on disk', async () => {
-  await fs.mkdir(path.join(vault, 'Machine Learning', 'B3 Ensembles'))
   await row('Machine Learning').click()
   await row('B2 Decision trees').click()
 
