@@ -1,6 +1,7 @@
 import { promises as fs } from 'fs'
 import path from 'path'
 import { DEFAULT_CLAUDE_SETTINGS, EFFORTS, MODELS, type ClaudeSettings } from '../shared/claude'
+import { settingsFrom, type AppSettings } from '../shared/settings'
 import { writeFileAtomic } from './vault/atomic'
 
 const MAX_RECENT = 10
@@ -9,6 +10,7 @@ export type StoredClaudeSettings = Omit<ClaudeSettings, 'hasApiKey'>
 
 interface AppConfig {
   recentVaults: string[]
+  settings: AppSettings
   claude: StoredClaudeSettings
   /** Encrypted with Electron's safeStorage (DPAPI on Windows), base64. */
   apiKey: string | null
@@ -42,6 +44,7 @@ export class ConfigStore {
     }
     return {
       recentVaults: Array.isArray(parsed.recentVaults) ? parsed.recentVaults : [],
+      settings: settingsFrom(parsed.settings),
       claude: claudeSettings(parsed.claude),
       apiKey: typeof parsed.apiKey === 'string' ? parsed.apiKey : null
     }

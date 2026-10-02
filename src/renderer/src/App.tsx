@@ -1,15 +1,20 @@
 import { useEffect } from 'react'
+import { comboOf, HOTKEY_ACTIONS, type HotkeyAction } from '../../shared/hotkeys'
 import { focusChatInput, useChat } from './claude/chat'
 import { ClaudePanel } from './claude/ClaudePanel'
 import { runTool } from './claude/tools'
+import { QuickSwitcher } from './components/QuickSwitcher'
+import { SearchPanel } from './components/SearchPanel'
+import { SettingsDialog } from './components/SettingsDialog'
 import { Sidebar } from './components/Sidebar'
 import { Welcome } from './components/Welcome'
 import { Workspace } from './components/Workspace'
 import { slideLink } from './editor/links'
 import { flushAll } from './lib/flush'
+import { indexPdfs } from './lib/indexer'
 import { useApp } from './store'
 
-/** Ctrl+Shift+L: a link to the slide on screen, typed into the summary wherever focus is. */
+/** Insert current slide link: typed into the summary wherever focus is. */
 function insertCurrentSlideLink(): void {
   const { editor, pdfView, showError } = useApp.getState()
   if (!editor) return showError('Open a summary to insert a slide link')
@@ -17,7 +22,7 @@ function insertCurrentSlideLink(): void {
   editor.insert(slideLink(editor.path, pdfView.path, pdfView.page))
 }
 
-/** Ctrl+L: open the panel, go to its input, or close it when already typing there. */
+/** Open the Claude panel, go to its input, or close it when already typing there. */
 function toggleClaude(): void {
   const { open, setOpen } = useChat.getState()
   const typing = document.activeElement?.closest('.claude-input')
@@ -29,26 +34,51 @@ function toggleClaude(): void {
   focusChatInput()
 }
 
-// Ctrl+Shift+ these keys work everywhere, also while typing in the editor.
-const HOTKEYS: Record<string, () => void> = {
-  KeyI: () => useApp.getState().importPdfs(),
-  KeyM: () => useApp.getState().toggleLecture(),
-  KeyL: insertCurrentSlideLink,
-  KeyS: () => useApp.getState().startSnapshot()
+function toggleOverlay(overlay: 'switcher' | 'search' | 'settings'): void {
+  const app = useApp.getState()
+  app.setOverlay(app.overlay === overlay ? null : overlay)
+}
+
+// The slide tools (pen, highlighter, ...) are handled by the slide viewer itself.
+const ACTIONS: Partial<Record<HotkeyAction, () => void>> = {
+  claude: toggleClaude,
+  lecture: () => useApp.getState().toggleLecture(),
+  importPdf: () => useApp.getState().importPdfs(),
+  slideLink: insertCurrentSlideLink,
+  snapshot: () => useApp.getState().startSnapshot(),
+  switcher: () => toggleOverlay('switcher'),
+  search: () => toggleOverlay('search'),
+  settings: () => toggleOverlay('settings')
 }
 
 export function App(): React.JSX.Element | null {
   const ready = useApp((s) => s.ready)
   const vault = useApp((s) => s.vault)
   const lectureMode = useApp((s) => s.lectureMode)
+  const overlay = useApp((s) => s.overlay)
   const error = useApp((s) => s.error)
   const showError = useApp((s) => s.showError)
   const claudeOpen = useChat((s) => s.open)
 
   useEffect(() => {
     useApp.getState().init()
-    return window.api.vault.onChanged(() => useApp.getState().refresh())
+    // Slides added or changed outside the app become searchable a little later.
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const stop = window.api.vault.onChanged(() => {
+      useApp.getState().refresh()
+      clearTimeout(timer)
+      timer = setTimeout(() => void indexPdfs(), 1500)
+    })
+    return () => {
+      clearTimeout(timer)
+      stop()
+    }
   }, [])
+
+  // Index once a vault is open (also after switching vaults).
+  useEffect(() => {
+    if (vault) void indexPdfs()
+  }, [vault])
 
   useEffect(
     () =>
@@ -70,21 +100,18 @@ export function App(): React.JSX.Element | null {
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent): void => {
-      const plainCtrl = e.ctrlKey && !e.shiftKey && !e.altKey
-      // Also before CodeMirror, whose Ctrl+L selects the line.
-      if (plainCtrl && e.code === 'KeyL' && useApp.getState().vault) {
-        e.preventDefault()
-        e.stopPropagation()
-        toggleClaude()
-        return
-      }
-      const action = e.ctrlKey && e.shiftKey && !e.altKey ? HOTKEYS[e.code] : undefined
-      if (!action || !useApp.getState().vault) return
+      const combo = comboOf(e)
+      const { vault, settings } = useApp.getState()
+      const { hotkeys } = settings
+      if (!combo || !vault) return
+      const action = HOTKEY_ACTIONS.find((a) => a.scope === 'global' && hotkeys[a.id] === combo)
+      const run = action && ACTIONS[action.id]
+      if (!run) return
       e.preventDefault()
       e.stopPropagation()
-      action()
+      run()
     }
-    // Capture phase, so the editor's own key bindings do not see these first.
+    // Capture phase, so the editor's own key bindings (like Ctrl+L) do not see these first.
     window.addEventListener('keydown', onKeyDown, true)
     return () => window.removeEventListener('keydown', onKeyDown, true)
   }, [])
@@ -100,6 +127,9 @@ export function App(): React.JSX.Element | null {
             <Workspace />
           </div>
           {claudeOpen && <ClaudePanel />}
+          {overlay === 'switcher' && <QuickSwitcher />}
+          {overlay === 'search' && <SearchPanel />}
+          {overlay === 'settings' && <SettingsDialog />}
         </div>
       ) : (
         <Welcome />

@@ -98,6 +98,8 @@ export function MarkdownEditor({
           })
         })
         setEditor({ path, insert: (t) => view && insertText(view, t) })
+        const goto = useApp.getState().noteGoto
+        if (goto?.path === path) goToLine(goto.line)
         unregisterNote = registerNote({ path, view })
         publishCursor(view.state)
         view.focus()
@@ -121,8 +123,24 @@ export function MarkdownEditor({
     })
     const unregister = registerFlush(save)
 
+    // A search result in this note: put the cursor at the start of its paragraph.
+    const goToLine = (line: number): void => {
+      if (!view) return
+      const target = view.state.doc.line(Math.min(Math.max(1, line), view.state.doc.lines))
+      view.dispatch({
+        selection: { anchor: target.from },
+        effects: EditorView.scrollIntoView(target.from, { y: 'center' })
+      })
+      view.focus()
+    }
+    const stopGoto = useApp.subscribe((state, previous) => {
+      const goto = state.noteGoto
+      if (goto && goto !== previous.noteGoto && goto.path === path) goToLine(goto.line)
+    })
+
     return () => {
       cancelled = true
+      stopGoto()
       unregisterNote()
       if (useApp.getState().noteCursor?.path === path) setNoteCursor(null)
       stopWatching()
@@ -138,7 +156,7 @@ export function MarkdownEditor({
         <span className="pane-title">{title}</span>
         <button
           className={lectureMode ? 'icon-button pressed' : 'icon-button'}
-          title="Lecture mode (Ctrl+Shift+M)"
+          title={`Lecture mode (${useApp.getState().settings.hotkeys.lecture})`}
           aria-label="Lecture mode"
           aria-pressed={lectureMode}
           onClick={() => toggleLecture()}

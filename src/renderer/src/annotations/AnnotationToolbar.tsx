@@ -1,24 +1,22 @@
 import { useStore } from 'zustand'
+import { colorName, type AppSettings } from '../../../shared/settings'
+import type { HotkeyAction } from '../../../shared/hotkeys'
 import { Icon, type IconName } from '../components/Icon'
 import { useApp, type Tool } from '../store'
 import { findItem, replaceItem, type AnnotationDoc } from './doc'
 import { round } from './geometry'
-import {
-  ERASER_SIZES,
-  HIGHLIGHT_COLORS,
-  PEN_COLORS,
-  PEN_WIDTHS,
-  pageUnit,
-  TEXT_SIZES
-} from './palette'
+import { ERASER_SIZES, PEN_WIDTHS, pageUnit, TEXT_SIZES } from './palette'
 
-const TOOLS: { tool: Tool; label: string; key: string; icon: IconName }[] = [
-  { tool: 'select', label: 'Select', key: 'Esc', icon: 'cursor' },
-  { tool: 'pen', label: 'Pen', key: 'P', icon: 'pen' },
-  { tool: 'highlighter', label: 'Highlighter', key: 'H', icon: 'highlighter' },
-  { tool: 'eraser', label: 'Eraser', key: 'E', icon: 'eraser' },
-  { tool: 'text', label: 'Text box', key: 'T', icon: 'text' }
+const TOOLS: { tool: Tool; label: string; icon: IconName }[] = [
+  { tool: 'select', label: 'Select', icon: 'cursor' },
+  { tool: 'pen', label: 'Pen', icon: 'pen' },
+  { tool: 'highlighter', label: 'Highlighter', icon: 'highlighter' },
+  { tool: 'eraser', label: 'Eraser', icon: 'eraser' },
+  { tool: 'text', label: 'Text box', icon: 'text' }
 ]
+
+const keyFor = (tool: Tool, settings: AppSettings): string =>
+  tool === 'select' ? 'Esc' : settings.hotkeys[tool as HotkeyAction]
 
 interface Props {
   doc: AnnotationDoc | null
@@ -31,6 +29,7 @@ export function AnnotationToolbar({ doc, pageWidth }: Props): React.JSX.Element 
   const ink = useApp((s) => s.ink)
   const setTool = useApp((s) => s.setTool)
   const setInk = useApp((s) => s.setInk)
+  const settings = useApp((s) => s.settings)
 
   return (
     <div className="annotation-toolbar" role="toolbar" aria-label="Annotation tools">
@@ -38,7 +37,7 @@ export function AnnotationToolbar({ doc, pageWidth }: Props): React.JSX.Element 
         <button
           key={t.tool}
           className={tool === t.tool ? 'icon-button pressed' : 'icon-button'}
-          title={`${t.label} (${t.key})`}
+          title={`${t.label} (${keyFor(t.tool, settings)})`}
           aria-label={t.label}
           aria-pressed={tool === t.tool}
           disabled={!doc && t.tool !== 'select'}
@@ -52,7 +51,7 @@ export function AnnotationToolbar({ doc, pageWidth }: Props): React.JSX.Element 
         <>
           <span className="toolbar-divider" />
           <Swatches
-            colors={PEN_COLORS}
+            colors={settings.penColors}
             value={ink.penColor}
             onPick={(penColor) => setInk({ penColor })}
           />
@@ -74,7 +73,7 @@ export function AnnotationToolbar({ doc, pageWidth }: Props): React.JSX.Element 
         <>
           <span className="toolbar-divider" />
           <Swatches
-            colors={HIGHLIGHT_COLORS}
+            colors={settings.highlightColors}
             value={ink.highlightColor}
             onPick={(highlightColor) => setInk({ highlightColor })}
           />
@@ -207,21 +206,21 @@ function Swatches({
   value,
   onPick
 }: {
-  colors: { name: string; value: string }[]
+  colors: string[]
   value: string
   onPick(color: string): void
 }): React.JSX.Element {
   return (
     <div className="ink-swatches">
-      {colors.map((c) => (
+      {colors.map((c, i) => (
         <button
-          key={c.value}
+          key={i}
           className="swatch"
-          title={c.name}
-          aria-label={c.name}
-          aria-pressed={value === c.value}
-          style={{ background: c.value }}
-          onClick={() => onPick(c.value)}
+          title={colorName(c)}
+          aria-label={colorName(c)}
+          aria-pressed={value === c}
+          style={{ background: c }}
+          onClick={() => onPick(c)}
         />
       ))}
     </div>

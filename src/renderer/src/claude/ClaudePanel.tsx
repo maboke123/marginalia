@@ -122,7 +122,7 @@ export function ClaudePanel(): React.JSX.Element {
         </button>
         <button
           className="icon-button"
-          title="Close (Ctrl+L)"
+          title={`Close (${useApp.getState().settings.hotkeys.claude})`}
           aria-label="Close"
           onClick={() => useChat.getState().setOpen(false)}
         >

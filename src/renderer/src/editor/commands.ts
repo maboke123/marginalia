@@ -224,6 +224,11 @@ export const editorKeymap: KeyBinding[] = [
 // ---------------------------------------------------------------------------------------------
 // Slash menu
 
+const hotkeyHint = (detail: string | undefined): string | undefined => {
+  const { hotkeys } = useApp.getState().settings
+  return detail && detail in hotkeys ? hotkeys[detail as keyof typeof hotkeys] : detail
+}
+
 interface SlashCommand {
   label: string
   detail?: string
@@ -237,10 +242,10 @@ const SLASH_COMMANDS: SlashCommand[] = [
   { label: 'Table', run: insertTable },
   { label: 'Math block', detail: '$$', run: insertMathBlock },
   { label: 'Image', detail: 'from a file', run: (v) => void insertImages(v) },
-  { label: 'Slide link', detail: 'Ctrl+Shift+L', run: (v) => void insertSlideLink(v) },
+  { label: 'Slide link', detail: 'slideLink', run: (v) => void insertSlideLink(v) },
   {
     label: 'Slide snapshot',
-    detail: 'Ctrl+Shift+S',
+    detail: 'snapshot',
     run: () => useApp.getState().startSnapshot()
   }
 ]
@@ -252,7 +257,8 @@ export function slashCommands(context: CompletionContext): CompletionResult | nu
   const slash = match.from + match.text.indexOf('/')
   const options: Completion[] = SLASH_COMMANDS.map((command) => ({
     label: command.label,
-    detail: command.detail,
+    // Hotkey hints follow the settings.
+    detail: hotkeyHint(command.detail),
     apply: (view, _completion, _from, to) => {
       view.dispatch({ changes: { from: slash, to, insert: '' } })
       command.run(view)

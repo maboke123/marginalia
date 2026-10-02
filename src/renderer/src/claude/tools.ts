@@ -7,7 +7,6 @@ import type { ToolCall, ToolReply } from '../../../shared/claude'
 import { addItem, newId, pageOf, type AnnotationDoc } from '../annotations/doc'
 import { findTextRects } from '../annotations/findText'
 import { marginSlot } from '../annotations/margin'
-import { HIGHLIGHT_COLORS } from '../annotations/palette'
 import { pendingEdit, setPendingEdit } from '../editor/proposal'
 import { blockInsert, endOfContent, findSection, headings } from '../editor/sections'
 import { openNote, openPdf, whenOpen, type OpenNote, type OpenPdf } from '../lib/open'
@@ -281,7 +280,7 @@ const TOOLS: Record<string, (args: Args) => Promise<Result>> = {
     }
     const highlight: Highlight = {
       id: newId('h'),
-      color: HIGHLIGHT_COLORS[0].value,
+      color: useApp.getState().settings.highlightColors[0],
       text: wanted,
       rects,
       author: 'claude'

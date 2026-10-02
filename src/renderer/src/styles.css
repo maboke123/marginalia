@@ -1722,3 +1722,277 @@ h2 {
   flex: 1;
   min-width: 0;
 }
+
+/* Quick switcher and search */
+
+.overlay-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+}
+
+.overlay {
+  position: absolute;
+  top: 64px;
+  left: 50%;
+  display: flex;
+  flex-direction: column;
+  width: min(680px, calc(100vw - 32px));
+  max-height: calc(100vh - 128px);
+  transform: translateX(-50%);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-menu);
+  box-shadow: var(--shadow-menu);
+}
+
+.overlay-input {
+  height: 44px;
+  padding: 0 16px;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  outline: none;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 15px;
+}
+
+.overlay-list {
+  flex: 1;
+  min-height: 0;
+  margin: 0;
+  padding: 4px;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.overlay-list:empty {
+  display: none;
+}
+
+.overlay-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 30px;
+  padding: 4px 10px;
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+
+.overlay-item.active {
+  background: var(--bg-selected);
+}
+
+.overlay-item svg {
+  flex-shrink: 0;
+  color: var(--text-muted);
+}
+
+.overlay-name b {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.overlay-path,
+.search-file .muted {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 12px;
+}
+
+.overlay-group {
+  padding: 8px 10px 2px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.search-file {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text);
+  font-weight: 600;
+}
+
+.search-file .muted {
+  font-weight: 400;
+}
+
+.search-hit {
+  align-items: baseline;
+  padding-left: 32px;
+}
+
+.search-where {
+  flex-shrink: 0;
+  width: 56px;
+  font-size: 12px;
+}
+
+.search-snippet mark {
+  border-radius: 2px;
+  background: var(--bg-warning);
+  color: inherit;
+  font-weight: 600;
+}
+
+.overlay-empty {
+  padding: 10px;
+}
+
+.overlay-footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 16px;
+  border-top: 1px solid var(--border);
+  font-size: 12px;
+}
+
+.overlay-footer:empty {
+  display: none;
+}
+
+.toolbar-select {
+  height: 26px;
+  padding: 0 4px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+}
+
+.toolbar-select:hover {
+  background: var(--bg-hover);
+}
+
+/* Settings */
+
+.settings-dialog {
+  position: absolute;
+  top: 48px;
+  left: 50%;
+  display: flex;
+  flex-direction: column;
+  width: min(720px, calc(100vw - 32px));
+  max-height: calc(100vh - 96px);
+  transform: translateX(-50%);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  box-shadow: var(--shadow-menu);
+}
+
+.settings-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px 12px 24px;
+  border-bottom: 1px solid var(--border);
+}
+
+.settings-header h2 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.settings-body {
+  padding: 8px 24px 24px;
+  overflow-y: auto;
+}
+
+.settings-body h3 {
+  margin: 20px 0 10px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.settings-row {
+  display: grid;
+  grid-template-columns: 160px 1fr;
+  align-items: start;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.settings-label {
+  padding-top: 4px;
+  color: var(--text-muted);
+}
+
+.settings-choices {
+  display: flex;
+  gap: 16px;
+  padding-top: 4px;
+}
+
+.settings-choices .check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.settings-help {
+  margin: 6px 0 0;
+  font-size: 12px;
+}
+
+.settings-colors {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.settings-colors input[type='color'] {
+  width: 28px;
+  height: 24px;
+  padding: 1px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--bg);
+  cursor: pointer;
+}
+
+.settings-hotkeys {
+  border-collapse: collapse;
+}
+
+.settings-hotkeys td {
+  padding: 3px 12px 3px 0;
+}
+
+.settings-hotkeys td:first-child {
+  width: 300px;
+}
+
+.hotkey {
+  min-width: 110px;
+  height: 26px;
+  padding: 0 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--bg-sidebar);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.hotkey:hover {
+  background: var(--bg-hover);
+}
+
+.hotkey.recording {
+  border-color: var(--accent);
+  background: var(--bg-selected);
+}
+
+.settings-problem {
+  margin-left: 8px;
+  color: var(--danger);
+  font-size: 12px;
+}

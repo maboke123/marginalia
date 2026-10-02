@@ -1,10 +1,8 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { PDFDocumentLoadingTask, PDFDocumentProxy } from 'pdfjs-dist'
-import {
-  DEFAULT_MARGIN_WIDTH,
-  type LoadedAnnotations,
-  type TextMarkup
-} from '../../../shared/annotations'
+import { type LoadedAnnotations, type TextMarkup } from '../../../shared/annotations'
+import { MARGIN_WIDTHS } from '../../../shared/settings'
+import { comboOf } from '../../../shared/hotkeys'
 import { AnnotationToolbar } from '../annotations/AnnotationToolbar'
 import { AnnotationContext } from '../annotations/context'
 import { addItem, createAnnotationDoc, removeItems, type AnnotationDoc } from '../annotations/doc'
@@ -86,7 +84,7 @@ export function PdfViewer({ path, title }: { path: string; title: string }): Rea
   return <Document path={path} title={title} {...loaded} />
 }
 
-const TOOL_KEYS: Record<string, Tool> = { p: 'pen', h: 'highlighter', e: 'eraser', t: 'text' }
+const TOOLS: Tool[] = ['pen', 'highlighter', 'eraser', 'text']
 
 function Document({
   path,
@@ -99,7 +97,13 @@ function Document({
   const scrollRef = useRef<HTMLDivElement>(null)
   const viewerRef = useRef<HTMLDivElement>(null)
   const loadedFile = typeof annotations === 'string' ? null : annotations.file
-  const margin = loadedFile?.marginWidth ?? DEFAULT_MARGIN_WIDTH
+  // A PDF keeps its own margin once annotated; new ones start with the setting.
+  const [margin, setMargin] = useState(
+    () => loadedFile?.marginWidth ?? useApp.getState().settings.marginWidth
+  )
+  const savedMargin = useRef(loadedFile?.marginWidth ?? margin)
+  // Saves run one after another, so an older one can never land after a newer one.
+  const saving = useRef<Promise<void>>(Promise.resolve())
   const [doc] = useState<AnnotationDoc | null>(() =>
     typeof annotations === 'string' ? null : createAnnotationDoc(loadedFile?.pages ?? {})
   )
@@ -191,21 +195,28 @@ function Document({
     if (!activeDoc || typeof annotations === 'string') return
     const pdfSha256 = annotations.pdfSha256
     let timer: ReturnType<typeof setTimeout> | undefined
-    let dirty = false
-    const save = async (): Promise<void> => {
+    // A new margin width is saved straight away, like an annotation change.
+    let dirty = margin !== savedMargin.current
+    const save = (): Promise<void> => {
       clearTimeout(timer)
-      if (!dirty) return
+      if (!dirty) return saving.current
       dirty = false
-      await window.api.vault
-        .writeAnnotations(path, {
-          version: 1,
-          pdf: path.split('/').pop()!,
-          pdfSha256,
-          marginWidth: margin,
-          pages: activeDoc.getState().pages
-        })
-        .catch((err: Error) => showError(`Annotations not saved: ${err.message}`))
+      savedMargin.current = margin
+      const file = {
+        version: 1 as const,
+        pdf: path.split('/').pop()!,
+        pdfSha256,
+        marginWidth: margin,
+        pages: activeDoc.getState().pages
+      }
+      saving.current = saving.current.then(() =>
+        window.api.vault
+          .writeAnnotations(path, file)
+          .catch((err: Error) => showError(`Annotations not saved: ${err.message}`))
+      )
+      return saving.current
     }
+    if (dirty) timer = setTimeout(save)
     const unsubscribe = activeDoc.subscribe((state, previous) => {
       if (state.pages === previous.pages) return
       dirty = true
@@ -323,12 +334,16 @@ function Document({
     const ctrl = e.ctrlKey || e.metaKey
     const key = e.key.toLowerCase()
     const state = activeDoc?.getState()
+    const { hotkeys } = useApp.getState().settings
+    const combo = comboOf(e)
+    const toolKey = TOOLS.find((t) => hotkeys[t] === combo)
 
     if (state && ctrl && key === 'z' && !e.shiftKey) state.undo()
     else if (state && ctrl && (key === 'y' || (key === 'z' && e.shiftKey))) state.redo()
-    else if (state && !ctrl && key === 'h' && selectedTextLayer()) markSelection('highlight')
-    else if (state && !ctrl && key === 'u' && selectedTextLayer()) markSelection('underline')
-    else if (state && !ctrl && !e.altKey && TOOL_KEYS[key]) setTool(TOOL_KEYS[key])
+    else if (state && combo === hotkeys.highlighter && selectedTextLayer()) {
+      markSelection('highlight')
+    } else if (state && !ctrl && key === 'u' && selectedTextLayer()) markSelection('underline')
+    else if (state && toolKey) setTool(toolKey)
     else if (e.key === 'Escape') {
       setTool('select')
       state?.select(null)
@@ -358,6 +373,20 @@ function Document({
         <AnnotationToolbar doc={activeDoc} pageWidth={(n) => sizes[n - 1].width} />
         <span className="pdf-title">{title}</span>
         <PageInput page={page} count={sizes.length} onGo={goTo} />
+        <select
+          className="toolbar-select"
+          title="Width of the margin next to each slide"
+          aria-label="Margin"
+          value={margin}
+          disabled={!activeDoc}
+          onChange={(e) => setMargin(Number(e.target.value))}
+        >
+          {MARGIN_WIDTHS.map((m) => (
+            <option key={m.value} value={m.value}>
+              {m.name} margin
+            </option>
+          ))}
+        </select>
         <div className="pdf-zoom">
           <button
             className="icon-button"
@@ -387,7 +416,7 @@ function Document({
         </div>
         <button
           className={lectureMode ? 'icon-button pressed' : 'icon-button'}
-          title="Lecture mode (Ctrl+Shift+M)"
+          title={`Lecture mode (${useApp.getState().settings.hotkeys.lecture})`}
           aria-label="Lecture mode"
           aria-pressed={lectureMode}
           onClick={() => toggleLecture()}

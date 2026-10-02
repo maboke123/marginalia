@@ -1,9 +1,12 @@
-import { BrowserWindow, dialog, ipcMain, shell } from 'electron'
+import { createHash } from 'crypto'
+import { BrowserWindow, dialog, ipcMain, nativeTheme, shell } from 'electron'
 import { promises as fs } from 'fs'
 import path from 'path'
 import type { AnnotationFile } from '../shared/annotations'
+import { settingsFrom, type AppSettings } from '../shared/settings'
 import type { IpcResult, NotebookColor, Position, VaultInfo } from '../shared/types'
 import { ConfigStore } from './config'
+import { SearchIndex } from './search/searchIndex'
 import { VaultError } from './vault/names'
 import { Vault } from './vault/vault'
 import { watchVault } from './vault/watcher'
@@ -29,16 +32,22 @@ const info = (root: string): VaultInfo => ({ root, name: path.basename(root) })
 /** Returns a getter for the open vault, for the vault:// protocol. */
 export function registerIpc(
   getWindow: () => BrowserWindow | null,
-  config: ConfigStore
+  config: ConfigStore,
+  dataDir: string
 ): () => Vault | null {
   let vault: Vault | null = null
+  let search: SearchIndex | null = null
   let stopWatching: (() => Promise<void>) | null = null
 
   async function open(root: string): Promise<VaultInfo> {
     const stat = await fs.stat(root).catch(() => null)
     if (!stat?.isDirectory()) throw new VaultError(`Folder not found: ${root}`)
     await stopWatching?.()
+    await search?.flush()
     vault = new Vault(root, (p) => shell.trashItem(p))
+    // One cache per vault, named after its path, outside the vault so it is not synced.
+    const id = createHash('sha1').update(root.toLowerCase()).digest('hex').slice(0, 16)
+    search = new SearchIndex(vault, path.join(dataDir, 'search', `${id}.json`))
     stopWatching = watchVault(root, () => getWindow()?.webContents.send('vault:changed'))
     await config.addRecentVault(root)
     return info(root)
@@ -48,6 +57,18 @@ export function registerIpc(
     if (!vault) throw new VaultError('No vault is open')
     return vault
   }
+
+  handle('settings:get', async () => (await config.read()).settings)
+  handle('settings:set', async (change: Partial<AppSettings>) => {
+    let next: AppSettings | undefined
+    await config.update((c) => {
+      next = settingsFrom({ ...c.settings, ...change })
+      return { ...c, settings: next }
+    })
+    // prefers-color-scheme in the window follows this, so the CSS tokens switch by themselves.
+    nativeTheme.themeSource = next!.theme
+    return next!
+  })
 
   handle('vault:current', () => (vault ? info(vault.root) : null))
   handle('vault:recent', async () => (await config.read()).recentVaults)
@@ -64,6 +85,16 @@ export function registerIpc(
     if (result.canceled || !result.filePaths[0]) return null
     return open(result.filePaths[0])
   })
+
+  const searchIndex = (): SearchIndex => {
+    current()
+    return search!
+  }
+  handle('search:query', (query: string) => searchIndex().query(query))
+  handle('search:pending', () => searchIndex().pending())
+  handle('search:storePdf', (p: string, stamp: string, pages: string[]) =>
+    searchIndex().storePdf(p, stamp, pages)
+  )
 
   handle('vault:tree', () => current().tree())
   handle('vault:createFolder', (parent: string, name: string) =>

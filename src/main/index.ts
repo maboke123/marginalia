@@ -82,10 +82,11 @@ protocol.registerSchemesAsPrivileged([
 // The default menu binds Ctrl+Shift+I and Ctrl+R, which the app needs for its own hotkeys.
 Menu.setApplicationMenu(null)
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   app.setAppUserModelId('be.kuleuven.mathiasbk.marginalia-poc')
   const config = new ConfigStore(path.join(app.getPath('userData'), 'config.json'))
-  const currentVault = registerIpc(() => mainWindow, config)
+  nativeTheme.themeSource = (await config.read()).settings.theme
+  const currentVault = registerIpc(() => mainWindow, config, app.getPath('userData'))
   registerClaude(handle, () => mainWindow, config, currentVault)
   protocol.handle('vault', (request) => {
     const vault = currentVault()

@@ -64,8 +64,6 @@ export interface LoadedAnnotations {
   pdfSha256: string
 }
 
-export const DEFAULT_MARGIN_WIDTH = 0.6
-
 export const EMPTY_PAGE: PageAnnotations = Object.freeze({
   strokes: [],
   highlights: [],

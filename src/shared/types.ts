@@ -1,6 +1,7 @@
 export type NodeKind = 'notebook' | 'section' | 'markdown' | 'pdf'
 
 import type { AnnotationFile, LoadedAnnotations } from './annotations'
+import type { AppSettings } from './settings'
 import type {
   ChatEvent,
   ChatHistoryItem,
@@ -83,6 +84,17 @@ export interface MarginaliaApi {
     writeAnnotations(pdf: string, file: AnnotationFile): Promise<void>
     onChanged(listener: () => void): () => void
   }
+  settings: {
+    get(): Promise<AppSettings>
+    /** Saves a change and returns all settings as stored. */
+    set(change: Partial<AppSettings>): Promise<AppSettings>
+  }
+  search: {
+    query(query: string): Promise<SearchResult>
+    /** PDFs whose text the renderer should extract and hand over with storePdf. */
+    pending(): Promise<PdfToIndex[]>
+    storePdf(path: string, stamp: string, pages: string[]): Promise<void>
+  }
   claude: {
     settings(): Promise<ClaudeSettings>
     setSettings(update: ClaudeSettingsUpdate): Promise<ClaudeSettings>
@@ -105,4 +117,30 @@ export interface MarginaliaApi {
     /** Absolute path of a file dropped from Explorer. */
     pathFor(file: File): string
   }
+}
+
+export interface SearchHit {
+  path: string
+  kind: 'pdf' | 'markdown'
+  /** PDF page, 1-based. */
+  page?: number
+  /** Line in the note where the matching paragraph starts, 1-based. */
+  line?: number
+  snippet: string
+  /** [start, end) of the matched words in `snippet`. */
+  marks: [number, number][]
+}
+
+export interface SearchResult {
+  hits: SearchHit[]
+  /** More hits exist than were returned. */
+  truncated: boolean
+  /** PDFs whose text is not indexed yet, so they are not searched. */
+  unindexed: number
+}
+
+export interface PdfToIndex {
+  path: string
+  /** Changes when the file changes (mtime and size). */
+  stamp: string
 }

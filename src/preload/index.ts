@@ -39,6 +39,15 @@ const api: MarginaliaApi = {
       return () => ipcRenderer.removeListener('vault:changed', handler)
     }
   },
+  settings: {
+    get: () => invoke('settings:get'),
+    set: (change) => invoke('settings:set', change)
+  },
+  search: {
+    query: (query) => invoke('search:query', query),
+    pending: () => invoke('search:pending'),
+    storePdf: (path, stamp, pages) => invoke('search:storePdf', path, stamp, pages)
+  },
   claude: {
     settings: () => invoke('claude:settings'),
     setSettings: (update) => invoke('claude:setSettings', update),

@@ -1,12 +1,7 @@
 import { create } from 'zustand'
+import { DEFAULT_SETTINGS, type AppSettings } from '../../shared/settings'
 import type { NotebookColor, Position, VaultInfo, VaultNode } from '../../shared/types'
-import {
-  ERASER_SIZES,
-  HIGHLIGHT_COLORS,
-  PEN_COLORS,
-  PEN_WIDTHS,
-  TEXT_SIZES
-} from './annotations/palette'
+import { ERASER_SIZES, PEN_WIDTHS, TEXT_SIZES } from './annotations/palette'
 import { findNode, isFolder, parentOf, remap } from './lib/tree'
 
 const api = window.api.vault
@@ -31,6 +26,15 @@ export interface PdfView {
   page: number
   pageCount: number
 }
+
+/** Ask the open note to put the cursor on a line (from search). */
+export interface NoteGoto {
+  path: string
+  line: number
+  nonce: number
+}
+
+export type Overlay = 'switcher' | 'search' | 'settings' | null
 
 /** Text selected on a slide; kept when focus moves to the chat, which clears the DOM selection. */
 export interface PdfSelection {
@@ -80,6 +84,10 @@ interface AppState {
   summaryFile: string | null
   lectureMode: boolean
   pdfGoto: PdfGoto | null
+  noteGoto: NoteGoto | null
+  /** Most recently opened files first, for the quick switcher. */
+  recentFiles: string[]
+  overlay: Overlay
   editor: EditorHandle | null
   /** Waiting for a rectangle to be dragged on a slide (Ctrl+Shift+S). */
   snapshotting: boolean
@@ -89,6 +97,7 @@ interface AppState {
   pdfSelection: PdfSelection | null
   noteCursor: NoteCursor | null
   tool: Tool
+  settings: AppSettings
   ink: Ink
 
   init(): Promise<void>
@@ -96,7 +105,9 @@ interface AppState {
   refresh(): Promise<void>
   select(path: string | null): void
   setExpanded(path: string, open: boolean): void
-  openFile(path: string, page?: number): void
+  /** Opens a file; a PDF at `page`, a note at `line`. */
+  openFile(path: string, page?: number, line?: number): void
+  setOverlay(overlay: Overlay): void
   toggleLecture(): Promise<void>
   setEditor(editor: EditorHandle | null): void
   /** Ctrl+Shift+S: drag a rectangle on the slides to put that part into the summary. */
@@ -109,6 +120,7 @@ interface AppState {
   setNoteCursor(cursor: NoteCursor | null): void
   setTool(tool: Tool): void
   setInk(ink: Partial<Ink>): void
+  saveSettings(change: Partial<AppSettings>): Promise<void>
 
   create(item: NewItem, parent: string): Promise<void>
   rename(path: string, name: string): Promise<void>
@@ -137,6 +149,23 @@ function saveExpanded(root: string, expanded: Record<string, boolean>): void {
   }
 }
 
+function loadRecent(root: string): string[] {
+  try {
+    const list = JSON.parse(localStorage.getItem(`recent-files:${root}`) ?? '[]')
+    return Array.isArray(list) ? list.filter((p) => typeof p === 'string') : []
+  } catch {
+    return []
+  }
+}
+
+function saveRecent(root: string, list: string[]): void {
+  try {
+    localStorage.setItem(`recent-files:${root}`, JSON.stringify(list))
+  } catch {
+    // ignore
+  }
+}
+
 export const useApp = create<AppState>((set, get) => {
   /** Runs a vault call and turns a failure into an error message instead of a crash. */
   async function attempt<T>(fn: () => Promise<T>): Promise<T | undefined> {
@@ -157,8 +186,9 @@ export const useApp = create<AppState>((set, get) => {
 
   /** Keeps selection, open file and expanded folders pointing at an item that moved. */
   function followMove(from: string, to: string): void {
-    const { selected, activeFile, slidesFile, summaryFile } = get()
+    const { selected, activeFile, slidesFile, summaryFile, recentFiles } = get()
     set({
+      recentFiles: recentFiles.map((p) => remap(p, from, to)),
       selected: selected && remap(selected, from, to),
       activeFile: activeFile && remap(activeFile, from, to),
       slidesFile: slidesFile && remap(slidesFile, from, to),
@@ -173,6 +203,7 @@ export const useApp = create<AppState>((set, get) => {
     set({
       vault,
       expanded: loadExpanded(vault.root),
+      recentFiles: loadRecent(vault.root),
       selected: null,
       activeFile: null,
       slidesFile: null,
@@ -225,6 +256,9 @@ export const useApp = create<AppState>((set, get) => {
     summaryFile: null,
     lectureMode: false,
     pdfGoto: null,
+    noteGoto: null,
+    recentFiles: [],
+    overlay: null,
     editor: null,
     snapshotting: false,
     renaming: null,
@@ -233,10 +267,11 @@ export const useApp = create<AppState>((set, get) => {
     pdfSelection: null,
     noteCursor: null,
     tool: 'select',
+    settings: DEFAULT_SETTINGS,
     ink: {
-      penColor: PEN_COLORS[1].value,
+      penColor: DEFAULT_SETTINGS.penColors[1],
       penWidth: PEN_WIDTHS[0].value,
-      highlightColor: HIGHLIGHT_COLORS[0].value,
+      highlightColor: DEFAULT_SETTINGS.highlightColors[0],
       eraserMode: 'partial',
       eraserSize: ERASER_SIZES[1].value,
       textSize: TEXT_SIZES[1].value
@@ -246,6 +281,17 @@ export const useApp = create<AppState>((set, get) => {
       // React's StrictMode runs effects twice in development.
       if (initStarted) return
       initStarted = true
+      const settings = await attempt(() => window.api.settings.get())
+      if (settings) {
+        set({
+          settings,
+          ink: {
+            ...get().ink,
+            penColor: settings.penColors[1],
+            highlightColor: settings.highlightColors[0]
+          }
+        })
+      }
       const current = await attempt(() => api.current())
       const recent = (await attempt(() => api.recent())) ?? []
       set({ recent })
@@ -263,10 +309,11 @@ export const useApp = create<AppState>((set, get) => {
     async refresh() {
       const tree = await attempt(() => api.tree())
       if (!tree) return
-      const { selected, activeFile, slidesFile, summaryFile } = get()
+      const { selected, activeFile, slidesFile, summaryFile, recentFiles } = get()
       const keep = (path: string | null): string | null =>
         path && findNode(tree.nodes, path) ? path : null
       set({
+        recentFiles: recentFiles.filter((p) => findNode(tree.nodes, p)),
         nodes: tree.nodes,
         colors: tree.colors,
         selected: keep(selected),
@@ -280,16 +327,23 @@ export const useApp = create<AppState>((set, get) => {
 
     setExpanded: (path, open) => updateExpanded((e) => ({ ...e, [path]: open })),
 
-    openFile(path, page) {
+    openFile(path, page, line) {
       const pdf = /\.pdf$/i.test(path)
+      const { vault, recentFiles } = get()
+      const recent = [path, ...recentFiles.filter((p) => p !== path)].slice(0, 20)
+      if (vault) saveRecent(vault.root, recent)
       set({
         activeFile: path,
         selected: path,
+        recentFiles: recent,
         ...(pdf ? { slidesFile: path } : { summaryFile: path }),
-        ...(pdf && page ? { pdfGoto: { path, page, nonce: ++gotoNonce } } : {})
+        ...(pdf && page ? { pdfGoto: { path, page, nonce: ++gotoNonce } } : {}),
+        ...(!pdf && line ? { noteGoto: { path, line, nonce: ++gotoNonce } } : {})
       })
       expandAncestors(path)
     },
+
+    setOverlay: (overlay) => set({ overlay }),
 
     async toggleLecture() {
       if (get().lectureMode) {
@@ -341,6 +395,13 @@ export const useApp = create<AppState>((set, get) => {
     setNoteCursor: (noteCursor) => set({ noteCursor }),
     setTool: (tool) => set({ tool }),
     setInk: (ink) => set({ ink: { ...get().ink, ...ink } }),
+
+    async saveSettings(change) {
+      // Show the change at once; the stored version (validated by main) replaces it after.
+      set({ settings: { ...get().settings, ...change } })
+      const settings = await attempt(() => window.api.settings.set(change))
+      if (settings) set({ settings })
+    },
 
     async importPdfs(sources, parent) {
       const target = parent ?? currentFolder()

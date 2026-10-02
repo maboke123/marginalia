@@ -105,7 +105,7 @@ export function Sidebar(): React.JSX.Element {
         { label: 'New page', onSelect: () => app.create('page', node.path) },
         {
           label: 'Import PDF...',
-          hint: 'Ctrl+Shift+I',
+          hint: app.settings.hotkeys.importPdf,
           onSelect: () => app.importPdfs(undefined, node.path)
         },
         { separator: true }
@@ -214,11 +214,27 @@ export function Sidebar(): React.JSX.Element {
         </button>
         <button
           className="icon-button"
-          title="Import PDF (Ctrl+Shift+I)"
+          title={`Search everything (${app.settings.hotkeys.search})`}
+          aria-label="Search everything"
+          onClick={() => app.setOverlay('search')}
+        >
+          <Icon name="search" />
+        </button>
+        <button
+          className="icon-button"
+          title={`Import PDF (${app.settings.hotkeys.importPdf})`}
           aria-label="Import PDF"
           onClick={() => app.importPdfs()}
         >
           <Icon name="import" />
+        </button>
+        <button
+          className="icon-button"
+          title={`Settings (${app.settings.hotkeys.settings})`}
+          aria-label="Settings"
+          onClick={() => app.setOverlay('settings')}
+        >
+          <Icon name="settings" />
         </button>
         <button
           className="icon-button"
