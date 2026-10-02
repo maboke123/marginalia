@@ -1,4 +1,7 @@
 import { useEffect } from 'react'
+import { focusChatInput, useChat } from './claude/chat'
+import { ClaudePanel } from './claude/ClaudePanel'
+import { runTool } from './claude/tools'
 import { Sidebar } from './components/Sidebar'
 import { Welcome } from './components/Welcome'
 import { Workspace } from './components/Workspace'
@@ -12,6 +15,18 @@ function insertCurrentSlideLink(): void {
   if (!editor) return showError('Open a summary to insert a slide link')
   if (!pdfView) return showError('Open slides to link to the current slide')
   editor.insert(slideLink(editor.path, pdfView.path, pdfView.page))
+}
+
+/** Ctrl+L: open the panel, go to its input, or close it when already typing there. */
+function toggleClaude(): void {
+  const { open, setOpen } = useChat.getState()
+  const typing = document.activeElement?.closest('.claude-input')
+  if (open && typing) {
+    setOpen(false)
+    return
+  }
+  setOpen(true)
+  focusChatInput()
 }
 
 // Ctrl+Shift+ these keys work everywhere, also while typing in the editor.
@@ -28,6 +43,7 @@ export function App(): React.JSX.Element | null {
   const lectureMode = useApp((s) => s.lectureMode)
   const error = useApp((s) => s.error)
   const showError = useApp((s) => s.showError)
+  const claudeOpen = useChat((s) => s.open)
 
   useEffect(() => {
     useApp.getState().init()
@@ -43,8 +59,25 @@ export function App(): React.JSX.Element | null {
     []
   )
 
+  // Claude's app tools run here, against the open documents.
+  useEffect(
+    () =>
+      window.api.claude.onToolCall(async (call) =>
+        window.api.claude.replyTool(await runTool(call))
+      ),
+    []
+  )
+
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent): void => {
+      const plainCtrl = e.ctrlKey && !e.shiftKey && !e.altKey
+      // Also before CodeMirror, whose Ctrl+L selects the line.
+      if (plainCtrl && e.code === 'KeyL' && useApp.getState().vault) {
+        e.preventDefault()
+        e.stopPropagation()
+        toggleClaude()
+        return
+      }
       const action = e.ctrlKey && e.shiftKey && !e.altKey ? HOTKEYS[e.code] : undefined
       if (!action || !useApp.getState().vault) return
       e.preventDefault()
@@ -61,9 +94,12 @@ export function App(): React.JSX.Element | null {
   return (
     <>
       {vault ? (
-        <div className="layout">
-          {!lectureMode && <Sidebar />}
-          <Workspace />
+        <div className="shell">
+          <div className="layout">
+            {!lectureMode && <Sidebar />}
+            <Workspace />
+          </div>
+          {claudeOpen && <ClaudePanel />}
         </div>
       ) : (
         <Welcome />

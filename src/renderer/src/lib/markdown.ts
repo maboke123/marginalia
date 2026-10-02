@@ -28,3 +28,17 @@ const md = new MarkdownIt({ html: false, linkify: true, breaks: true })
 export function renderMarkdown(source: string): string {
   return md.render(source)
 }
+
+// Chat answers: code blocks get a copy button (the panel handles its clicks).
+const chatMd = new MarkdownIt({ html: false, linkify: true, breaks: false })
+  .use(katex, { throwOnError: false })
+  .use(underline)
+const fence = chatMd.renderer.rules.fence!
+chatMd.renderer.rules.fence = (tokens, idx, options, env, self) =>
+  '<div class="code-block"><button type="button" class="copy-code">Copy</button>' +
+  fence(tokens, idx, options, env, self) +
+  '</div>'
+
+export function renderChatMarkdown(source: string): string {
+  return chatMd.render(source)
+}

@@ -1,0 +1,302 @@
+import { create } from 'zustand'
+import type { ChatEvent, ClaudeSettings, ClaudeSettingsUpdate } from '../../../shared/claude'
+import { findNode, isFolder, parentOf } from '../lib/tree'
+import { useApp } from '../store'
+import { buildPacket, currentChips } from './context'
+
+export type Part =
+  | { kind: 'text'; text: string }
+  | { kind: 'tool'; label: string }
+  | { kind: 'proposal'; id: string; label: string; status: 'pending' | 'accepted' | 'rejected' }
+
+export interface Message {
+  id: string
+  role: 'user' | 'assistant'
+  parts: Part[]
+  /** Labels of the context chips sent with a question. */
+  context?: string[]
+  error?: string
+}
+
+interface Chat {
+  messages: Message[]
+  loaded: boolean
+  /** The slide page whose image was sent last, so the same image is not sent again. */
+  lastImage: string | null
+}
+
+const EMPTY_CHAT: Chat = { messages: [], loaded: false, lastImage: null }
+
+interface ChatState {
+  open: boolean
+  chats: Record<string, Chat>
+  /** The chat that is waiting for an answer. */
+  running: string | null
+  settings: ClaudeSettings | null
+  /** Chips taken out of the next message. */
+  removedChips: string[]
+  /** Files added with @ for the next message. */
+  attached: string[]
+
+  setOpen(open: boolean): void
+  load(chat: string): Promise<void>
+  send(chat: string, question: string): Promise<void>
+  stop(): void
+  newChat(chat: string): Promise<void>
+  removeChip(id: string): void
+  attach(path: string): void
+  loadSettings(): Promise<void>
+  saveSettings(update: ClaudeSettingsUpdate): Promise<void>
+  /**
+   * Asks me to accept an edit. `show` draws the preview and returns a function that removes
+   * it. Resolves true at once when "ask before editing" is off.
+   */
+  confirm(label: string, show: (decide: (accept: boolean) => void) => () => void): Promise<boolean>
+  decide(id: string, accept: boolean): void
+}
+
+/** The chat for what I am looking at: one conversation per section (lesson folder). */
+export function chatOf(state: ReturnType<typeof useApp.getState>): string {
+  const { lectureMode, slidesFile, summaryFile, activeFile, selected, nodes } = state
+  const file = lectureMode ? (slidesFile ?? summaryFile) : activeFile
+  if (file) return parentOf(file)
+  const node = selected ? findNode(nodes, selected) : null
+  if (node) return isFolder(node) ? node.path : parentOf(node.path)
+  return ''
+}
+
+const fileName = (path: unknown): string =>
+  String(path ?? '')
+    .split(/[\\/]/)
+    .pop() ?? ''
+
+function describeTool(name: string, input: Record<string, unknown>): string {
+  const file = fileName(input.file ?? input.file_path)
+  const page = input.page ? ` p.${input.page}` : ''
+  switch (name) {
+    case 'get_current_view':
+      return 'Looked at what is on screen'
+    case 'read_pdf_page':
+      return `Read ${file}${page}`
+    case 'read_summary':
+      return input.heading ? `Read ${file} › ${input.heading}` : `Read ${file}`
+    case 'insert_into_summary':
+      return input.heading ? `Writing in ${file} under ${input.heading}` : `Writing in ${file}`
+    case 'replace_in_summary':
+      return `Changing text in ${file}`
+    case 'add_text_annotation':
+      return `Adding a note to ${file}${page}`
+    case 'add_highlight':
+      return `Highlighting on ${file}${page}`
+    case 'goto':
+      return `Opened ${file}${page}`
+    case 'Read':
+      return `Read ${file}`
+    case 'Glob':
+      return `Looked for files: ${input.pattern}`
+    case 'Grep':
+      return `Searched notes for "${input.pattern}"`
+    case 'WebSearch':
+      return `Searched the web: ${input.query}`
+    case 'WebFetch':
+      return `Opened ${input.url}`
+    default:
+      return name
+  }
+}
+
+/** Moves the keyboard to the chat input (Ctrl+L). */
+export function focusChatInput(): void {
+  requestAnimationFrame(() =>
+    document.querySelector<HTMLElement>('.claude-input textarea')?.focus()
+  )
+}
+
+const decisions = new Map<string, (accept: boolean) => void>()
+let nextId = 0
+const id = (): string => `m${++nextId}`
+
+export const useChat = create<ChatState>((set, get) => {
+  function update(chat: string, fn: (c: Chat) => Chat): void {
+    set((s) => ({ chats: { ...s.chats, [chat]: fn(s.chats[chat] ?? EMPTY_CHAT) } }))
+  }
+
+  /** Changes the answer being written, the last message of the running chat. */
+  function updateAnswer(chat: string, fn: (m: Message) => Message): void {
+    update(chat, (c) => {
+      const last = c.messages[c.messages.length - 1]
+      if (last?.role !== 'assistant') return c
+      return { ...c, messages: [...c.messages.slice(0, -1), fn(last)] }
+    })
+  }
+
+  // Text arrives in many small pieces; render at most once per frame.
+  let buffered = ''
+  let bufferedChat = ''
+  let frame = 0
+  function flushText(): void {
+    cancelAnimationFrame(frame)
+    frame = 0
+    if (!buffered) return
+    const text = buffered
+    buffered = ''
+    updateAnswer(bufferedChat, (m) => {
+      const last = m.parts[m.parts.length - 1]
+      const parts: Part[] =
+        last?.kind === 'text'
+          ? [...m.parts.slice(0, -1), { kind: 'text', text: last.text + text }]
+          : [...m.parts, { kind: 'text', text }]
+      return { ...m, parts }
+    })
+  }
+
+  function onEvent(chat: string, event: ChatEvent): void {
+    if (event.type === 'text') {
+      buffered += event.text
+      bufferedChat = chat
+      if (!frame) frame = requestAnimationFrame(flushText)
+      return
+    }
+    flushText()
+    if (event.type === 'tool') {
+      const label = describeTool(event.name, event.input)
+      updateAnswer(chat, (m) => ({ ...m, parts: [...m.parts, { kind: 'tool', label }] }))
+      return
+    }
+    // done
+    for (const decide of [...decisions.values()]) decide(false)
+    updateAnswer(chat, (m) => ({ ...m, ...(event.error ? { error: event.error } : {}) }))
+    set({ running: null })
+  }
+
+  window.api.claude.onEvent(onEvent)
+
+  return {
+    open: false,
+    chats: {},
+    running: null,
+    settings: null,
+    removedChips: [],
+    attached: [],
+
+    setOpen(open) {
+      set({ open })
+      if (open && !get().settings) void get().loadSettings()
+    },
+
+    async load(chat) {
+      if (get().chats[chat]?.loaded) return
+      update(chat, (c) => ({ ...c, loaded: true }))
+      const history = await window.api.claude.history(chat).catch(() => [])
+      update(chat, (c) => ({
+        ...c,
+        // Messages sent while the history was loading go after it.
+        messages: [
+          ...history.map((h): Message => ({
+            id: id(),
+            role: h.role,
+            parts: [{ kind: 'text', text: h.text }]
+          })),
+          ...c.messages
+        ]
+      }))
+    },
+
+    async send(chat, question) {
+      if (get().running || !question.trim()) return
+      const { removedChips, attached } = get()
+      const chips = currentChips(attached).filter((c) => !removedChips.includes(c.id))
+      update(chat, (c) => ({
+        ...c,
+        messages: [
+          ...c.messages,
+          {
+            id: id(),
+            role: 'user',
+            parts: [{ kind: 'text', text: question.trim() }],
+            context: chips.map((c) => c.label)
+          },
+          { id: id(), role: 'assistant', parts: [] }
+        ]
+      }))
+      set({ running: chat, removedChips: [], attached: [] })
+      try {
+        const lastImage = get().chats[chat]?.lastImage ?? null
+        const packet = await buildPacket(chat, chips, question.trim(), lastImage)
+        if (packet.imageKey) update(chat, (c) => ({ ...c, lastImage: packet.imageKey }))
+        await window.api.claude.send({ chat, text: packet.text, images: packet.images })
+      } catch (err) {
+        if (get().running === chat) onEvent(chat, { type: 'done', error: (err as Error).message })
+      }
+    },
+
+    stop() {
+      for (const decide of [...decisions.values()]) decide(false)
+      void window.api.claude.stop()
+    },
+
+    async newChat(chat) {
+      if (get().running === chat) return
+      await window.api.claude.newChat(chat)
+      update(chat, () => ({ ...EMPTY_CHAT, loaded: true }))
+    },
+
+    removeChip: (chipId) => set((s) => ({ removedChips: [...s.removedChips, chipId] })),
+
+    attach(path) {
+      const { attached, removedChips } = get()
+      set({
+        attached: attached.includes(path) ? attached : [...attached, path],
+        removedChips: removedChips.filter((c) => c !== `file:${path}`)
+      })
+    },
+
+    async loadSettings() {
+      const settings = await window.api.claude.settings().catch(() => null)
+      if (settings) set({ settings })
+    },
+
+    async saveSettings(change) {
+      try {
+        set({ settings: await window.api.claude.setSettings(change) })
+      } catch (err) {
+        useApp.getState().showError((err as Error).message)
+      }
+    },
+
+    confirm(label, show) {
+      if (get().settings?.askBeforeEditing === false) return Promise.resolve(true)
+      const chat = get().running
+      const proposal = id()
+      return new Promise((resolve) => {
+        let hide = (): void => {}
+        const decide = (accept: boolean): void => {
+          if (!decisions.has(proposal)) return
+          decisions.delete(proposal)
+          hide()
+          if (chat !== null) {
+            updateAnswer(chat, (m) => ({
+              ...m,
+              parts: m.parts.map((p) =>
+                p.kind === 'proposal' && p.id === proposal
+                  ? { ...p, status: accept ? 'accepted' : 'rejected' }
+                  : p
+              )
+            }))
+          }
+          resolve(accept)
+        }
+        decisions.set(proposal, decide)
+        if (chat !== null) {
+          updateAnswer(chat, (m) => ({
+            ...m,
+            parts: [...m.parts, { kind: 'proposal', id: proposal, label, status: 'pending' }]
+          }))
+        }
+        hide = show(decide)
+      })
+    },
+
+    decide: (proposal, accept) => decisions.get(proposal)?.(accept)
+  }
+})

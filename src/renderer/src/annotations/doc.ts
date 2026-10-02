@@ -22,6 +22,14 @@ export interface Selection {
   id: string
 }
 
+/** An annotation Claude proposes, drawn faintly until it is accepted or rejected. */
+export interface Ghost {
+  page: number
+  textBox?: TextBox
+  highlight?: Highlight
+  decide(accept: boolean): void
+}
+
 const HISTORY_LIMIT = 200
 
 export interface DocState {
@@ -31,6 +39,7 @@ export interface DocState {
   selection: Selection | null
   /** Text box whose Markdown is being typed. */
   editing: Selection | null
+  ghost: Ghost | null
 
   /** Applies one change as one undo step. */
   change(fn: (pages: AnnotationPages) => AnnotationPages): void
@@ -46,6 +55,7 @@ export interface DocState {
   redo(): void
   select(selection: Selection | null): void
   edit(selection: Selection | null): void
+  setGhost(ghost: Ghost | null): void
 }
 
 export type AnnotationDoc = StoreApi<DocState>
@@ -71,6 +81,7 @@ export function createAnnotationDoc(pages: AnnotationPages): AnnotationDoc {
       future: [],
       selection: null,
       editing: null,
+      ghost: null,
 
       change: (fn) => push(get().pages, fn(get().pages)),
 
@@ -113,7 +124,8 @@ export function createAnnotationDoc(pages: AnnotationPages): AnnotationDoc {
       },
 
       select: (selection) => set({ selection }),
-      edit: (editing) => set({ editing, selection: editing })
+      edit: (editing) => set({ editing, selection: editing }),
+      setGhost: (ghost) => set({ ghost })
     }
   })
 }

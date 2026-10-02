@@ -3,9 +3,11 @@ import { Annotation, EditorState } from '@codemirror/state'
 import { EditorView } from '@codemirror/view'
 import { Icon } from '../components/Icon'
 import { registerFlush } from '../lib/flush'
+import { registerNote } from '../lib/open'
 import { useApp } from '../store'
 import { insertText } from './commands'
 import { resolveLink } from './links'
+import { headingPath } from './sections'
 import { editorExtensions } from './setup'
 
 /** Marks a change that came from disk, so it is not saved straight back. */
@@ -25,8 +27,9 @@ export function MarkdownEditor({
 
   useEffect(() => {
     const api = window.api.vault
-    const { setEditor, showError, openFile } = useApp.getState()
+    const { setEditor, showError, openFile, setNoteCursor } = useApp.getState()
     let view: EditorView | null = null
+    let unregisterNote = (): void => {}
     let cancelled = false
     let saved = ''
     let dirty = false
@@ -44,6 +47,21 @@ export function MarkdownEditor({
         dirty = true
         showError(`Summary not saved: ${(err as Error).message}`)
       }
+    }
+
+    let lastCursor = ''
+    const publishCursor = (state: EditorState): void => {
+      const { from, to, head } = state.selection.main
+      const cursor = {
+        path,
+        headings: headingPath(state.doc.toString(), head),
+        selection: state.sliceDoc(from, Math.min(to, from + 4000))
+      }
+      // Only publish real changes; most keystrokes do not move to another heading.
+      const key = JSON.stringify(cursor)
+      if (key === lastCursor) return
+      lastCursor = key
+      setNoteCursor(cursor)
     }
 
     const openLink = (href: string): void => {
@@ -69,6 +87,7 @@ export function MarkdownEditor({
             extensions: [
               editorExtensions({ path, onOpenLink: openLink }),
               EditorView.updateListener.of((update) => {
+                if (update.docChanged || update.selectionSet) publishCursor(update.state)
                 if (!update.docChanged) return
                 if (update.transactions.every((tr) => tr.annotation(fromDisk))) return
                 dirty = true
@@ -79,6 +98,8 @@ export function MarkdownEditor({
           })
         })
         setEditor({ path, insert: (t) => view && insertText(view, t) })
+        unregisterNote = registerNote({ path, view })
+        publishCursor(view.state)
         view.focus()
         view.dispatch({ effects: EditorView.scrollIntoView(text.length, { y: 'center' }) })
       })
@@ -102,6 +123,8 @@ export function MarkdownEditor({
 
     return () => {
       cancelled = true
+      unregisterNote()
+      if (useApp.getState().noteCursor?.path === path) setNoteCursor(null)
       stopWatching()
       unregister()
       void save().finally(() => view?.destroy())

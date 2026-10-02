@@ -8,6 +8,7 @@ import { tags } from '@lezer/highlight'
 import { editorKeymap, insertImageFiles, slashCommands } from './commands'
 import { livePreview, notePath } from './livePreview'
 import { mathSyntax } from './mathSyntax'
+import { pendingEdit } from './proposal'
 
 const highlight = HighlightStyle.define([
   { tag: tags.heading, fontWeight: '600' },
@@ -36,6 +37,7 @@ export function editorExtensions({ path, onOpenLink }: EditorOptions): Extension
     markdown({ base: markdownLanguage, extensions: [mathSyntax] }),
     syntaxHighlighting(highlight),
     livePreview,
+    pendingEdit,
     autocompletion({ override: [slashCommands], icons: false }),
     placeholder('Type / for headings, tables, math and slides'),
     // Before the Markdown keymap, whose Enter continues lists.

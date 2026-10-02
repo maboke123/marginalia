@@ -24,6 +24,7 @@ import {
   translateStroke,
   type Point
 } from './geometry'
+import { GhostView } from './GhostView'
 import { strokePath } from './ink'
 import { HIGHLIGHT_OPACITY, HIGHLIGHTER_WIDTH, pageUnit, TEXT_SIZES } from './palette'
 import { TextBoxView } from './TextBoxView'
@@ -92,6 +93,7 @@ function AnnotatedOverlay({
   const page = useStore(doc, (s) => pageOf(s.pages, number))
   const selection = useStore(doc, (s) => (s.selection?.page === number ? s.selection : null))
   const editing = useStore(doc, (s) => (s.editing?.page === number ? s.editing : null))
+  const ghost = useStore(doc, (s) => (s.ghost?.page === number ? s.ghost : null))
   const rootRef = useRef<HTMLDivElement>(null)
   const [live, setLive] = useState<Stroke | null>(null)
   const [eraserAt, setEraserAt] = useState<Point | null>(null)
@@ -417,6 +419,8 @@ function AnnotatedOverlay({
           onCommit={(markdown) => commitBox(box, markdown)}
         />
       ))}
+
+      {ghost && <GhostView ghost={ghost} scale={scale} />}
     </div>
   )
 }

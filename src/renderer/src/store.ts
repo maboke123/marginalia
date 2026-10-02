@@ -32,6 +32,20 @@ export interface PdfView {
   pageCount: number
 }
 
+/** Text selected on a slide; kept when focus moves to the chat, which clears the DOM selection. */
+export interface PdfSelection {
+  path: string
+  page: number
+  text: string
+}
+
+/** Where the cursor is in the open summary, for Claude's context. */
+export interface NoteCursor {
+  path: string
+  headings: string[]
+  selection: string
+}
+
 /** The open summary editor, so hotkeys elsewhere in the app can write into it. */
 export interface EditorHandle {
   path: string
@@ -72,6 +86,8 @@ interface AppState {
   renaming: string | null
   error: string | null
   pdfView: PdfView | null
+  pdfSelection: PdfSelection | null
+  noteCursor: NoteCursor | null
   tool: Tool
   ink: Ink
 
@@ -89,6 +105,8 @@ interface AppState {
   startRename(path: string | null): void
   showError(message: string | null): void
   setPdfView(view: PdfView | null): void
+  setPdfSelection(selection: PdfSelection | null): void
+  setNoteCursor(cursor: NoteCursor | null): void
   setTool(tool: Tool): void
   setInk(ink: Partial<Ink>): void
 
@@ -212,6 +230,8 @@ export const useApp = create<AppState>((set, get) => {
     renaming: null,
     error: null,
     pdfView: null,
+    pdfSelection: null,
+    noteCursor: null,
     tool: 'select',
     ink: {
       penColor: PEN_COLORS[1].value,
@@ -317,6 +337,8 @@ export const useApp = create<AppState>((set, get) => {
     },
 
     setPdfView: (view) => set({ pdfView: view }),
+    setPdfSelection: (pdfSelection) => set({ pdfSelection }),
+    setNoteCursor: (noteCursor) => set({ noteCursor }),
     setTool: (tool) => set({ tool }),
     setInk: (ink) => set({ ink: { ...get().ink, ...ink } }),
 

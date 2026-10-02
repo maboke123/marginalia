@@ -11,6 +11,7 @@ import { addItem, createAnnotationDoc, removeItems, type AnnotationDoc } from '.
 import { highlightFromSelection, selectedTextLayer } from '../annotations/selection'
 import { Icon } from '../components/Icon'
 import { registerFlush } from '../lib/flush'
+import { registerPdf } from '../lib/open'
 import { useApp, type Tool } from '../store'
 import {
   VIEW_PADDING,
@@ -219,6 +220,11 @@ function Document({
     }
   }, [activeDoc, annotations, path, margin, showError])
 
+  useEffect(
+    () => registerPdf({ path, pdf, doc: activeDoc, sizes, margin }),
+    [path, pdf, activeDoc, sizes, margin]
+  )
+
   // Highlights use the highlighter colour; lines under or through text use the pen colour,
   // because a yellow line is hard to see.
   const markSelection = useCallback(
@@ -237,7 +243,15 @@ function Document({
   // Offer a "Highlight" button at the end of a text selection on a slide.
   const updateSelectionAction = useCallback(() => {
     const layer = selectedTextLayer()
-    if (!activeDoc || !layer || !viewerRef.current?.contains(layer)) {
+    const { setPdfSelection } = useApp.getState()
+    if (!layer || !viewerRef.current?.contains(layer)) {
+      setPdfSelection(null)
+      setSelectionAt(null)
+      return
+    }
+    const text = window.getSelection()!.toString().replace(/s+/g, ' ').trim()
+    setPdfSelection(text ? { path, page: Number(layer.dataset.page), text } : null)
+    if (!activeDoc) {
       setSelectionAt(null)
       return
     }
@@ -248,7 +262,9 @@ function Document({
     if (!last) return
     const host = viewerRef.current.getBoundingClientRect()
     setSelectionAt({ x: last.right - host.left, y: last.bottom - host.top + 6 })
-  }, [activeDoc])
+  }, [activeDoc, path])
+
+  useEffect(() => () => useApp.getState().setPdfSelection(null), [])
 
   useEffect(() => {
     const onChange = (): void => {

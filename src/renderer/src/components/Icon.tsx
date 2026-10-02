@@ -15,7 +15,13 @@ const PATHS = {
   text: 'M3 3.5h10M8 3.5v9.5M6 13h4',
   undo: 'M5.5 3.5L2.5 6.5l3 3M2.5 6.5H10a3.5 3.5 0 0 1 0 7H7',
   columns: 'M2.5 3h11v10h-11zM8 3v10',
-  redo: 'M10.5 3.5l3 3-3 3M13.5 6.5H6a3.5 3.5 0 0 0 0 7h3'
+  redo: 'M10.5 3.5l3 3-3 3M13.5 6.5H6a3.5 3.5 0 0 0 0 7h3',
+  close: 'M4 4l8 8M12 4l-8 8',
+  settings:
+    'M8 5.75a2.25 2.25 0 1 0 0 4.5 2.25 2.25 0 0 0 0-4.5zM8 1.75v1.5M8 12.75v1.5M1.75 8h1.5M12.75 8h1.5M3.6 3.6l1.05 1.05M11.35 11.35l1.05 1.05M3.6 12.4l1.05-1.05M11.35 4.65l1.05-1.05',
+  send: 'M8 13V3.5M4 7.5l4-4 4 4',
+  stop: 'M4.5 4.5h7v7h-7z',
+  chat: 'M2.5 3.5h11v7.5H7l-3 2.5v-2.5H2.5z'
 } as const
 
 export type IconName = keyof typeof PATHS
