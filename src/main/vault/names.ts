@@ -41,11 +41,22 @@ export async function exists(p: string): Promise<boolean> {
   }
 }
 
-/** `New section`, `New section (2)`, `New section (3)`, ... until the name is free. */
-export async function uniqueName(dir: string, base: string, ext = ''): Promise<string> {
+/**
+ * `New section`, `New section (2)`, `New section (3)`, ... until the name is free.
+ * With `alsoFree`, the name plus each of those suffixes must be free too.
+ */
+export async function uniqueName(
+  dir: string,
+  base: string,
+  ext = '',
+  alsoFree: string[] = []
+): Promise<string> {
   for (let n = 1; ; n++) {
     const name = n === 1 ? `${base}${ext}` : `${base} (${n})${ext}`
-    if (!(await exists(path.join(dir, name)))) return name
+    const taken = await Promise.all(
+      [name, ...alsoFree.map((suffix) => name + suffix)].map((p) => exists(path.join(dir, p)))
+    )
+    if (!taken.includes(true)) return name
   }
 }
 

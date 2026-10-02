@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from 'electron'
+import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import type { IpcResult, MarginaliaApi } from '../shared/types'
 
 async function invoke<T>(channel: string, ...args: unknown[]): Promise<T> {
@@ -21,11 +21,19 @@ const api: MarginaliaApi = {
     trash: (path) => invoke('vault:trash', path),
     reveal: (path) => invoke('vault:reveal', path),
     setColor: (notebook, color) => invoke('vault:setColor', notebook, color),
+    pickPdfs: () => invoke('vault:pickPdfs'),
+    importPdfs: (parent, sources) => invoke('vault:importPdfs', parent, sources),
+    readFile: (path) => invoke('vault:readFile', path),
+    lastPage: (path) => invoke('vault:lastPage', path),
+    setLastPage: (path, page) => invoke('vault:setLastPage', path, page),
     onChanged: (listener) => {
       const handler = (): void => listener()
       ipcRenderer.on('vault:changed', handler)
       return () => ipcRenderer.removeListener('vault:changed', handler)
     }
+  },
+  files: {
+    pathFor: (file) => webUtils.getPathForFile(file)
   }
 }
 

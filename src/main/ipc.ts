@@ -70,6 +70,29 @@ export function registerIpc(getWindow: () => BrowserWindow | null, config: Confi
     current().setColor(notebook, color)
   )
   handle('vault:reveal', (p: string) => shell.showItemInFolder(current().resolve(p)))
+  handle('vault:readFile', (p: string) => current().readFile(p))
+  handle('vault:lastPage', (p: string) => current().lastPage(p))
+  handle('vault:setLastPage', (p: string, page: number) => current().setLastPage(p, page))
+
+  handle('vault:pickPdfs', async () => {
+    const win = getWindow()
+    const options: Electron.OpenDialogOptions = {
+      title: 'Import PDF',
+      properties: ['openFile', 'multiSelections'],
+      filters: [{ name: 'PDF', extensions: ['pdf'] }]
+    }
+    const result = win
+      ? await dialog.showOpenDialog(win, options)
+      : await dialog.showOpenDialog(options)
+    return result.canceled ? [] : result.filePaths
+  })
+
+  handle('vault:importPdfs', async (parent: string, sources: string[]) => {
+    const v = current()
+    const imported: string[] = []
+    for (const source of sources) imported.push(await v.importPdf(parent, source))
+    return imported
+  })
 
   handle('vault:trash', async (p: string) => {
     const v = current()

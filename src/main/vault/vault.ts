@@ -1,7 +1,7 @@
-import { promises as fs } from 'fs'
+import { constants as fsConstants, promises as fs } from 'fs'
 import path from 'path'
 import type { NotebookColor, Position, VaultNode, VaultTree } from '../../shared/types'
-import { renameWithRetry, writeFileAtomic } from './atomic'
+import { renameWithRetry, tempPathFor, writeFileAtomic } from './atomic'
 import {
   DATA_DIR,
   ORDER_FILE,
@@ -26,6 +26,15 @@ interface VaultSettings {
   notebookColors?: Record<string, NotebookColor>
   [key: string]: unknown
 }
+
+/** Positions that change often; kept apart from settings.json, which people may edit by hand. */
+interface VaultState {
+  lastPage?: Record<string, number>
+  [key: string]: unknown
+}
+
+const SETTINGS_FILE = 'settings.json'
+const STATE_FILE = 'state.json'
 
 /** Folders first, then natural order (B2 before B10). Names in `_order.json` come before the rest. */
 export function sortEntries<T extends Entry>(entries: T[], order: string[] | null): T[] {
@@ -74,6 +83,8 @@ const isPdf = (p: string): boolean => /\.pdf$/i.test(p)
 export type TrashFn = (absPath: string) => Promise<void>
 
 export class Vault {
+  private dataQueue: Promise<unknown> = Promise.resolve()
+
   constructor(
     readonly root: string,
     private readonly trashItem: TrashFn
@@ -86,7 +97,7 @@ export class Vault {
   async tree(): Promise<VaultTree> {
     const [nodes, settings] = await Promise.all([
       this.readDir(this.root, 0),
-      this.readSettings().catch((): VaultSettings => ({}))
+      this.readData<VaultSettings>(SETTINGS_FILE).catch((): VaultSettings => ({}))
     ])
     return { nodes, colors: settings.notebookColors ?? {} }
   }
@@ -131,6 +142,50 @@ export class Vault {
     return toRel(this.root, target)
   }
 
+  /** Copies a PDF into a section. The original is only read, never moved or changed. */
+  async importPdf(parentRel: string, source: string): Promise<string> {
+    if (!parentRel) throw new VaultError('PDFs go inside a notebook or section')
+    if (!isPdf(source)) throw new VaultError(`"${path.basename(source)}" is not a PDF`)
+    const stat = await fs.stat(source).catch(() => null)
+    if (!stat?.isFile()) throw new VaultError(`File not found: ${source}`)
+    const parent = await this.existingDir(parentRel)
+
+    const base = path.basename(source, path.extname(source))
+    // An orphaned sidecar would otherwise attach old annotations to the new PDF.
+    const name = await uniqueName(parent, base, '.pdf', [SIDECAR_SUFFIX])
+    const target = path.join(parent, name)
+    const tmp = tempPathFor(target)
+    await fs.copyFile(source, tmp, fsConstants.COPYFILE_EXCL)
+    try {
+      await renameWithRetry(tmp, target)
+    } catch (err) {
+      await fs.rm(tmp, { force: true })
+      throw err
+    }
+    return toRel(this.root, target)
+  }
+
+  async readFile(rel: string): Promise<Uint8Array> {
+    const abs = this.resolveItem(rel)
+    const stat = await fs.stat(abs).catch(() => null)
+    if (!stat?.isFile()) throw new VaultError(`"${rel}" does not exist`)
+    return fs.readFile(abs)
+  }
+
+  async lastPage(rel: string): Promise<number | null> {
+    const state = await this.readData<VaultState>(STATE_FILE)
+    return state.lastPage?.[toRel(this.root, this.resolveItem(rel))] ?? null
+  }
+
+  setLastPage(rel: string, page: number): Promise<void> {
+    const key = toRel(this.root, this.resolveItem(rel))
+    return this.updateData<VaultState>(STATE_FILE, (state) =>
+      state.lastPage?.[key] === page
+        ? null
+        : { ...state, lastPage: { ...state.lastPage, [key]: page } }
+    )
+  }
+
   async rename(rel: string, newName: string): Promise<string> {
     const abs = this.resolveItem(rel)
     const isDir = (await fs.stat(abs)).isDirectory()
@@ -145,6 +200,7 @@ export class Vault {
     await this.moveEntry(abs, target, isDir)
     await updateOrder(dir, (names) => names.map((n) => (n === oldName ? name : n)))
     if (isDir && dir === this.root) await this.renameColor(oldName, name)
+    await this.remapLastPages(toRel(this.root, abs), toRel(this.root, target))
     return toRel(this.root, target)
   }
 
@@ -166,6 +222,7 @@ export class Vault {
       await this.moveEntry(abs, target, isDir)
       await updateOrder(oldParent, (names) => names.filter((n) => n !== name))
       if (isDir && oldParent === this.root) await this.renameColor(name, null)
+      await this.remapLastPages(toRel(this.root, abs), toRel(this.root, target))
     }
 
     if (before !== undefined) {
@@ -188,17 +245,19 @@ export class Vault {
     }
     await updateOrder(parent, (names) => names.filter((n) => n !== name))
     if (isDir && parent === this.root) await this.renameColor(name, null)
+    await this.remapLastPages(toRel(this.root, abs), null)
   }
 
   async setColor(notebook: string, color: NotebookColor | null): Promise<void> {
     const abs = await this.existingDir(notebook)
     if (path.dirname(abs) !== this.root) throw new VaultError('Only notebooks have a colour')
-    const settings = await this.readSettings()
-    const colors = { ...settings.notebookColors }
     const name = path.basename(abs)
-    if (color) colors[name] = color
-    else delete colors[name]
-    await this.writeSettings({ ...settings, notebookColors: colors })
+    await this.updateData<VaultSettings>(SETTINGS_FILE, (settings) => {
+      const colors = { ...settings.notebookColors }
+      if (color) colors[name] = color
+      else delete colors[name]
+      return { ...settings, notebookColors: colors }
+    })
   }
 
   /** Moves a file or folder without ever overwriting. A PDF takes its annotation sidecar along. */
@@ -236,22 +295,40 @@ export class Vault {
     return abs
   }
 
-  private async renameColor(oldName: string, newName: string | null): Promise<void> {
-    const settings = await this.readSettings()
-    const color = settings.notebookColors?.[oldName]
-    if (!color) return
-    const colors = { ...settings.notebookColors }
-    delete colors[oldName]
-    if (newName) colors[newName] = color
-    await this.writeSettings({ ...settings, notebookColors: colors })
+  private renameColor(oldName: string, newName: string | null): Promise<void> {
+    return this.updateData<VaultSettings>(SETTINGS_FILE, (settings) => {
+      const color = settings.notebookColors?.[oldName]
+      if (!color) return null
+      const colors = { ...settings.notebookColors }
+      delete colors[oldName]
+      if (newName) colors[newName] = color
+      return { ...settings, notebookColors: colors }
+    })
   }
 
-  private async readSettings(): Promise<VaultSettings> {
+  /** Keeps remembered pages attached to PDFs that were renamed, moved (also via a folder) or trashed. */
+  private remapLastPages(from: string, to: string | null): Promise<void> {
+    return this.updateData<VaultState>(STATE_FILE, (state) => {
+      if (!state.lastPage) return null
+      let changed = false
+      const pages: Record<string, number> = {}
+      for (const [p, page] of Object.entries(state.lastPage)) {
+        if (p !== from && !p.startsWith(from + '/')) pages[p] = page
+        else {
+          changed = true
+          if (to !== null) pages[to + p.slice(from.length)] = page
+        }
+      }
+      return changed ? { ...state, lastPage: pages } : null
+    })
+  }
+
+  private async readData<T extends object>(file: string): Promise<T> {
     let text: string
     try {
-      text = await fs.readFile(this.settingsPath(), 'utf8')
+      text = await fs.readFile(path.join(this.root, DATA_DIR, file), 'utf8')
     } catch (err) {
-      if ((err as NodeJS.ErrnoException).code === 'ENOENT') return {}
+      if ((err as NodeJS.ErrnoException).code === 'ENOENT') return {} as T
       throw err
     }
     try {
@@ -261,15 +338,22 @@ export class Vault {
       // fall through
     }
     // Refuse to continue rather than overwrite a file someone may have edited by hand.
-    throw new VaultError(`${DATA_DIR}/settings.json is not valid JSON`)
+    throw new VaultError(`${DATA_DIR}/${file} is not valid JSON`)
   }
 
-  private async writeSettings(settings: VaultSettings): Promise<void> {
-    await fs.mkdir(path.join(this.root, DATA_DIR), { recursive: true })
-    await writeFileAtomic(this.settingsPath(), JSON.stringify(settings, null, 2) + '\n')
-  }
-
-  private settingsPath(): string {
-    return path.join(this.root, DATA_DIR, 'settings.json')
+  /**
+   * Read-modify-write of a file in .marginalia. Runs one at a time so two quick updates
+   * (say a rename and a page change) cannot overwrite each other. Returning null skips the write.
+   */
+  private updateData<T extends object>(file: string, change: (data: T) => T | null): Promise<void> {
+    const run = this.dataQueue.then(async () => {
+      const next = change(await this.readData<T>(file))
+      if (!next) return
+      await fs.mkdir(path.join(this.root, DATA_DIR), { recursive: true })
+      const text = JSON.stringify(next, null, 2) + '\n'
+      await writeFileAtomic(path.join(this.root, DATA_DIR, file), text)
+    })
+    this.dataQueue = run.catch(() => undefined)
+    return run
   }
 }

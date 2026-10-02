@@ -248,6 +248,99 @@ describe('trash', () => {
   })
 })
 
+describe('importPdf', () => {
+  let outside: string
+
+  beforeEach(async () => {
+    outside = await fs.mkdtemp(path.join(os.tmpdir(), 'downloads-'))
+  })
+
+  afterEach(async () => {
+    await fs.rm(outside, { recursive: true, force: true })
+  })
+
+  it('copies the PDF and leaves the original untouched', async () => {
+    const source = path.join(outside, 'B2 Decision trees.pdf')
+    await fs.writeFile(source, '%PDF-1.7 original')
+    await fs.mkdir(path.join(root, 'ML'))
+
+    expect(await vault.importPdf('ML', source)).toBe('ML/B2 Decision trees.pdf')
+    expect(await fs.readFile(source, 'utf8')).toBe('%PDF-1.7 original')
+    expect(await fs.readFile(path.join(root, 'ML/B2 Decision trees.pdf'), 'utf8')).toBe(
+      '%PDF-1.7 original'
+    )
+    expect(await list('ML')).toEqual(['B2 Decision trees.pdf'])
+  })
+
+  it('adds a suffix on a name clash, also with an orphaned sidecar', async () => {
+    const source = path.join(outside, 'slides.pdf')
+    await fs.writeFile(source, 'new')
+    await write('ML/slides.pdf', 'old')
+    await write('ML/slides (2).pdf.annotations.json', '{}')
+
+    expect(await vault.importPdf('ML', source)).toBe('ML/slides (3).pdf')
+    expect(await fs.readFile(path.join(root, 'ML/slides.pdf'), 'utf8')).toBe('old')
+  })
+
+  it('only imports PDFs into a notebook or section', async () => {
+    const source = path.join(outside, 'notes.docx')
+    await fs.writeFile(source, '')
+    await fs.writeFile(path.join(outside, 'a.pdf'), '')
+    await fs.mkdir(path.join(root, 'ML'))
+
+    await expect(vault.importPdf('ML', source)).rejects.toThrow('not a PDF')
+    await expect(vault.importPdf('', path.join(outside, 'a.pdf'))).rejects.toThrow('notebook')
+  })
+
+  it('reads a file as bytes', async () => {
+    await write('ML/slides.pdf', 'pdf bytes')
+
+    expect(Buffer.from(await vault.readFile('ML/slides.pdf')).toString()).toBe('pdf bytes')
+    await expect(vault.readFile('ML/missing.pdf')).rejects.toThrow('does not exist')
+  })
+})
+
+describe('last page', () => {
+  it('remembers the page per PDF and follows renames, moves and trash', async () => {
+    await write('ML/B2/slides.pdf')
+    await write('ML/B3/other.pdf')
+    await fs.mkdir(path.join(root, 'Stats'))
+
+    await vault.setLastPage('ML/B2/slides.pdf', 12)
+    await vault.setLastPage('ML/B3/other.pdf', 3)
+    expect(await vault.lastPage('ML/B2/slides.pdf')).toBe(12)
+
+    await vault.rename('ML/B2/slides.pdf', 'trees')
+    expect(await vault.lastPage('ML/B2/trees.pdf')).toBe(12)
+
+    await vault.rename('ML', 'Machine Learning')
+    await vault.move('Machine Learning/B2', 'Stats')
+    expect(await vault.lastPage('Stats/B2/trees.pdf')).toBe(12)
+
+    await vault.trash('Machine Learning/B3/other.pdf')
+    const state = JSON.parse(await fs.readFile(path.join(root, '.marginalia/state.json'), 'utf8'))
+    expect(state).toEqual({ lastPage: { 'Stats/B2/trees.pdf': 12 } })
+  })
+
+  it('does not lose updates made at the same time', async () => {
+    await write('ML/a.pdf')
+    await write('ML/b.pdf')
+    await write('ML/c.pdf')
+
+    await Promise.all([
+      vault.setLastPage('ML/a.pdf', 1),
+      vault.setLastPage('ML/b.pdf', 2),
+      vault.setLastPage('ML/c.pdf', 3),
+      vault.setColor('ML', 'green')
+    ])
+
+    expect(await vault.lastPage('ML/a.pdf')).toBe(1)
+    expect(await vault.lastPage('ML/b.pdf')).toBe(2)
+    expect(await vault.lastPage('ML/c.pdf')).toBe(3)
+    expect((await vault.tree()).colors).toEqual({ ML: 'green' })
+  })
+})
+
 describe('settings', () => {
   it('does not overwrite a settings file it cannot read', async () => {
     await write('ML/x.md')

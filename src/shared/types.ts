@@ -55,6 +55,17 @@ export interface MarginaliaApi {
     trash(path: string): Promise<boolean>
     reveal(path: string): Promise<void>
     setColor(notebook: string, color: NotebookColor | null): Promise<void>
+    /** Opens a file dialog; returns absolute paths of the chosen PDFs (empty when cancelled). */
+    pickPdfs(): Promise<string[]>
+    /** Copies PDFs from anywhere on disk into a section; returns their vault paths. */
+    importPdfs(parent: string, sources: string[]): Promise<string[]>
+    readFile(path: string): Promise<Uint8Array>
+    lastPage(path: string): Promise<number | null>
+    setLastPage(path: string, page: number): Promise<void>
     onChanged(listener: () => void): () => void
+  }
+  files: {
+    /** Absolute path of a file dropped from Explorer. */
+    pathFor(file: File): string
   }
 }

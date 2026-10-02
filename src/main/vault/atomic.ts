@@ -19,15 +19,17 @@ export async function renameWithRetry(from: string, to: string, attempts = 6): P
   }
 }
 
+/** A hidden name next to `file`, so the vault watcher and the tree both ignore it. */
+export function tempPathFor(file: string): string {
+  return path.join(path.dirname(file), `.${path.basename(file)}.${process.pid}-${Date.now()}.tmp`)
+}
+
 /**
  * Writes to a temp file next to the target, flushes it to disk and renames it over the target.
  * A crash halfway leaves either the old file or the new one, never a half-written file.
  */
 export async function writeFileAtomic(file: string, data: string | Uint8Array): Promise<void> {
-  const tmp = path.join(
-    path.dirname(file),
-    `.${path.basename(file)}.${process.pid}-${Date.now()}.tmp`
-  )
+  const tmp = tempPathFor(file)
   const handle = await fs.open(tmp, 'wx')
   try {
     await handle.writeFile(data)
