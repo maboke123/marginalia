@@ -54,7 +54,10 @@ export async function writeWithClaude(request: WriteRequest): Promise<WriteAnswe
       `I am writing in ${request.where}.`,
       'Here is the text around the spot; ⟦here⟧ marks where your text goes:',
       `<text>\n${request.around}\n</text>`,
-      `My request at ⟦here⟧: ${request.ask}`
+      `My request at ⟦here⟧: ${request.ask}`,
+      // Last, because the smaller models follow the final instruction most closely.
+      'Reply with only the text that goes into my notes (and FIND/REPLACE blocks for changes). ' +
+        'No "Here is", no explanation before or after it.'
     ]
       .filter(Boolean)
       .join('\n\n')
