@@ -16,7 +16,7 @@ const TOOLS: { tool: Tool; label: string; icon: IconName }[] = [
 ]
 
 const keyFor = (tool: Tool, settings: AppSettings): string =>
-  tool === 'select' ? 'Esc' : settings.hotkeys[tool as HotkeyAction]
+  tool === 'select' ? `${settings.hotkeys.select} or Esc` : settings.hotkeys[tool as HotkeyAction]
 
 interface Props {
   doc: AnnotationDoc | null

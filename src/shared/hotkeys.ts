@@ -8,6 +8,7 @@ export const HOTKEY_ACTIONS = [
   { id: 'switcher', label: 'Quick switcher', key: 'Ctrl+P', scope: 'global' },
   { id: 'search', label: 'Search everything', key: 'Ctrl+Shift+F', scope: 'global' },
   { id: 'settings', label: 'Settings', key: 'Ctrl+,', scope: 'global' },
+  { id: 'select', label: 'Select and move', key: 'V', scope: 'slides' },
   { id: 'pen', label: 'Pen', key: 'P', scope: 'slides' },
   {
     id: 'highlighter',

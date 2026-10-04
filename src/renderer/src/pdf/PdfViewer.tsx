@@ -85,7 +85,7 @@ export function PdfViewer({ path, title }: { path: string; title: string }): Rea
   return <Document path={path} title={title} {...loaded} />
 }
 
-const TOOLS: Tool[] = ['pen', 'highlighter', 'eraser', 'text']
+const TOOLS: Tool[] = ['select', 'pen', 'highlighter', 'eraser', 'text']
 
 function Document({
   path,

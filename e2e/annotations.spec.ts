@@ -219,6 +219,19 @@ test('text boxes can be resized, change text size and use bold', async () => {
     .toBeLessThan(fontBefore * 0.5)
 })
 
+test('V goes back to the select tool', async () => {
+  await openSlides()
+  const tool = (name: string): Locator =>
+    page
+      .getByRole('toolbar', { name: 'Annotation tools' })
+      .getByRole('button', { name, exact: true })
+  await page.keyboard.press('t')
+  await expect(tool('Text box')).toHaveAttribute('aria-pressed', 'true')
+  await page.keyboard.press('v')
+  await expect(tool('Select')).toHaveAttribute('aria-pressed', 'true')
+  await expect(tool('Select')).toHaveAttribute('title', 'Select (V or Esc)')
+})
+
 test('in text mode a click on a box carries on typing in it', async () => {
   await openSlides()
   await page.keyboard.press('t')
