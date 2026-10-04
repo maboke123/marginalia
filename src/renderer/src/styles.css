@@ -428,6 +428,11 @@ h2 {
   overflow: auto;
 }
 
+.empty-logo {
+  display: block;
+  margin-bottom: 12px;
+}
+
 .workspace.dropping {
   outline: 2px solid var(--accent);
   outline-offset: -2px;
@@ -457,6 +462,11 @@ h2 {
 .welcome {
   max-width: 560px;
   padding: 64px 48px;
+}
+
+.welcome-logo {
+  display: block;
+  margin-bottom: 24px;
 }
 
 .welcome h1 {
