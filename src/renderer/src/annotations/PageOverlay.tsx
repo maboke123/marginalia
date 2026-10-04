@@ -180,7 +180,11 @@ function AnnotatedOverlay({
 
   function onBoxPointerDown(e: React.PointerEvent, box: TextBox): void {
     if (tool === 'text') {
+      if (e.button !== 0) return
       e.stopPropagation()
+      // Otherwise the mouse-down moves focus to the viewer right after the editor took it,
+      // and losing focus closes the box again.
+      e.preventDefault()
       startEditing(box)
       return
     }

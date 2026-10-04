@@ -215,6 +215,25 @@ test('text boxes can be resized, change text size and use bold', async () => {
     .toBeGreaterThan(fontBefore * 1.4)
 })
 
+test('in text mode a click on a box carries on typing in it', async () => {
+  await openSlides()
+  await page.keyboard.press('t')
+  await drawOnPage([0.7, 0.2], [0.7, 0.2])
+  await page.keyboard.type('Entropy')
+  // Clicking elsewhere on the slide ends the box and starts a new one; Escape drops that.
+  await drawOnPage([0.3, 0.7], [0.3, 0.7])
+  await page.keyboard.press('Escape')
+  const box = firstPage().locator('.text-box')
+  await expect(box).toHaveCount(1)
+
+  await box.click()
+  await expect(box.locator('textarea')).toBeFocused()
+  await page.keyboard.type(' is uncertainty')
+  await page.keyboard.press('Escape')
+  await expect(box).toHaveText('Entropy is uncertainty')
+  await expect(box).toHaveCount(1)
+})
+
 test('text boxes take a colour from the toolbar', async () => {
   await openSlides()
   await page.keyboard.press('t')
