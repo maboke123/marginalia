@@ -6,7 +6,18 @@ import type { RecordingStatus } from '../../shared/types'
 import { Vault } from '../vault/vault'
 import type { Transcriber } from './engine'
 import { LiveSession } from './live'
-import { clock, transcriptHeader, transcriptName, transcriptParagraph } from './transcript'
+import { LiveSession as Session, timelineName } from './live'
+import {
+  audioOf,
+  clock,
+  headerOf,
+  NOT_TRANSCRIBED,
+  slideAt,
+  slideMarker,
+  transcriptHeader,
+  transcriptName,
+  transcriptParagraph
+} from './transcript'
 import { wavFromPcm } from './wav'
 
 describe('transcript text', () => {
@@ -88,6 +99,7 @@ describe('LiveSession', () => {
       engine,
       'ML/les_3',
       (s) => statuses.push(s),
+      true,
       new Date(2026, 9, 6, 10, 5)
     )
     expect(session.transcript).toBe('ML/les_3/Transcript 2026-10-06 10-05.md')
@@ -118,11 +130,73 @@ describe('LiveSession', () => {
       }
     }
     const statuses: RecordingStatus[] = []
-    const session = await LiveSession.start(vault, engine, 'ML/les_3', (s) => statuses.push(s))
+    const session = await LiveSession.start(
+      vault,
+      engine,
+      'ML/les_3',
+      (s) => statuses.push(s),
+      true
+    )
     session.addChunk({ pcm: new Uint8Array(3200), at: 0, language: 'auto' })
     session.addChunk({ pcm: new Uint8Array(3200), at: 30, language: 'auto' })
     await session.stop()
     expect(statuses.some((s) => s.error === 'model missing')).toBe(true)
     expect(await vault.readText(session.transcript)).toContain('recovered')
+  })
+})
+
+describe('recording without live transcription', () => {
+  let root: string
+  let vault: Vault
+  beforeEach(async () => {
+    root = await fs.mkdtemp(path.join(os.tmpdir(), 'record-'))
+    await fs.mkdir(path.join(root, 'ML', 'les_3'), { recursive: true })
+    vault = new Vault(root, async () => undefined)
+  })
+  afterEach(() => fs.rm(root, { recursive: true, force: true }))
+
+  it('leaves a placeholder and keeps a slide timeline next to the audio', async () => {
+    const engine = {} as Transcriber
+    const session = await Session.start(vault, engine, 'ML/les_3', () => undefined, false)
+    await session.addSlide({ at: 0, pdf: 'ML/les_3/B2.pdf', page: 1 })
+    await session.addSlide({ at: 95, pdf: 'ML/les_3/B2.pdf', page: 4 })
+    await session.addAudio(new Uint8Array([1]))
+    await session.stop()
+    const note = await vault.readText(session.transcript)
+    expect(note).toContain(NOT_TRANSCRIBED)
+    const audio = audioOf(note)!
+    expect(audio).toBe(`assets/${session.audioName}`)
+    const timeline = JSON.parse(
+      await vault.readAsset(session.transcript, timelineName(session.audioName))
+    )
+    expect(timeline.slides).toEqual([
+      { at: 0, pdf: 'ML/les_3/B2.pdf', page: 1 },
+      { at: 95, pdf: 'ML/les_3/B2.pdf', page: 4 }
+    ])
+    expect(headerOf(note)).not.toContain(NOT_TRANSCRIBED)
+  })
+})
+
+describe('slide links in transcripts', () => {
+  const timeline = [
+    { at: 0, pdf: 'ML/les_3/B2 trees.pdf', page: 1 },
+    { at: 60, pdf: 'ML/les_3/B2 trees.pdf', page: 2 },
+    { at: 300, pdf: 'ML/les_2/B1.pdf', page: 40 }
+  ]
+
+  it('finds the slide that was open at a moment', () => {
+    expect(slideAt(timeline, 59)?.page).toBe(1)
+    expect(slideAt(timeline, 60)?.page).toBe(2)
+    expect(slideAt(timeline, 1000)?.pdf).toBe('ML/les_2/B1.pdf')
+    expect(slideAt([{ at: 10, pdf: 'x.pdf', page: 1 }], 5)).toBeNull()
+  })
+
+  it('links relative to the note, also into another lesson', () => {
+    expect(slideMarker('ML/les_3/Transcript.md', 'ML/les_3/B2 trees.pdf', 2)).toBe(
+      '[slide 2](B2%20trees.pdf#page=2)'
+    )
+    expect(slideMarker('ML/les_3/Transcript.md', 'ML/les_2/B1.pdf', 40)).toBe(
+      '[slide 40](../les_2/B1.pdf#page=40)'
+    )
   })
 })

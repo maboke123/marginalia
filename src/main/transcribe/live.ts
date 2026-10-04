@@ -4,8 +4,17 @@ import path from 'path'
 import type { LiveChunk, RecordingStatus } from '../../shared/types'
 import { timestamp, type Vault } from '../vault/vault'
 import type { Transcriber } from './engine'
-import { transcriptHeader, transcriptName, transcriptParagraph } from './transcript'
+import {
+  NOT_TRANSCRIBED,
+  transcriptHeader,
+  transcriptName,
+  transcriptParagraph,
+  type SlideMoment
+} from './transcript'
 import { SAMPLE_RATE, wavFromPcm } from './wav'
+
+/** The slide timeline of a recording: `recording-<time>.json` next to its audio. */
+export const timelineName = (audio: string): string => audio.replace(/\.[^.]+$/, '.json')
 
 /**
  * A lecture being recorded: the renderer sends ~30 s chunks of 16 kHz audio, which are
@@ -19,6 +28,8 @@ export class LiveSession {
   private pending = 0
   private transcribedTo = 0
   private error: string | null = null
+  private readonly timeline: SlideMoment[] = []
+  private timelineWrites: Promise<unknown> = Promise.resolve()
 
   private constructor(
     private readonly vault: Vault,
@@ -33,6 +44,7 @@ export class LiveSession {
     engine: Transcriber,
     folder: string,
     notify: (status: RecordingStatus) => void,
+    live: boolean,
     now = new Date()
   ): Promise<LiveSession> {
     const transcript = await vault.createNote(folder, transcriptName(now))
@@ -42,8 +54,19 @@ export class LiveSession {
       source: 'Recorded live with the microphone. Times are from the start of the recording.',
       audio: `assets/${audioName}`
     })
-    await vault.writeText(transcript, header)
+    // Recorded without live transcription, it is transcribed afterwards.
+    await vault.writeText(transcript, live ? header : `${header}\n${NOT_TRANSCRIBED}\n`)
     return new LiveSession(vault, engine, transcript, audioName, notify)
+  }
+
+  /** Which slide I had open from now on; kept next to the audio for transcribing later. */
+  addSlide(moment: SlideMoment): Promise<unknown> {
+    this.timeline.push(moment)
+    const data = JSON.stringify({ slides: this.timeline }, null, 1)
+    this.timelineWrites = this.timelineWrites.then(() =>
+      this.vault.writeAsset(this.transcript, timelineName(this.audioName), data)
+    )
+    return this.timelineWrites
   }
 
   /** The kept audio, in the order the recorder made it. */
@@ -102,6 +125,7 @@ export class LiveSession {
   async stop(): Promise<void> {
     await this.queue
     await this.audioWrites
+    await this.timelineWrites
   }
 
   /** The app is closing: keep the audio, skip what was not transcribed yet. */

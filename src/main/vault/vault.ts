@@ -221,6 +221,22 @@ export class Vault {
     return `${ASSETS_DIR}/${name}`
   }
 
+  /** Reads a small text file of the app's own from the assets folder next to `nearRel`. */
+  async readAsset(nearRel: string, name: string): Promise<string> {
+    if (!/^[\w.-]+$/.test(name)) throw new VaultError(`Bad asset name: ${name}`)
+    const dir = path.join(path.dirname(this.resolveItem(nearRel)), ASSETS_DIR)
+    return fs.readFile(path.join(dir, name), 'utf8')
+  }
+
+  /** Writes (replaces) a small file of the app's own in the assets folder next to `nearRel`. */
+  async writeAsset(nearRel: string, name: string, text: string): Promise<string> {
+    if (!/^[\w.-]+$/.test(name)) throw new VaultError(`Bad asset name: ${name}`)
+    const dir = path.join(path.dirname(this.resolveItem(nearRel)), ASSETS_DIR)
+    await fs.mkdir(dir, { recursive: true })
+    await writeFileAtomic(path.join(dir, name), text)
+    return `${ASSETS_DIR}/${name}`
+  }
+
   /** Copies a file from outside into the assets folder next to `nearRel`, never overwriting. */
   async copyAsset(nearRel: string, name: string, source: string): Promise<string> {
     if (!/^[\w.-]+$/.test(name)) throw new VaultError(`Bad asset name: ${name}`)

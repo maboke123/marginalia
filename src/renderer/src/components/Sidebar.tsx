@@ -4,7 +4,7 @@ import { draggingFiles, importDroppedFiles } from '../lib/drop'
 import { childrenOf, displayOrder, isFolder, isWithin, visibleRows, type Row } from '../lib/tree'
 import { useApp } from '../store'
 import { ContextMenu, type MenuItem } from './ContextMenu'
-import { useFiles } from '../transcribe/files'
+import { isTranscript, useFiles } from '../transcribe/files'
 import { FeedbackBox } from './FeedbackBox'
 import { Icon } from './Icon'
 import { TreeRow, type DropZone } from './TreeRow'
@@ -120,6 +120,12 @@ export function Sidebar(): React.JSX.Element {
       items.push({ label: 'Open', onSelect: () => app.openFile(node.path) })
       if (node.kind === 'pdf') {
         items.push({ label: 'Export annotated PDF...', onSelect: () => app.exportPdf(node.path) })
+      }
+      if (isTranscript(node.path)) {
+        items.push({
+          label: 'Transcribe the recording',
+          onSelect: () => useFiles.getState().transcribeRecorded(node.path)
+        })
       }
       items.push({ separator: true })
     }

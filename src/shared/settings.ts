@@ -16,6 +16,11 @@ export interface AppSettings {
   transcribeLanguage: TranscribeLanguage
   /** Last choice for transcribing a recording file. */
   transcribeModel: 'small' | 'accurate'
+  /**
+   * Transcribe while recording a lecture. Off by default: it costs battery and heat, and the
+   * recording can be transcribed afterwards.
+   */
+  transcribeLive: boolean
 }
 
 export type TranscribeLanguage = 'auto' | 'nl' | 'en'
@@ -60,7 +65,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   hotkeys: DEFAULT_HOTKEYS,
   snapping: true,
   transcribeLanguage: 'auto',
-  transcribeModel: 'accurate'
+  transcribeModel: 'accurate',
+  transcribeLive: false
 }
 
 function colors(raw: unknown, fallback: string[]): string[] {
@@ -85,6 +91,7 @@ export function settingsFrom(raw: unknown): AppSettings {
     transcribeLanguage: TRANSCRIBE_LANGUAGES.some((l) => l.value === r.transcribeLanguage)
       ? (r.transcribeLanguage as TranscribeLanguage)
       : DEFAULT_SETTINGS.transcribeLanguage,
-    transcribeModel: r.transcribeModel === 'small' ? 'small' : 'accurate'
+    transcribeModel: r.transcribeModel === 'small' ? 'small' : 'accurate',
+    transcribeLive: r.transcribeLive === true
   }
 }

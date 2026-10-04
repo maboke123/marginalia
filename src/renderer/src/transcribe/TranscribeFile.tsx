@@ -24,7 +24,15 @@ export function TranscribeFileDialog(): React.JSX.Element | null {
   const [model, setModel] = useState(settings.transcribeModel)
   const [language, setLanguage] = useState<TranscribeLanguage>(settings.transcribeLanguage)
   if (!choosing) return null
-  const name = choosing.source.split(/[\\/]/).pop()
+  const file = (p: string): string => p.split(/[\\/]/).pop()!
+  const title =
+    choosing.kind === 'file'
+      ? `Transcribe ${file(choosing.source)}`
+      : `Transcribe ${file(choosing.note).replace(/\.md$/, '')}`
+  const where =
+    choosing.kind === 'file'
+      ? `the transcript appears in ${file(choosing.folder)}. The video itself stays where it is.`
+      : 'the text goes into this transcript, with links to the slides you had open.'
   const close = (): void => useFiles.getState().cancelChoice()
 
   return (
@@ -36,11 +44,8 @@ export function TranscribeFileDialog(): React.JSX.Element | null {
         onMouseDown={(e) => e.stopPropagation()}
         onKeyDown={(e) => e.key === 'Escape' && close()}
       >
-        <h2>Transcribe {name}</h2>
-        <p className="muted">
-          It runs in the background; the transcript appears in {choosing.folder.split('/').pop()}.
-          The video itself stays where it is.
-        </p>
+        <h2>{title}</h2>
+        <p className="muted">It runs in the background; {where}</p>
         <div role="radiogroup" aria-label="Speed">
           {MODELS.map((m) => (
             <label key={m.value} className="transcribe-choice">
@@ -99,11 +104,26 @@ const PHASES: Record<TranscribeJob['phase'], string> = {
 /** Progress of recording files being transcribed, under the recording bar. */
 export function TranscribeJobs(): React.JSX.Element | null {
   const jobs = useFiles((s) => s.jobs)
-  if (!jobs.length) return null
-  const { cancel, dismiss } = useFiles.getState()
+  const offers = useFiles((s) => s.offers)
+  if (!jobs.length && !offers.length) return null
+  const { cancel, dismiss, transcribeRecorded, dismissOffer } = useFiles.getState()
 
   return (
     <>
+      {offers.map((note) => (
+        <div key={note} className="recording-bar" role="status" aria-label="Recording saved">
+          <span className="recording-time">Recording saved</span>
+          <span className="recording-progress">
+            Transcribe it now, or later from the transcript&apos;s menu in the sidebar.
+          </span>
+          <button className="button primary" onClick={() => transcribeRecorded(note)}>
+            Transcribe now
+          </button>
+          <button className="button" onClick={() => dismissOffer(note)}>
+            Later
+          </button>
+        </div>
+      ))}
       {jobs.map((job) => (
         <div key={job.id} className="recording-bar" role="status" aria-label="Transcribing">
           <span className="recording-time">{job.name}</span>

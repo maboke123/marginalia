@@ -5,6 +5,7 @@ import path from 'path'
 import type {
   LiveChunk,
   TranscribeFileRequest,
+  TranscribeRecordedRequest,
   TranscribeJob,
   TranscribePart,
   TranscribeStatus
@@ -13,8 +14,9 @@ import type { Handle } from '../ipc'
 import { VaultError } from '../vault/names'
 import type { Vault } from '../vault/vault'
 import { PARTS, WhisperEngine, type Transcriber } from './engine'
-import { transcribeFile } from './fileJob'
-import { LiveSession } from './live'
+import { transcribeFile, type FileJob } from './fileJob'
+import { LiveSession, timelineName } from './live'
+import { audioOf, type SlideMoment } from './transcript'
 import type { Segment } from './transcript'
 
 /**
@@ -102,12 +104,21 @@ export function registerTranscription(
     engine.install(parts, (part, done) => send('transcribe:install-progress', { part, done }))
   )
 
-  handle('record:start', async (folder: string) => {
+  handle('record:start', async (folder: string, transcribeLive: boolean) => {
     if (live) throw new VaultError('A recording is already running')
     const vault = getVault()
     if (!vault) throw new VaultError('No vault is open')
-    live = await LiveSession.start(vault, engine, folder, (status) => send('record:status', status))
+    live = await LiveSession.start(
+      vault,
+      engine,
+      folder,
+      (status) => send('record:status', status),
+      transcribeLive
+    )
     return live.transcript
+  })
+  handle('record:slide', async (moment: SlideMoment) => {
+    await live?.addSlide(moment)
   })
   handle('record:audio', async (data: Uint8Array) => {
     await live?.addAudio(data)
@@ -142,14 +153,44 @@ export function registerTranscription(
     return result.canceled ? null : result.filePaths[0]
   })
 
-  handle('transcribe:file', (request: TranscribeFileRequest) => {
+  handle('transcribe:file', (request: TranscribeFileRequest) =>
+    queueJob(request, path.basename(request.source))
+  )
+
+  // A recording made in the app: its own audio, filled into its note, slide links from its
+  // timeline (written next to the audio while recording).
+  handle('transcribe:recorded', async (request: TranscribeRecordedRequest) => {
+    const vault = getVault()
+    if (!vault) throw new VaultError('No vault is open')
+    const note = await vault.readText(request.note)
+    const audio = audioOf(note)
+    if (!audio) throw new VaultError('This transcript has no recording to transcribe')
+    const folder = request.note.split('/').slice(0, -1).join('/')
+    const timeline = await vault
+      .readAsset(request.note, timelineName(audio.split('/').pop()!))
+      .then((text) => (JSON.parse(text) as { slides: SlideMoment[] }).slides)
+      .catch(() => undefined)
+    return queueJob(
+      {
+        folder,
+        source: vault.resolve(`${folder}/${audio}`),
+        model: request.model,
+        language: request.language,
+        into: request.note,
+        timeline
+      },
+      request.note.split('/').pop()!.replace(/\.md$/, '')
+    )
+  })
+
+  function queueJob(request: Omit<FileJob, 'signal' | 'onProgress'>, name: string): string {
     const vault = getVault()
     if (!vault) throw new VaultError('No vault is open')
     const id = randomUUID()
     const abort = new AbortController()
     const job: TranscribeJob = {
       id,
-      name: path.basename(request.source),
+      name,
       folder: request.folder,
       phase: 'waiting',
       percent: 0
@@ -186,7 +227,7 @@ export function registerTranscription(
       }
     })
     return id
-  })
+  }
 
   handle('transcribe:cancel', (id: string) => {
     const entry = jobs.get(id)

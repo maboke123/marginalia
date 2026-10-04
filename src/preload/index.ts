@@ -67,7 +67,8 @@ const api: MarginaliaApi = {
       ipcRenderer.on('transcribe:install-progress', handler)
       return () => ipcRenderer.removeListener('transcribe:install-progress', handler)
     },
-    start: (folder) => invoke('record:start', folder),
+    start: (folder, transcribeLive) => invoke('record:start', folder, transcribeLive),
+    slide: (moment) => invoke('record:slide', moment),
     audio: (data) => invoke('record:audio', data),
     chunk: (chunk) => invoke('record:chunk', chunk),
     stop: () => invoke('record:stop'),
@@ -78,6 +79,7 @@ const api: MarginaliaApi = {
     },
     pickRecording: () => invoke('transcribe:pickRecording'),
     transcribeFile: (request) => invoke('transcribe:file', request),
+    transcribeRecorded: (request) => invoke('transcribe:recorded', request),
     cancelJob: (id) => invoke('transcribe:cancel', id),
     onJob: (listener) => {
       const handler = (_e: unknown, job: TranscribeJob): void => listener(job)

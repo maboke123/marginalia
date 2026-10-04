@@ -10,8 +10,14 @@ let page: Page
 const section = 'Machine Learning/B2 Decision trees'
 const row = (name: string): Locator => page.locator('.tree-row', { hasText: name })
 
-async function start(extra: Record<string, string> = {}): Promise<void> {
+async function start(
+  extra: Record<string, string> = {},
+  settings: Record<string, unknown> = {}
+): Promise<void> {
   env = await createEnv()
+  const config = path.join(env.userData, 'config.json')
+  const current = JSON.parse(await fs.readFile(config, 'utf8'))
+  await fs.writeFile(config, JSON.stringify({ ...current, settings }))
   await fs.mkdir(path.join(env.vault, section), { recursive: true })
   await makeSlides(path.join(env.vault, section, 'slides.pdf'), 3)
   ;({ app, page } = await launch(env, extra))
@@ -26,10 +32,10 @@ test.afterEach(async () => {
   await fs.rm(env.dir, { recursive: true, force: true })
 })
 
-test('a recorded lecture becomes a transcript with slide links and kept audio', async () => {
-  await start()
+test('with live transcription on, the transcript is written while recording', async () => {
+  await start({}, { transcribeLive: true })
   await page.keyboard.press('Control+Shift+R')
-  const bar = page.getByRole('status', { name: 'Recording' })
+  const bar = page.getByRole('status', { name: 'Recording', exact: true })
   await expect(bar).toContainText('Recording 00:0')
 
   // The transcript appears in the lesson and cannot be edited while it is being written.
@@ -74,7 +80,7 @@ test('a recorded lecture becomes a transcript with slide links and kept audio', 
 test('recording starts without asking, even when speech to text was missing', async () => {
   await start({ MARGINALIA_FAKE_WHISPER: 'missing' })
   await page.keyboard.press('Control+Shift+R')
-  const bar = page.getByRole('status', { name: 'Recording' })
+  const bar = page.getByRole('status', { name: 'Recording', exact: true })
   await expect(bar).toContainText('Recording 00:0')
   await expect(page.getByRole('dialog')).toHaveCount(0)
   await bar.getByRole('button', { name: 'Stop' }).click()
@@ -133,4 +139,45 @@ test('a recording file is transcribed in the background into the lesson', async 
   await job.getByRole('button', { name: 'Show transcript' }).click()
   await expect(page.locator('.cm-content')).toContainText('Spoken part 1')
   await expect(job).toBeHidden()
+})
+
+test('by default only the audio is recorded, and transcribed afterwards with slide links', async () => {
+  await start()
+  await page.keyboard.press('Control+Shift+R')
+  const bar = page.getByRole('status', { name: 'Recording', exact: true })
+  await expect(bar).toContainText('Saving the audio and which slide is open')
+  await expect(bar.getByRole('checkbox', { name: 'Live transcript' })).not.toBeChecked()
+
+  // Slide 2 from about 3 s on: the timeline gives the transcript its slide links.
+  await page.waitForTimeout(3000)
+  await page.getByRole('textbox', { name: 'Page' }).fill('2')
+  await page.getByRole('textbox', { name: 'Page' }).press('Enter')
+  await page.waitForTimeout(3500)
+  await bar.getByRole('button', { name: 'Stop' }).click()
+
+  const name = (await fs.readdir(path.join(env.vault, section))).find((f) =>
+    f.startsWith('Transcript ')
+  )!
+  const note = path.join(env.vault, section, name)
+  expect(await fs.readFile(note, 'utf8')).toContain('Not transcribed yet')
+  const timeline = (await fs.readdir(path.join(env.vault, section, 'assets'))).find((f) =>
+    f.endsWith('.json')
+  )!
+  const slides = JSON.parse(
+    await fs.readFile(path.join(env.vault, section, 'assets', timeline), 'utf8')
+  ).slides
+  expect(slides.map((s: { page: number }) => s.page)).toEqual([1, 2])
+
+  const offer = page.getByRole('status', { name: 'Recording saved' })
+  await offer.getByRole('button', { name: 'Transcribe now' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Transcribe a recording' })
+  await expect(dialog).toContainText('with links to the slides you had open')
+  await dialog.getByRole('button', { name: 'Transcribe' }).click()
+  const job = page.getByRole('status', { name: 'Transcribing' })
+  await expect(job).toContainText('Transcript ready', { timeout: 30_000 })
+
+  const text = await fs.readFile(note, 'utf8')
+  expect(text).not.toContain('Not transcribed yet')
+  expect(text).toMatch(/^# Transcript /)
+  expect(text).toMatch(/\*\*00:00\*\* · \[slide 1\]\(slides\.pdf#page=1\) Spoken part 1/)
 })

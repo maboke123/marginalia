@@ -6,13 +6,26 @@ import { lessonFolder } from './recording'
 /** What ffmpeg can read that a lecture recording is likely to be (as in main's service.ts). */
 export const MEDIA_FILE = /\.(mp4|mkv|mov|webm|avi|m4a|mp3|wav|ogg|opus|flac|aac)$/i
 
+/** A transcript note made by recording in the app (its name, as the app gives it). */
+export const isTranscript = (path: string): boolean => /(^|\/)Transcript [^/]*\.md$/.test(path)
+
+/** What is about to be transcribed: a file from outside, or a recording made in the app. */
+export type Choice =
+  { kind: 'file'; folder: string; source: string } | { kind: 'recorded'; note: string }
+
 interface FilesState {
-  /** Recording files being transcribed, and finished ones until dismissed. */
+  /** Recordings being transcribed, and finished ones until dismissed. */
   jobs: TranscribeJob[]
-  /** A file waiting for the choice between fast and accurate. */
-  choosing: { folder: string; source: string } | null
+  /** Recordings made without live transcription, offered right after they stop. */
+  offers: string[]
+  /** Waiting for the choice between fast and accurate. */
+  choosing: Choice | null
   /** Starts with a file (dropped) or asks for one; the transcript goes to `folder`. */
   transcribe(folder?: string | null, source?: string): Promise<void>
+  /** A transcript recorded in the app, from its kept audio. */
+  transcribeRecorded(note: string): void
+  offer(note: string): void
+  dismissOffer(note: string): void
   confirm(model: 'small' | 'accurate', language: string): Promise<void>
   cancelChoice(): void
   cancel(id: string): void
@@ -28,6 +41,7 @@ export const useFiles = create<FilesState>((set, get) => {
 
   return {
     jobs: [],
+    offers: [],
     choosing: null,
 
     async transcribe(folder, source) {
@@ -39,8 +53,16 @@ export const useFiles = create<FilesState>((set, get) => {
       }
       const file = source ?? (await window.api.transcribe.pickRecording())
       if (!file) return
-      set({ choosing: { folder: target, source: file } })
+      set({ choosing: { kind: 'file', folder: target, source: file } })
     },
+
+    transcribeRecorded(note) {
+      get().dismissOffer(note)
+      set({ choosing: { kind: 'recorded', note } })
+    },
+
+    offer: (note) => set({ offers: [...get().offers.filter((n) => n !== note), note] }),
+    dismissOffer: (note) => set({ offers: get().offers.filter((n) => n !== note) }),
 
     async confirm(model, language) {
       const choice = get().choosing
@@ -49,7 +71,12 @@ export const useFiles = create<FilesState>((set, get) => {
       const app = useApp.getState()
       void app.saveSettings({ transcribeModel: model })
       try {
-        await window.api.transcribe.transcribeFile({ ...choice, model, language })
+        if (choice.kind === 'file') {
+          const { folder, source } = choice
+          await window.api.transcribe.transcribeFile({ folder, source, model, language })
+        } else {
+          await window.api.transcribe.transcribeRecorded({ note: choice.note, model, language })
+        }
       } catch (err) {
         app.showError(`Could not transcribe: ${(err as Error).message}`)
       }

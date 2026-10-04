@@ -110,7 +110,9 @@ export interface MarginaliaApi {
     install(parts: TranscribePart[]): Promise<void>
     onInstallProgress(listener: (part: TranscribePart, done: number) => void): () => void
     /** Starts a live recording into a new transcript note in `folder`; returns its path. */
-    start(folder: string): Promise<string>
+    start(folder: string, transcribeLive: boolean): Promise<string>
+    /** The slide I opened, from this moment of the recording on. */
+    slide(moment: { at: number; pdf: string; page: number }): Promise<void>
     /** Compressed audio of the recording, kept next to the transcript. */
     audio(data: Uint8Array): Promise<void>
     chunk(chunk: LiveChunk): Promise<void>
@@ -121,6 +123,8 @@ export interface MarginaliaApi {
     pickRecording(): Promise<string | null>
     /** Queues a recording file for transcription; returns the job id. Progress via onJob. */
     transcribeFile(request: TranscribeFileRequest): Promise<string>
+    /** Queues a transcript recorded without live transcription; returns the job id. */
+    transcribeRecorded(request: TranscribeRecordedRequest): Promise<string>
     cancelJob(id: string): Promise<void>
     onJob(listener: (job: TranscribeJob) => void): () => void
   }
@@ -200,6 +204,14 @@ export interface TranscribeFileRequest {
   source: string
   model: 'small' | 'accurate'
   /** "nl", "en" or "auto". */
+  language: string
+}
+
+/** A transcript recorded without live transcription, to be transcribed from its audio. */
+export interface TranscribeRecordedRequest {
+  /** Vault path of the transcript note. */
+  note: string
+  model: 'small' | 'accurate'
   language: string
 }
 

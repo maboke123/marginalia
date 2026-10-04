@@ -6,7 +6,16 @@ import type { TranscribeJobPhase } from '../../shared/types'
 import { VaultError } from '../vault/names'
 import { timestamp, type Vault } from '../vault/vault'
 import type { Model, Transcriber } from './engine'
-import { paragraphs, transcriptHeader, transcriptName, transcriptParagraph } from './transcript'
+import {
+  headerOf,
+  paragraphs,
+  slideAt,
+  slideMarker,
+  transcriptHeader,
+  transcriptName,
+  transcriptParagraph,
+  type SlideMoment
+} from './transcript'
 
 export interface FileJob {
   folder: string
@@ -14,6 +23,10 @@ export interface FileJob {
   source: string
   model: Model
   language: string
+  /** A recorded transcript to fill in, instead of a new note (its audio is the source). */
+  into?: string
+  /** Which slide was open when, for slide links in the paragraphs. */
+  timeline?: SlideMoment[]
   signal: AbortSignal
   onProgress(phase: TranscribeJobPhase, percent: number): void
 }
@@ -96,15 +109,27 @@ export async function transcribeFile(
       onProgress: (p) => job.onProgress('transcribing', p)
     })
     job.onProgress('writing', 100)
-    const transcript = await vault.createNote(job.folder, transcriptName(now))
-    const audio = await vault.copyAsset(transcript, `recording-${timestamp(now)}.webm`, opus)
-    const header = transcriptHeader({
-      date: now,
-      source: `Transcribed from ${path.basename(job.source)}. Times are from the start of the recording.`,
-      audio
-    })
+    let transcript: string
+    let header: string
+    if (job.into) {
+      // A recording made in the app: its note and audio exist; the text replaces the rest.
+      transcript = job.into
+      header = headerOf(await vault.readText(transcript)) ?? ''
+    } else {
+      transcript = await vault.createNote(job.folder, transcriptName(now))
+      const audio = await vault.copyAsset(transcript, `recording-${timestamp(now)}.webm`, opus)
+      header = transcriptHeader({
+        date: now,
+        source: `Transcribed from ${path.basename(job.source)}. Times are from the start of the recording.`,
+        audio
+      })
+    }
     const body = paragraphs(segments)
-      .map((p) => transcriptParagraph(p.at, p.segments))
+      .map((p) => {
+        const slide = job.timeline && slideAt(job.timeline, p.at)
+        const marker = slide ? slideMarker(transcript, slide.pdf, slide.page) : undefined
+        return transcriptParagraph(p.at, p.segments, marker)
+      })
       .join('')
     await vault.writeText(transcript, header + body)
     return transcript

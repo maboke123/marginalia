@@ -6,6 +6,7 @@ import { findNode, isFolder, parentOf } from '../lib/tree'
 import { pageText } from '../pdf/text'
 import { useApp } from '../store'
 import { toPcm16, type Chunk } from './chunker'
+import { useFiles } from './files'
 import { startMicrophone, type Microphone } from './recorder'
 
 /** What a live recording needs; these ship with the app, so normally nothing is missing. */
@@ -51,6 +52,30 @@ async function slideNow(transcript: string): Promise<{ marker?: string; prompt?:
 }
 
 let microphone: Microphone | null = null
+// Whether every part of the recording was transcribed live.
+let complete = false
+let stopFollowing = (): void => {}
+
+/**
+ * Tells main which slide is open, from when, during a recording: the timeline gives the
+ * transcript its slide links when it is transcribed afterwards.
+ */
+function followSlides(startedAt: number): () => void {
+  let last = ''
+  const note = (): void => {
+    const view = useApp.getState().pdfView
+    if (!view) return
+    const key = `${view.path}#${view.page}`
+    if (key === last) return
+    last = key
+    const at = Math.round((Date.now() - startedAt) / 100) / 10
+    void window.api.transcribe.slide({ at, pdf: view.path, page: view.page }).catch(() => undefined)
+  }
+  note()
+  return useApp.subscribe((state, previous) => {
+    if (state.pdfView !== previous.pdfView) note()
+  })
+}
 
 export const useRecording = create<RecordingState>((set, get) => {
   window.api.transcribe.onStatus((status) => set({ status }))
@@ -104,6 +129,12 @@ export const useRecording = create<RecordingState>((set, get) => {
       let session: Promise<string> | null = null
       let slide: Promise<{ marker?: string; prompt?: string }> = Promise.resolve({})
       const send = async (chunk: Chunk): Promise<void> => {
+        // With live transcription off (the default, it saves battery) only audio is kept, and
+        // the whole recording is transcribed afterwards.
+        if (!useApp.getState().settings.transcribeLive) {
+          complete = false
+          return
+        }
         const transcript = await session!
         const { marker, prompt } = await slide
         slide = slideNow(transcript)
@@ -129,10 +160,13 @@ export const useRecording = create<RecordingState>((set, get) => {
         return
       }
       try {
-        session = window.api.transcribe.start(folder)
+        complete = useApp.getState().settings.transcribeLive
+        session = window.api.transcribe.start(folder, complete)
         const transcript = await session
         slide = slideNow(transcript)
-        set({ active: { transcript, startedAt: Date.now() }, status: null })
+        const startedAt = Date.now()
+        set({ active: { transcript, startedAt }, status: null })
+        stopFollowing = followSlides(startedAt)
         await refresh()
       } catch (err) {
         await microphone.stop().catch(() => undefined)
@@ -144,11 +178,16 @@ export const useRecording = create<RecordingState>((set, get) => {
     async stop() {
       if (!get().active || get().stopping) return
       set({ stopping: true })
+      const transcript = get().active!.transcript
       try {
+        stopFollowing()
         await microphone?.stop()
         microphone = null
         await window.api.transcribe.stop()
-        useApp.getState().showNotice('Recording stopped; the transcript is complete')
+        if (complete) useApp.getState().showNotice('Recording stopped; the transcript is complete')
+        // Not (fully) transcribed live: offer to do it now, or later from the note's menu.
+        else useFiles.getState().offer(transcript)
+        await useApp.getState().refresh()
       } catch (err) {
         useApp.getState().showError(`Recording did not stop cleanly: ${(err as Error).message}`)
       } finally {

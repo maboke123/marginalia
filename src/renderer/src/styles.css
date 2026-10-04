@@ -2457,3 +2457,10 @@ h2 {
   gap: 8px;
   margin-top: 20px;
 }
+
+.recording-live {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}

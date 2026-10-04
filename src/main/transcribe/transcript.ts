@@ -71,3 +71,51 @@ export function paragraphs(
   }
   return out
 }
+
+/** Stands in a transcript recorded without live transcription, until it is transcribed. */
+export const NOT_TRANSCRIBED =
+  '*Not transcribed yet. Right-click this note in the sidebar and choose "Transcribe the recording".*'
+
+/** Which slide was open from when on, during a recording. */
+export interface SlideMoment {
+  /** Seconds from the start of the recording. */
+  at: number
+  /** Vault path of the PDF. */
+  pdf: string
+  page: number
+}
+
+/** The slide open at `seconds`, if any was. */
+export function slideAt(timeline: SlideMoment[], seconds: number): SlideMoment | null {
+  let current: SlideMoment | null = null
+  for (const moment of timeline) {
+    if (moment.at > seconds) break
+    current = moment
+  }
+  return current
+}
+
+/** `[slide 14](B2%20trees.pdf#page=14)`, relative to the note, like links in notes. */
+export function slideMarker(note: string, pdf: string, page: number): string {
+  const from = note.split('/').slice(0, -1)
+  const to = pdf.split('/')
+  let common = 0
+  while (common < from.length && common < to.length - 1 && from[common] === to[common]) common++
+  const href = [...from.slice(common).map(() => '..'), ...to.slice(common)]
+    .map(encodeURIComponent)
+    .join('/')
+  return `[slide ${page}](${href}#page=${page})`
+}
+
+/** The header of a transcript note: everything up to and including its "Audio:" line. */
+export function headerOf(note: string): string | null {
+  const lines = note.split('\n')
+  const audio = lines.findIndex((l) => l.startsWith('Audio: '))
+  return audio === -1 ? null : lines.slice(0, audio + 1).join('\n') + '\n'
+}
+
+/** The kept audio a transcript links to, relative to the note: `assets/recording-....webm`. */
+export function audioOf(note: string): string | null {
+  const m = /^Audio: \[[^\]]*\]\(([^)]+)\)/m.exec(note)
+  return m ? decodeURI(m[1]) : null
+}

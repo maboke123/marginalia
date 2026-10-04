@@ -19,6 +19,7 @@ export function RecordingBar(): React.JSX.Element | null {
   const stopping = useRecording((s) => s.stopping)
   const preparing = useRecording((s) => s.preparing)
   const language = useApp((s) => s.settings.transcribeLanguage)
+  const live = useApp((s) => s.settings.transcribeLive)
   const [now, setNow] = useState(() => Date.now())
 
   useEffect(() => {
@@ -38,10 +39,12 @@ export function RecordingBar(): React.JSX.Element | null {
   const elapsed = (now - active.startedAt) / 1000
   const pending = status?.pending ?? 0
   const progress = stopping
-    ? 'Finishing the transcript...'
-    : status?.transcribedTo
-      ? `Transcript up to ${clock(status.transcribedTo)}${pending > 1 ? `, ${pending} parts waiting` : ''}`
-      : 'The first text appears after about half a minute'
+    ? 'Finishing...'
+    : !live
+      ? 'Saving the audio and which slide is open; transcribe it afterwards'
+      : status?.transcribedTo
+        ? `Transcript up to ${clock(status.transcribedTo)}${pending > 1 ? `, ${pending} parts waiting` : ''}`
+        : 'The first text appears after about half a minute'
 
   return (
     <div className="recording-bar" role="status" aria-label="Recording">
@@ -53,6 +56,19 @@ export function RecordingBar(): React.JSX.Element | null {
       <span className={status?.error ? 'recording-progress error' : 'recording-progress'}>
         {status?.error ? `Transcription failed: ${status.error}` : progress}
       </span>
+      <label
+        className="recording-live"
+        title="Transcribe while recording. Uses more battery and can make the laptop warm."
+      >
+        <input
+          type="checkbox"
+          checked={live}
+          onChange={(e) =>
+            void useApp.getState().saveSettings({ transcribeLive: e.target.checked })
+          }
+        />
+        Live transcript
+      </label>
       <select
         className="toolbar-select"
         aria-label="Spoken language"
