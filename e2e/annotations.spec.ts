@@ -273,6 +273,32 @@ test('text boxes take a colour from the toolbar', async () => {
   await expect(box).toHaveCSS('color', 'rgb(207, 34, 46)')
 })
 
+test('selected slide text goes away with Escape or a click elsewhere', async () => {
+  await openSlides()
+  const span = firstPage().locator('.textLayer span', { hasText: 'Information gain' })
+  const select = async (): Promise<void> => {
+    const box = (await span.boundingBox())!
+    await page.mouse.move(box.x + 1, box.y + box.height / 2)
+    await page.mouse.down()
+    await page.mouse.move(box.x + box.width * 0.45, box.y + box.height / 2, { steps: 8 })
+    await page.mouse.up()
+    await expect(page.locator('.selection-action')).toBeVisible()
+  }
+  const selected = (): Promise<string> => page.evaluate(() => String(window.getSelection()))
+
+  await select()
+  await page.keyboard.press('Escape')
+  await expect(page.locator('.selection-action')).toBeHidden()
+  expect(await selected()).toBe('')
+
+  // A click in the margin, where there is no slide text.
+  await select()
+  const sheet = (await firstPage().boundingBox())!
+  await page.mouse.click(sheet.x + sheet.width * 0.95, sheet.y + sheet.height * 0.5)
+  await expect(page.locator('.selection-action')).toBeHidden()
+  expect(await selected()).toBe('')
+})
+
 test('selected slide text becomes a highlight', async () => {
   await openSlides()
   const span = firstPage().locator('.textLayer span', { hasText: 'Information gain' })

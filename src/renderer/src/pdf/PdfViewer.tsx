@@ -276,6 +276,15 @@ function Document({
     setSelectionAt({ x: last.right - host.left, y: last.bottom - host.top + 6 })
   }, [activeDoc, path])
 
+  /** Ends a selection of slide text in this viewer, together with its Highlight buttons. */
+  const clearTextSelection = useCallback((): void => {
+    const layer = selectedTextLayer()
+    if (!layer || !viewerRef.current?.contains(layer)) return
+    window.getSelection()?.removeAllRanges()
+    setSelectionAt(null)
+    useApp.getState().setPdfSelection(null)
+  }, [])
+
   useEffect(() => () => useApp.getState().setPdfSelection(null), [])
 
   useEffect(() => {
@@ -347,6 +356,7 @@ function Document({
     else if (state && toolKey) setTool(toolKey)
     else if (e.key === 'Escape') {
       setTool('select')
+      clearTextSelection()
       state?.select(null)
     } else if (state?.selection && (e.key === 'Delete' || e.key === 'Backspace')) {
       const { page, kind, id } = state.selection
@@ -487,6 +497,11 @@ function Document({
           onScroll={onScroll}
           onKeyDown={onKeyDown}
           onPaste={onPaste}
+          onPointerDownCapture={(e) => {
+            // Most of the page cannot be selected (user-select: none), and a click there
+            // would leave an old selection standing. A click on slide text starts a new one.
+            if (!(e.target as Element).closest('.textLayer span')) clearTextSelection()
+          }}
           onPointerUp={() => setTimeout(updateSelectionAction)}
         >
           <div className="pdf-content" style={{ height: layout.totalHeight, width: contentWidth }}>
