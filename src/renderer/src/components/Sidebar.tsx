@@ -4,6 +4,7 @@ import { draggingFiles, importDroppedFiles } from '../lib/drop'
 import { childrenOf, displayOrder, isFolder, isWithin, visibleRows, type Row } from '../lib/tree'
 import { useApp } from '../store'
 import { ContextMenu, type MenuItem } from './ContextMenu'
+import { FeedbackBox } from './FeedbackBox'
 import { Icon } from './Icon'
 import { TreeRow, type DropZone } from './TreeRow'
 
@@ -304,6 +305,7 @@ export function Sidebar(): React.JSX.Element {
         )}
       </div>
 
+      <FeedbackBox />
       {menu && <ContextMenu {...menu} onClose={closeMenu} />}
     </aside>
   )

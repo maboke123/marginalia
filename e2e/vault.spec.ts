@@ -98,6 +98,22 @@ test('a note is shown right under the PDF it belongs to', async () => {
   expect(await order()).toContain('  A first look')
 })
 
+test('feedback from the sidebar is saved with what was open', async () => {
+  await row('Machine Learning').click()
+  await row('B2 Decision trees').click()
+  await row('Summary').click()
+  await page.getByRole('button', { name: 'Feedback' }).click()
+  await page.getByPlaceholder('What went wrong, or what should change?').fill('Sizes are too big')
+  await page.screenshot({ path: path.join('test-results', 'feedback.png') })
+  await page.keyboard.press('Control+Enter')
+  await expect(page.getByRole('dialog', { name: 'Feedback' })).toBeHidden()
+
+  const saved = await fs.readFile(path.join(env.userData, 'feedback.md'), 'utf8')
+  expect(saved).toMatch(
+    /- \[ \] \*\*\d{4}-\d\d-\d\d \d\d:\d\d\*\* · Machine Learning\/B2 Decision trees\/Summary\.md\n {2}Sizes are too big\n/
+  )
+})
+
 test('a notebook created in the app appears on disk', async () => {
   await page.getByRole('button', { name: 'New notebook' }).first().click()
   const input = page.locator('.rename-input')

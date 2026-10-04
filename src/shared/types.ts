@@ -133,6 +133,10 @@ export interface MarginaliaApi {
     /** The window is about to close; save everything, then call readyToClose(). */
     onBeforeClose(listener: () => void): () => void
     readyToClose(): void
+    /** Adds an entry to feedback.md in the app's data folder. */
+    saveFeedback(entry: FeedbackEntry): Promise<void>
+    /** Opens feedback.md in the default editor. */
+    openFeedback(): Promise<void>
   }
   files: {
     /** Absolute path of a file dropped from Explorer. */
@@ -143,6 +147,12 @@ export interface MarginaliaApi {
 export interface TerminalSession {
   /** Recent output of a session that was already running, to redraw the screen. */
   output: string
+}
+
+export interface FeedbackEntry {
+  text: string
+  /** What was open, e.g. "ML/les_3/B2 Decision trees.pdf, page 31". */
+  context?: string
 }
 
 export interface ExportedPdf {

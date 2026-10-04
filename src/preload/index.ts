@@ -95,7 +95,9 @@ const api: MarginaliaApi = {
       ipcRenderer.on('app:before-close', handler)
       return () => ipcRenderer.removeListener('app:before-close', handler)
     },
-    readyToClose: () => ipcRenderer.send('app:ready-to-close')
+    readyToClose: () => ipcRenderer.send('app:ready-to-close'),
+    saveFeedback: (entry) => invoke('app:feedback', entry),
+    openFeedback: () => invoke('app:openFeedback')
   },
   files: {
     pathFor: (file) => webUtils.getPathForFile(file)

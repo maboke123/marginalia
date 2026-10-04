@@ -4,9 +4,10 @@ import { promises as fs } from 'fs'
 import path from 'path'
 import type { AnnotationFile } from '../shared/annotations'
 import { settingsFrom, type AppSettings } from '../shared/settings'
-import type { IpcResult, NotebookColor, Position, VaultInfo } from '../shared/types'
+import type { FeedbackEntry, IpcResult, NotebookColor, Position, VaultInfo } from '../shared/types'
 import { ConfigStore } from './config'
 import { exportAnnotated } from './export/exportPdf'
+import { appendFeedback, ensureFeedbackFile } from './feedback'
 import { writeFileAtomic } from './vault/atomic'
 import { SearchIndex } from './search/searchIndex'
 import { VaultError } from './vault/names'
@@ -65,6 +66,15 @@ export function registerIpc(
     if (!vault) throw new VaultError('No vault is open')
     return vault
   }
+
+  // Things that went wrong, kept with the app's data so it works with any vault open.
+  const feedbackFile = path.join(dataDir, 'feedback.md')
+  handle('app:feedback', (entry: FeedbackEntry) => appendFeedback(feedbackFile, entry))
+  handle('app:openFeedback', async () => {
+    await ensureFeedbackFile(feedbackFile)
+    const error = await shell.openPath(feedbackFile)
+    if (error) throw new VaultError(`Could not open feedback.md: ${error}`)
+  })
 
   handle('settings:get', async () => (await config.read()).settings)
   handle('settings:set', async (change: Partial<AppSettings>) => {
