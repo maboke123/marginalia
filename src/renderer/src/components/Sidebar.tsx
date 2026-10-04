@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { NOTEBOOK_COLORS, type Position, type VaultNode } from '../../../shared/types'
 import { draggingFiles, importDroppedFiles } from '../lib/drop'
-import { childrenOf, isFolder, isWithin, visibleRows, type Row } from '../lib/tree'
+import { childrenOf, displayOrder, isFolder, isWithin, visibleRows, type Row } from '../lib/tree'
 import { useApp } from '../store'
 import { ContextMenu, type MenuItem } from './ContextMenu'
 import { Icon } from './Icon'
@@ -20,8 +20,8 @@ interface DropTarget {
 
 export function Sidebar(): React.JSX.Element {
   const app = useApp()
-  const { vault, nodes, expanded, selected, activeFile, renaming, colors } = app
-  const rows = useMemo(() => visibleRows(nodes, expanded), [nodes, expanded])
+  const { vault, nodes, expanded, selected, activeFile, renaming, colors, links } = app
+  const rows = useMemo(() => visibleRows(nodes, expanded, links), [nodes, expanded, links])
   const treeRef = useRef<HTMLDivElement>(null)
   const dragged = useRef<VaultNode | null>(null)
   const [drop, setDrop] = useState<DropTarget | null>(null)
@@ -152,7 +152,8 @@ export function Sidebar(): React.JSX.Element {
 
   function dropTarget(row: Row, zone: DropZone): { parent: string; before: Position } {
     if (zone === 'into') return { parent: row.node.path, before: undefined }
-    const siblings = childrenOf(nodes, row.parent)
+    // In the order shown, so dropping after a PDF lands below its note too.
+    const siblings = displayOrder(childrenOf(nodes, row.parent), links)
     const i = siblings.findIndex((n) => n.path === row.node.path)
     const before = zone === 'before' ? row.node.name : (siblings[i + 1]?.name ?? null)
     return { parent: row.parent, before }

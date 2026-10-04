@@ -78,6 +78,8 @@ interface AppState {
   ready: boolean
   nodes: VaultNode[]
   colors: Record<string, NotebookColor>
+  /** PDF path -> its linked note, so the sidebar can show the note under its PDF. */
+  links: Record<string, string>
   expanded: Record<string, boolean>
   selected: string | null
   /** The file shown when not in lecture mode. */
@@ -257,6 +259,12 @@ export const useApp = create<AppState>((set, get) => {
    * "<pdf name>.md" next to it; else, when the PDF is alone in its folder, the note already
    * there; else a new "<pdf name>.md". The choice is remembered (in .marginalia/state.json).
    */
+  /** Links a note to a PDF; the sidebar then shows it under that PDF. */
+  async function link(pdf: string, note: string): Promise<void> {
+    await attempt(() => api.setLinkedNote(pdf, note))
+    if (get().links[pdf] !== note) set({ links: { ...get().links, [pdf]: note } })
+  }
+
   async function noteFor(pdf: string): Promise<string | null> {
     const linked = await attempt(() => api.linkedNote(pdf))
     if (linked && findNode(get().nodes, linked)) return linked
@@ -276,7 +284,7 @@ export const useApp = create<AppState>((set, get) => {
       note = (await attempt(() => api.createNote(folder, base))) ?? null
       await get().refresh()
     }
-    if (note) await attempt(() => api.setLinkedNote(pdf, note))
+    if (note) await link(pdf, note)
     return note
   }
 
@@ -290,6 +298,7 @@ export const useApp = create<AppState>((set, get) => {
     ready: false,
     nodes: [],
     colors: {},
+    links: {},
     expanded: {},
     selected: null,
     activeFile: null,
@@ -359,6 +368,7 @@ export const useApp = create<AppState>((set, get) => {
         recentFiles: recentFiles.filter((p) => findNode(tree.nodes, p)),
         nodes: tree.nodes,
         colors: tree.colors,
+        links: tree.notes,
         selected: keep(selected),
         activeFile: keep(activeFile),
         slidesFile: keep(slidesFile),
@@ -394,7 +404,7 @@ export const useApp = create<AppState>((set, get) => {
         const note = await noteFor(path)
         if (note) set({ summaryFile: note })
       } else if (slidesFile) {
-        await attempt(() => api.setLinkedNote(slidesFile, path))
+        await link(slidesFile, path)
       }
     },
 

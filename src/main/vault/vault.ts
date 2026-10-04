@@ -157,11 +157,12 @@ export class Vault {
   }
 
   async tree(): Promise<VaultTree> {
-    const [nodes, settings] = await Promise.all([
+    const [nodes, settings, state] = await Promise.all([
       this.readDir(this.root, 0),
-      this.readData<VaultSettings>(SETTINGS_FILE).catch((): VaultSettings => ({}))
+      this.readData<VaultSettings>(SETTINGS_FILE).catch((): VaultSettings => ({})),
+      this.readState().catch((): VaultState => ({}))
     ])
-    return { nodes, colors: settings.notebookColors ?? {} }
+    return { nodes, colors: settings.notebookColors ?? {}, notes: state.notes ?? {} }
   }
 
   private async readDir(dir: string, depth: number): Promise<VaultNode[]> {

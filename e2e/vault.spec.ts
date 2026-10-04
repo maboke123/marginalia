@@ -1,7 +1,7 @@
 import { expect, test, type ElectronApplication, type Locator, type Page } from '@playwright/test'
 import { promises as fs } from 'fs'
 import path from 'path'
-import { createEnv, launch, type TestEnv } from './helpers'
+import { createEnv, launch, makeSlides, type TestEnv } from './helpers'
 
 let env: TestEnv
 let vault: string
@@ -32,6 +32,59 @@ test('reopens the last vault and shows its notebooks', async () => {
   await row('B2 Decision trees').click()
   await expect(row('Summary')).toBeVisible()
   await expect(row('slides.pdf')).toBeVisible()
+})
+
+test('a note is shown right under the PDF it belongs to', async () => {
+  const section = path.join(vault, 'Machine Learning', 'B2 Decision trees')
+  await makeSlides(path.join(section, 'slides.pdf'), 3)
+  await fs.writeFile(path.join(section, 'A first look.md'), '')
+  await row('Machine Learning').click()
+  await row('B2 Decision trees').click()
+  const order = (): Promise<string[]> =>
+    page
+      .locator('.tree-row')
+      .evaluateAll((rows) =>
+        rows.map((r) => `${r.classList.contains('paired') ? '  ' : ''}${r.textContent}`)
+      )
+  expect(await order()).toEqual([
+    'Machine Learning',
+    'B2 Decision trees',
+    'A first look',
+    'slides.pdf',
+    'Summary',
+    'B3 Ensembles'
+  ])
+
+  // Lecture mode links the lone PDF to a note; from then on that note sits under it.
+  await row('slides.pdf').click()
+  await page.getByRole('button', { name: 'Lecture mode' }).click()
+  await expect(page.locator('.sidebar')).toBeHidden()
+  await page.getByRole('button', { name: 'Lecture mode' }).click()
+  await expect(page.locator('.tree-row.paired')).toHaveText('A first look')
+  expect(await order()).toEqual([
+    'Machine Learning',
+    'B2 Decision trees',
+    'slides.pdf',
+    '  A first look',
+    'Summary',
+    'B3 Ensembles'
+  ])
+
+  // A note with the same name as a PDF goes under it without any linking.
+  await makeSlides(path.join(section, 'Exercises.pdf'), 1)
+  await fs.writeFile(path.join(section, 'exercises.md'), '')
+  await expect(page.locator('.tree-row.paired')).toHaveCount(2)
+  expect(await order()).toEqual([
+    'Machine Learning',
+    'B2 Decision trees',
+    'Exercises.pdf',
+    '  exercises',
+    'slides.pdf',
+    '  A first look',
+    'Summary',
+    'B3 Ensembles'
+  ])
+  await page.locator('.sidebar').screenshot({ path: path.join('test-results', 'paired-notes.png') })
 })
 
 test('a notebook created in the app appears on disk', async () => {

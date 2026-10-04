@@ -38,6 +38,7 @@ export function TreeRow(props: Props): React.JSX.Element {
   if (selected) classes.push('selected')
   if (active) classes.push('active')
   if (dropZone) classes.push(`drop-${dropZone}`)
+  if (row.pairedWith) classes.push('paired')
 
   return (
     <div
@@ -46,7 +47,8 @@ export function TreeRow(props: Props): React.JSX.Element {
       aria-selected={selected}
       aria-expanded={folder ? expanded : undefined}
       data-path={node.path}
-      style={{ paddingLeft: 8 + depth * 16 }}
+      title={row.pairedWith ? `Note for ${row.pairedWith.split('/').pop()}` : undefined}
+      style={{ paddingLeft: 8 + depth * 16, ['--depth' as string]: depth }}
       draggable={!renaming}
       onClick={props.onClick}
       onContextMenu={props.onContextMenu}
@@ -55,6 +57,7 @@ export function TreeRow(props: Props): React.JSX.Element {
       onDrop={props.onDrop}
       onDragEnd={props.onDragEnd}
     >
+      {row.pairedWith && <span className="tree-pair-line" aria-hidden />}
       <span className={expanded ? 'tree-chevron open' : 'tree-chevron'}>
         {folder && node.children!.length > 0 && <Icon name="chevron" />}
       </span>

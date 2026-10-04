@@ -31,6 +31,8 @@ export interface VaultTree {
   nodes: VaultNode[]
   /** Notebook name -> colour name. */
   colors: Record<string, NotebookColor>
+  /** PDF path -> the note linked to it in lecture mode. */
+  notes: Record<string, string>
 }
 
 export const NOTEBOOK_COLORS = [

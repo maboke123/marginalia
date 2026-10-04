@@ -304,6 +304,19 @@ h2 {
   color: var(--text-muted);
 }
 
+/* A note shown under its PDF: an elbow from the PDF's icon to the note's. */
+.tree-pair-line {
+  position: absolute;
+  top: -4px;
+  left: calc(var(--depth) * 16px + 18px);
+  width: 6px;
+  height: calc(var(--row-height) / 2 + 4px);
+  border-bottom: 1px solid var(--border-strong);
+  border-left: 1px solid var(--border-strong);
+  border-bottom-left-radius: 3px;
+  pointer-events: none;
+}
+
 .tree-label {
   overflow: hidden;
   white-space: nowrap;
