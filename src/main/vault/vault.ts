@@ -371,10 +371,36 @@ export class Vault {
     }
     const dir = path.dirname(abs)
     const target = path.join(dir, name)
+    // A note paired with the PDF by its name keeps that name; a note linked under another
+    // name keeps its own (the link follows the rename).
+    const stem = (n: string): string => n.replace(/\.(md|pdf)$/i, '')
+    const paired = !isDir && isPdf(abs) ? await this.pairedNote(abs) : null
+    const note =
+      paired && stem(path.basename(paired)).toLowerCase() === stem(oldName).toLowerCase()
+        ? paired
+        : null
+    const noteTarget = note && path.join(dir, `${stem(name)}.md`)
+    const caseOnly = (a: string, b: string): boolean => a.toLowerCase() === b.toLowerCase()
+    if (note && noteTarget && !caseOnly(note, noteTarget) && (await exists(noteTarget))) {
+      throw new VaultError(`"${path.basename(noteTarget)}" already exists`)
+    }
     await this.moveEntry(abs, target, isDir)
-    await updateOrder(dir, (names) => names.map((n) => (n === oldName ? name : n)))
+    if (note && noteTarget) {
+      try {
+        await this.moveEntry(note, noteTarget, false)
+      } catch (err) {
+        await this.moveEntry(target, abs, false)
+        throw err
+      }
+    }
+    const renamed = new Map([[oldName, name]])
+    if (note && noteTarget) renamed.set(path.basename(note), path.basename(noteTarget))
+    await updateOrder(dir, (names) => names.map((n) => renamed.get(n) ?? n))
     if (isDir && dir === this.root) await this.renameColor(oldName, name)
     await this.remapState(toRel(this.root, abs), toRel(this.root, target))
+    if (note && noteTarget) {
+      await this.remapState(toRel(this.root, note), toRel(this.root, noteTarget))
+    }
     return toRel(this.root, target)
   }
 

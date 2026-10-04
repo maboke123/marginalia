@@ -230,6 +230,36 @@ describe('move', () => {
     expect(moved.pages['2'].images!.map((im) => im.src)).toEqual(['assets/a-2.png', 'assets/b.png'])
   })
 
+  it('renames a same-named note with its PDF, but not a note linked under its own name', async () => {
+    await write('ML/B2/Decision trees.pdf', 'pdf')
+    await write('ML/B2/decision trees.md', 'same name')
+    await write('ML/B2/lecture.pdf', 'pdf')
+    await write('ML/B2/Summary.md', 'linked')
+    await vault.setLinkedNote('ML/B2/lecture.pdf', 'ML/B2/Summary.md')
+
+    expect(await vault.rename('ML/B2/Decision trees.pdf', 'B2 Decision trees')).toBe(
+      'ML/B2/B2 Decision trees.pdf'
+    )
+    await vault.rename('ML/B2/lecture.pdf', 'Lecture B2.pdf')
+
+    expect(await list('ML/B2')).toEqual([
+      'B2 Decision trees.md',
+      'B2 Decision trees.pdf',
+      'Lecture B2.pdf',
+      'Summary.md'
+    ])
+    expect(await vault.linkedNote('ML/B2/Lecture B2.pdf')).toBe('ML/B2/Summary.md')
+  })
+
+  it('renames neither when the note name is taken', async () => {
+    await write('ML/B2/slides.pdf', 'pdf')
+    await write('ML/B2/slides.md', 'mine')
+    await write('ML/B2/B2.md', 'other')
+
+    await expect(vault.rename('ML/B2/slides.pdf', 'B2')).rejects.toThrow('"B2.md" already exists')
+    expect(await list('ML/B2')).toEqual(['B2.md', 'slides.md', 'slides.pdf'])
+  })
+
   it('takes the note that belongs to a PDF along', async () => {
     await write('ML/B2/slides.pdf', 'pdf')
     await write('ML/B2/slides.md', 'same name')

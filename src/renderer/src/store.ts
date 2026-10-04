@@ -520,9 +520,20 @@ export const useApp = create<AppState>((set, get) => {
       set({ renaming: null })
       const node = findNode(get().nodes, path)
       if (!node || name.trim() === '' || name === node.name) return
+      // Main renames a note paired by name along with its PDF; open panes follow both.
+      const stem = (n: string): string => n.replace(/\.(md|pdf)$/i, '').toLowerCase()
+      const paired = pairNotes(childrenOf(get().nodes, parentOf(path)), get().links).get(path)
+      const note = paired && stem(paired.name) === stem(node.name) ? paired : undefined
       const to = await attempt(() => api.rename(path, name))
       if (!to) return
       followMove(path, to)
+      if (note) {
+        const base = to
+          .split('/')
+          .pop()!
+          .replace(/\.pdf$/i, '')
+        followMove(note.path, `${parentOf(note.path)}/${base}.md`)
+      }
       await get().refresh()
     },
 
