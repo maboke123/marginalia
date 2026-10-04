@@ -71,15 +71,12 @@ test('a recorded lecture becomes a transcript with slide links and kept audio', 
   expect(log).toContain('Transcripts of this lesson')
 })
 
-test('the first recording downloads the speech model after asking', async () => {
+test('recording starts without asking, even when speech to text was missing', async () => {
   await start({ MARGINALIA_FAKE_WHISPER: 'missing' })
   await page.keyboard.press('Control+Shift+R')
-  const dialog = page.getByRole('dialog', { name: 'Set up speech to text' })
-  await expect(dialog).toContainText('212 MB')
-  await dialog.getByRole('button', { name: 'Download and start recording' }).click()
-  await expect(dialog).toBeHidden()
   const bar = page.getByRole('status', { name: 'Recording' })
-  await expect(bar).toBeVisible()
+  await expect(bar).toContainText('Recording 00:0')
+  await expect(page.getByRole('dialog')).toHaveCount(0)
   await bar.getByRole('button', { name: 'Stop' }).click()
   await expect(bar).toBeHidden()
 })

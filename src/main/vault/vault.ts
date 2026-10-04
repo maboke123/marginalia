@@ -221,6 +221,15 @@ export class Vault {
     return `${ASSETS_DIR}/${name}`
   }
 
+  /** Copies a file from outside into the assets folder next to `nearRel`, never overwriting. */
+  async copyAsset(nearRel: string, name: string, source: string): Promise<string> {
+    if (!/^[\w.-]+$/.test(name)) throw new VaultError(`Bad asset name: ${name}`)
+    const dir = path.join(path.dirname(this.resolveItem(nearRel)), ASSETS_DIR)
+    await fs.mkdir(dir, { recursive: true })
+    await fs.copyFile(source, path.join(dir, name), fsConstants.COPYFILE_EXCL)
+    return `${ASSETS_DIR}/${name}`
+  }
+
   /** Copies a PDF into a section. The original is only read, never moved or changed. */
   async importPdf(parentRel: string, source: string): Promise<string> {
     if (!parentRel) throw new VaultError('PDFs go inside a notebook or section')

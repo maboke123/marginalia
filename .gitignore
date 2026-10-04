@@ -5,3 +5,4 @@ out
 *.log*
 test-results
 playwright-report
+resources/whisper

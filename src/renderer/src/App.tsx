@@ -15,7 +15,6 @@ import { indexPdfs } from './lib/indexer'
 import { useApp } from './store'
 import { RecordingBar } from './transcribe/RecordingBar'
 import { useRecording } from './transcribe/recording'
-import { TranscribeSetup } from './transcribe/TranscribeSetup'
 
 /** Insert current slide link: typed into the summary wherever focus is. */
 function insertCurrentSlideLink(): void {
@@ -138,7 +137,6 @@ export function App(): React.JSX.Element | null {
           {overlay === 'switcher' && <QuickSwitcher />}
           {overlay === 'search' && <SearchPanel />}
           {overlay === 'settings' && <SettingsDialog />}
-          <TranscribeSetup />
         </div>
       ) : (
         <Welcome />

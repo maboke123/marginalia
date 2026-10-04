@@ -9,7 +9,7 @@ const wav = process.env['MARGINALIA_WHISPER_WAV']
 
 describe.skipIf(!dir || !wav)('WhisperEngine (real)', { timeout: 300_000 }, () => {
   it('installs what is missing and transcribes speech', async () => {
-    const engine = new WhisperEngine(dir!)
+    const engine = new WhisperEngine(null, dir!)
     await engine.install(['program', 'vad', 'small'], () => undefined)
     const { installed } = await engine.status()
     expect(installed).toMatchObject({ program: true, vad: true, small: true })

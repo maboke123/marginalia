@@ -1,11 +1,19 @@
-import { app, BrowserWindow } from 'electron'
+import { app, BrowserWindow, dialog } from 'electron'
+import { randomUUID } from 'crypto'
 import { promises as fs } from 'fs'
 import path from 'path'
-import type { LiveChunk, TranscribePart, TranscribeStatus } from '../../shared/types'
+import type {
+  LiveChunk,
+  TranscribeFileRequest,
+  TranscribeJob,
+  TranscribePart,
+  TranscribeStatus
+} from '../../shared/types'
 import type { Handle } from '../ipc'
 import { VaultError } from '../vault/names'
 import type { Vault } from '../vault/vault'
 import { PARTS, WhisperEngine, type Transcriber } from './engine'
+import { transcribeFile } from './fileJob'
 import { LiveSession } from './live'
 import type { Segment } from './transcript'
 
@@ -53,6 +61,22 @@ class FakeTranscriber implements Transcriber {
   }
 }
 
+// What ffmpeg can read that a lecture recording is likely to be.
+export const MEDIA_EXTENSIONS = [
+  'mp4',
+  'mkv',
+  'mov',
+  'webm',
+  'avi',
+  'm4a',
+  'mp3',
+  'wav',
+  'ogg',
+  'opus',
+  'flac',
+  'aac'
+]
+
 /** Speech to text (SPEC addition): live lecture recording into a transcript note. */
 export function registerTranscription(
   handle: Handle,
@@ -62,7 +86,13 @@ export function registerTranscription(
 ): void {
   const engine: Transcriber = process.env['MARGINALIA_FAKE_WHISPER']
     ? new FakeTranscriber(process.env['MARGINALIA_FAKE_WHISPER'] !== 'missing')
-    : new WhisperEngine(path.join(dataDir, 'whisper'))
+    : new WhisperEngine(
+        // Shipped with the app; in development the copy scripts/whisper-resources.mjs makes.
+        app.isPackaged
+          ? path.join(process.resourcesPath, 'whisper')
+          : path.join(app.getAppPath(), 'resources', 'whisper'),
+        path.join(dataDir, 'whisper')
+      )
   let live: LiveSession | null = null
   const send = (channel: string, value: unknown): void =>
     getWindow()?.webContents.send(channel, value)
@@ -89,8 +119,72 @@ export function registerTranscription(
     await session?.stop()
   })
 
+  // Recordings from a file, one at a time: whisper already uses half the cores.
+  const jobs = new Map<string, { job: TranscribeJob; abort: AbortController }>()
+  let queue: Promise<void> = Promise.resolve()
+  const update = (id: string, change: Partial<TranscribeJob>): void => {
+    const entry = jobs.get(id)
+    if (!entry) return
+    entry.job = { ...entry.job, ...change }
+    send('transcribe:job', entry.job)
+  }
+
+  handle('transcribe:pickRecording', async () => {
+    const options: Electron.OpenDialogOptions = {
+      title: 'Transcribe a recording',
+      properties: ['openFile'],
+      filters: [{ name: 'Video or audio', extensions: MEDIA_EXTENSIONS }]
+    }
+    const win = getWindow()
+    const result = win
+      ? await dialog.showOpenDialog(win, options)
+      : await dialog.showOpenDialog(options)
+    return result.canceled ? null : result.filePaths[0]
+  })
+
+  handle('transcribe:file', (request: TranscribeFileRequest) => {
+    const vault = getVault()
+    if (!vault) throw new VaultError('No vault is open')
+    const id = randomUUID()
+    const abort = new AbortController()
+    const job: TranscribeJob = {
+      id,
+      name: path.basename(request.source),
+      folder: request.folder,
+      phase: 'waiting',
+      percent: 0
+    }
+    jobs.set(id, { job, abort })
+    send('transcribe:job', job)
+    queue = queue.then(async () => {
+      if (abort.signal.aborted) return
+      try {
+        const transcript = await transcribeFile(vault, engine, {
+          ...request,
+          signal: abort.signal,
+          onProgress: (phase, percent) => update(id, { phase, percent: Math.round(percent) })
+        })
+        update(id, { transcript, phase: 'writing', percent: 100 })
+      } catch (err) {
+        update(id, { error: abort.signal.aborted ? 'Cancelled' : (err as Error).message })
+      } finally {
+        jobs.delete(id)
+      }
+    })
+    return id
+  })
+
+  handle('transcribe:cancel', (id: string) => {
+    const entry = jobs.get(id)
+    if (!entry) return
+    entry.abort.abort()
+    update(id, { error: 'Cancelled' })
+    jobs.delete(id)
+  })
+
   // Quitting mid-lecture keeps the audio; chunks still waiting are skipped.
   app.on('before-quit', () => {
     void live?.cancel()
+    for (const { abort } of jobs.values()) abort.abort()
   })
 }

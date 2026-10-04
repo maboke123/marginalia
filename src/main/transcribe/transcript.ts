@@ -48,3 +48,26 @@ export function transcriptParagraph(at: number, segments: Segment[], marker?: st
   if (!text) return ''
   return `\n**${clock(at)}**${marker ? ` · ${marker}` : ''} ${text}\n`
 }
+
+/**
+ * Whisper's segments of a whole recording (a few seconds each) as paragraphs: a new one after
+ * a pause or once a paragraph runs longer than `maxSeconds`. `at` is in seconds.
+ */
+export function paragraphs(
+  segments: Segment[],
+  maxSeconds = 45,
+  pauseSeconds = 2
+): { at: number; segments: Segment[] }[] {
+  const out: { at: number; segments: Segment[] }[] = []
+  for (const segment of segments) {
+    const last = out[out.length - 1]
+    const previous = last?.segments[last.segments.length - 1]
+    const pause = previous ? (segment.from - previous.to) / 1000 : Infinity
+    if (!last || pause >= pauseSeconds || segment.from / 1000 - last.at >= maxSeconds) {
+      out.push({ at: segment.from / 1000, segments: [segment] })
+    } else {
+      last.segments.push(segment)
+    }
+  }
+  return out
+}

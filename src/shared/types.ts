@@ -117,6 +117,12 @@ export interface MarginaliaApi {
     /** Resolves once everything sent so far is transcribed. */
     stop(): Promise<void>
     onStatus(listener: (status: RecordingStatus) => void): () => void
+    /** Asks for a video or audio file; null when cancelled. */
+    pickRecording(): Promise<string | null>
+    /** Queues a recording file for transcription; returns the job id. Progress via onJob. */
+    transcribeFile(request: TranscribeFileRequest): Promise<string>
+    cancelJob(id: string): Promise<void>
+    onJob(listener: (job: TranscribeJob) => void): () => void
   }
   terminal: {
     /** Starts the CLI in the vault folder, or attaches to the running one (with its output). */
@@ -186,6 +192,31 @@ export interface LiveChunk {
   marker?: string
   /** Text of that slide, so course terms are spelled right. */
   prompt?: string
+}
+
+export interface TranscribeFileRequest {
+  folder: string
+  /** Absolute path of the video or audio file. */
+  source: string
+  model: 'small' | 'accurate'
+  /** "nl", "en" or "auto". */
+  language: string
+}
+
+export type TranscribeJobPhase = 'waiting' | 'reading' | 'transcribing' | 'writing'
+
+/** A recording file being transcribed in the background. */
+export interface TranscribeJob {
+  id: string
+  /** File name of the recording. */
+  name: string
+  folder: string
+  phase: TranscribeJobPhase
+  /** Of the current phase, 0 to 100. */
+  percent: number
+  /** Set when done. */
+  transcript?: string
+  error?: string
 }
 
 export interface RecordingStatus {

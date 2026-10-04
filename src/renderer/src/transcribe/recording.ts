@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { RecordingStatus, TranscribePart, TranscribeStatus } from '../../../shared/types'
+import type { RecordingStatus, TranscribePart } from '../../../shared/types'
 import { slideLink } from '../editor/links'
 import { openPdf } from '../lib/open'
 import { findNode, isFolder, parentOf } from '../lib/tree'
@@ -8,20 +8,11 @@ import { useApp } from '../store'
 import { toPcm16, type Chunk } from './chunker'
 import { startMicrophone, type Microphone } from './recorder'
 
-/** What a live recording needs; the accurate model is only for recordings imported later. */
+/** What a live recording needs; these ship with the app, so normally nothing is missing. */
 const LIVE_PARTS: TranscribePart[] = ['program', 'vad', 'small']
 
 // Whisper's prompt holds about 220 tokens; the start of the slide is the useful part.
 const PROMPT_CHARS = 600
-
-interface Setup {
-  parts: TranscribePart[]
-  sizes: TranscribeStatus['sizes']
-  /** Bytes downloaded per part so far. */
-  done: Partial<Record<TranscribePart, number>>
-  installing: boolean
-  error: string | null
-}
 
 interface RecordingState {
   /** The recording going on, if any. */
@@ -30,13 +21,11 @@ interface RecordingState {
   /** Microphone loudness, 0 to 1. */
   level: number
   stopping: boolean
-  /** The one-time download, shown before the first recording. */
-  setup: Setup | null
+  /** Percent of a download of missing parts before recording starts (only in development). */
+  preparing: number | null
   toggle(): Promise<void>
   start(): Promise<void>
   stop(): Promise<void>
-  install(): Promise<void>
-  closeSetup(): void
   /** The window is closing: keep the audio, do not wait for the transcript to catch up. */
   abandon(): Promise<void>
 }
@@ -65,9 +54,14 @@ let microphone: Microphone | null = null
 
 export const useRecording = create<RecordingState>((set, get) => {
   window.api.transcribe.onStatus((status) => set({ status }))
+  // Bytes per part of a download in progress, for the percentage.
+  let downloading: { sizes: Record<string, number>; done: Record<string, number> } | null = null
   window.api.transcribe.onInstallProgress((part, done) => {
-    const setup = get().setup
-    if (setup) set({ setup: { ...setup, done: { ...setup.done, [part]: done } } })
+    if (!downloading) return
+    downloading.done[part] = done
+    const total = Object.values(downloading.sizes).reduce((a, b) => a + b, 0)
+    const got = Object.values(downloading.done).reduce((a, b) => a + b, 0)
+    set({ preparing: Math.round((got / total) * 100) })
   })
 
   return {
@@ -75,12 +69,12 @@ export const useRecording = create<RecordingState>((set, get) => {
     status: null,
     level: 0,
     stopping: false,
-    setup: null,
+    preparing: null,
 
     toggle: () => (get().active ? get().stop() : get().start()),
 
     async start() {
-      if (get().active || get().stopping) return
+      if (get().active || get().stopping || get().preparing !== null) return
       const { showError, refresh } = useApp.getState()
       const folder = lessonFolder()
       if (!folder) {
@@ -90,10 +84,20 @@ export const useRecording = create<RecordingState>((set, get) => {
       const status = await window.api.transcribe.status()
       const missing = LIVE_PARTS.filter((p) => !status.installed[p])
       if (missing.length) {
-        set({
-          setup: { parts: missing, sizes: status.sizes, done: {}, installing: false, error: null }
-        })
-        return
+        downloading = {
+          sizes: Object.fromEntries(missing.map((p) => [p, status.sizes[p]])),
+          done: {}
+        }
+        set({ preparing: 0 })
+        try {
+          await window.api.transcribe.install(missing)
+        } catch (err) {
+          showError(`Speech to text could not be set up: ${(err as Error).message}`)
+          return
+        } finally {
+          downloading = null
+          set({ preparing: null })
+        }
       }
 
       // The slide on screen when a chunk starts is the one it is about.
@@ -151,22 +155,6 @@ export const useRecording = create<RecordingState>((set, get) => {
         set({ active: null, stopping: false, level: 0 })
       }
     },
-
-    async install() {
-      const setup = get().setup
-      if (!setup || setup.installing) return
-      set({ setup: { ...setup, installing: true, error: null } })
-      try {
-        await window.api.transcribe.install(setup.parts)
-        set({ setup: null })
-        await get().start()
-      } catch (err) {
-        const now = get().setup
-        if (now) set({ setup: { ...now, installing: false, error: (err as Error).message } })
-      }
-    },
-
-    closeSetup: () => set({ setup: null }),
 
     async abandon() {
       await microphone?.stop().catch(() => undefined)

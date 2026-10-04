@@ -2400,54 +2400,6 @@ h2 {
   color: var(--danger);
 }
 
-.setup-dialog {
-  position: absolute;
-  top: 96px;
-  left: 50%;
-  width: min(480px, calc(100vw - 32px));
-  padding: 20px 24px;
-  transform: translateX(-50%);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--bg);
-  box-shadow: var(--shadow-menu);
-}
-
-.setup-dialog h2 {
-  margin: 0 0 12px;
-  font-size: 16px;
-}
-
-.setup-dialog p {
-  margin: 0 0 10px;
-  line-height: 1.5;
-}
-
-.setup-progress {
-  height: 6px;
-  margin: 16px 0 8px;
-  border-radius: 3px;
-  background: var(--border);
-  overflow: hidden;
-}
-
-.setup-progress span {
-  display: block;
-  height: 100%;
-  background: var(--accent);
-}
-
-.setup-error {
-  color: var(--danger);
-}
-
-.setup-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  margin-top: 16px;
-}
-
 .pane-note {
   margin-right: 8px;
   font-size: 12px;

@@ -10,6 +10,10 @@ asarUnpack:
   - node_modules/@anthropic-ai/claude-agent-sdk-*/**
   # node-pty's native module and its conpty helpers are loaded from disk as well.
   - node_modules/node-pty/**
+# Speech to text ships with the app (filled by scripts/whisper-resources.mjs, not in git).
+extraResources:
+  - from: resources/whisper
+    to: whisper
 win:
   executableName: marginalia
 nsis:

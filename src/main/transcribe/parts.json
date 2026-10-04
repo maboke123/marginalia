@@ -1,0 +1,26 @@
+{
+  "program": {
+    "url": "https://github.com/ggml-org/whisper.cpp/releases/download/b5130/whisper-blas-bin-x64.zip",
+    "file": "whisper-blas-bin-x64.zip",
+    "size": 21360234,
+    "sha256": "55c06d09e8b9b6cfb2b0b47ddedc71803054f0e48be1f41848b3141c06c703a9"
+  },
+  "vad": {
+    "url": "https://huggingface.co/ggml-org/whisper-vad/resolve/main/ggml-silero-v5.1.2.bin",
+    "file": "ggml-silero-v5.1.2.bin",
+    "size": 885098,
+    "sha256": "29940d98d42b91fbd05ce489f3ecf7c72f0a42f027e4875919a28fb4c04ea2cf"
+  },
+  "small": {
+    "url": "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small-q5_1.bin",
+    "file": "ggml-small-q5_1.bin",
+    "size": 190085487,
+    "sha256": "ae85e4a935d7a567bd102fe55afc16bb595bdb618e11b2fc7591bc08120411bb"
+  },
+  "accurate": {
+    "url": "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo-q5_0.bin",
+    "file": "ggml-large-v3-turbo-q5_0.bin",
+    "size": 574041195,
+    "sha256": "394221709cd5ad1f40c46e6031ca61bce88931e6e088c188294c6d5a55ffa7e2"
+  }
+}

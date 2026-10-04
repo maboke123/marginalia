@@ -1,6 +1,12 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import type { ChatEvent, ToolCall } from '../shared/claude'
-import type { IpcResult, MarginaliaApi, RecordingStatus, TranscribePart } from '../shared/types'
+import type {
+  IpcResult,
+  MarginaliaApi,
+  RecordingStatus,
+  TranscribeJob,
+  TranscribePart
+} from '../shared/types'
 
 async function invoke<T>(channel: string, ...args: unknown[]): Promise<T> {
   const result: IpcResult<T> = await ipcRenderer.invoke(channel, ...args)
@@ -69,6 +75,14 @@ const api: MarginaliaApi = {
       const handler = (_e: unknown, status: RecordingStatus): void => listener(status)
       ipcRenderer.on('record:status', handler)
       return () => ipcRenderer.removeListener('record:status', handler)
+    },
+    pickRecording: () => invoke('transcribe:pickRecording'),
+    transcribeFile: (request) => invoke('transcribe:file', request),
+    cancelJob: (id) => invoke('transcribe:cancel', id),
+    onJob: (listener) => {
+      const handler = (_e: unknown, job: TranscribeJob): void => listener(job)
+      ipcRenderer.on('transcribe:job', handler)
+      return () => ipcRenderer.removeListener('transcribe:job', handler)
     }
   },
   terminal: {

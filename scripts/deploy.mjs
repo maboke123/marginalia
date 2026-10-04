@@ -40,9 +40,20 @@ for (const f of existsSync(dist) ? readdirSync(dist) : []) {
   if (/-setup\.exe(\.blockmap)?$/.test(f)) rmSync(path.join(dist, f))
 }
 run('npx electron-vite build')
+run('node scripts/whisper-resources.mjs')
 run(`npx electron-builder --win -c.extraMetadata.version=${version}`)
 const installer = path.join(dist, `marginalia-${version}-setup.exe`)
 if (!existsSync(installer)) throw new Error(`Installer not found: ${installer}`)
+const bundledWhisper = path.join(
+  dist,
+  'win-unpacked',
+  'resources',
+  'whisper',
+  'bin',
+  'Release',
+  'whisper-cli.exe'
+)
+if (!existsSync(bundledWhisper)) throw new Error('Speech to text is missing from the build')
 
 step('Starting the built app once, off screen')
 {

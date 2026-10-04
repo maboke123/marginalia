@@ -17,6 +17,7 @@ export function RecordingBar(): React.JSX.Element | null {
   const status = useRecording((s) => s.status)
   const level = useRecording((s) => s.level)
   const stopping = useRecording((s) => s.stopping)
+  const preparing = useRecording((s) => s.preparing)
   const language = useApp((s) => s.settings.transcribeLanguage)
   const [now, setNow] = useState(() => Date.now())
 
@@ -26,6 +27,13 @@ export function RecordingBar(): React.JSX.Element | null {
     return () => clearInterval(timer)
   }, [active])
 
+  if (preparing !== null) {
+    return (
+      <div className="recording-bar" role="status" aria-label="Recording">
+        <span className="recording-progress">Getting speech to text ready... {preparing}%</span>
+      </div>
+    )
+  }
   if (!active) return null
   const elapsed = (now - active.startedAt) / 1000
   const pending = status?.pending ?? 0

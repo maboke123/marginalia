@@ -5,44 +5,18 @@ import os from 'os'
 import path from 'path'
 import { promisify } from 'util'
 import type { TranscribePart, TranscribeStatus } from '../../shared/types'
+import partsJson from './parts.json'
 import type { Segment } from './transcript'
 
 /**
- * whisper.cpp, downloaded on first use into the app's data folder (not the installer) and
- * checked against these hashes. The BLAS build was the fastest on this laptop's CPU.
+ * whisper.cpp and its models, pinned by hash. The program, the small model and the VAD model
+ * ship with the app (scripts/whisper-resources.mjs puts them in the installer); the accurate
+ * model is downloaded the first time it is used. The BLAS build was fastest on this CPU.
  */
 export const PARTS: Record<
   TranscribePart,
   { url: string; file: string; size: number; sha256: string }
-> = {
-  program: {
-    url: 'https://github.com/ggml-org/whisper.cpp/releases/download/b5130/whisper-blas-bin-x64.zip',
-    file: 'whisper-blas-bin-x64.zip',
-    size: 21_360_234,
-    sha256: '55c06d09e8b9b6cfb2b0b47ddedc71803054f0e48be1f41848b3141c06c703a9'
-  },
-  // Voice activity detection: skips silence and keeps whisper from dropping sentences.
-  vad: {
-    url: 'https://huggingface.co/ggml-org/whisper-vad/resolve/main/ggml-silero-v5.1.2.bin',
-    file: 'ggml-silero-v5.1.2.bin',
-    size: 885_098,
-    sha256: '29940d98d42b91fbd05ce489f3ecf7c72f0a42f027e4875919a28fb4c04ea2cf'
-  },
-  // About 3.5x real time here: fast enough for live recording.
-  small: {
-    url: 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small-q5_1.bin',
-    file: 'ggml-small-q5_1.bin',
-    size: 190_085_487,
-    sha256: 'ae85e4a935d7a567bd102fe55afc16bb595bdb618e11b2fc7591bc08120411bb'
-  },
-  // About real time here, but clearly better for Dutch and hard audio: for recordings.
-  accurate: {
-    url: 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo-q5_0.bin',
-    file: 'ggml-large-v3-turbo-q5_0.bin',
-    size: 574_041_195,
-    sha256: '394221709cd5ad1f40c46e6031ca61bce88931e6e088c188294c6d5a55ffa7e2'
-  }
-}
+> = partsJson
 
 export type Model = 'small' | 'accurate'
 
@@ -69,31 +43,43 @@ export interface Transcriber {
 
 const run = promisify(execFile)
 
+/** Where a part lives inside a whisper folder (the bundled one and the downloads use the same). */
+const partPath = (dir: string, part: TranscribePart): string =>
+  part === 'program'
+    ? path.join(dir, 'bin', 'Release', 'whisper-cli.exe')
+    : path.join(dir, 'models', PARTS[part].file)
+
 export class WhisperEngine implements Transcriber {
-  private readonly models: string
-  private readonly bin: string
+  /**
+   * @param bundled the copy that came with the app (resources/whisper), if any
+   * @param downloads where missing parts are downloaded to (in the app's data folder)
+   */
+  constructor(
+    private readonly bundled: string | null,
+    private readonly downloads: string
+  ) {}
 
-  constructor(dir: string) {
-    this.models = path.join(dir, 'models')
-    this.bin = path.join(dir, 'bin')
+  /** The first complete copy of a part: the bundled one, else a downloaded one. */
+  private async locate(part: TranscribePart): Promise<string | null> {
+    for (const dir of [this.bundled, this.downloads]) {
+      if (!dir) continue
+      const file = partPath(dir, part)
+      const stat = await fs.stat(file).catch(() => null)
+      // The program is unpacked, so only its presence counts; models must be complete.
+      if (stat && (part === 'program' || stat.size === PARTS[part].size)) return file
+    }
+    return null
   }
 
-  private get cli(): string {
-    return path.join(this.bin, 'Release', 'whisper-cli.exe')
-  }
-
-  private target(part: TranscribePart): string {
-    return part === 'program' ? this.cli : path.join(this.models, PARTS[part].file)
+  private async need(part: TranscribePart): Promise<string> {
+    const file = await this.locate(part)
+    if (!file) throw new Error(`Speech to text is missing ${PARTS[part].file}`)
+    return file
   }
 
   async status(): Promise<TranscribeStatus> {
-    const has = async (part: TranscribePart): Promise<boolean> => {
-      const stat = await fs.stat(this.target(part)).catch(() => null)
-      // The program is unpacked, so only its presence counts; models must be complete.
-      return !!stat && (part === 'program' || stat.size === PARTS[part].size)
-    }
     const parts = Object.keys(PARTS) as TranscribePart[]
-    const present = await Promise.all(parts.map(has))
+    const present = await Promise.all(parts.map(async (p) => !!(await this.locate(p))))
     return {
       installed: Object.fromEntries(parts.map((p, i) => [p, present[i]])) as Record<
         TranscribePart,
@@ -112,11 +98,13 @@ export class WhisperEngine implements Transcriber {
     onProgress: (part: TranscribePart, done: number) => void
   ): Promise<void> {
     const { installed } = await this.status()
-    await fs.mkdir(this.models, { recursive: true })
+    const models = path.join(this.downloads, 'models')
+    const bin = path.join(this.downloads, 'bin')
+    await fs.mkdir(models, { recursive: true })
     for (const part of parts) {
       if (installed[part]) continue
       const { url, file, sha256 } = PARTS[part]
-      const temp = path.join(this.models, `${file}.download`)
+      const temp = path.join(models, `${file}.download`)
       const response = await fetch(url)
       if (!response.ok || !response.body) {
         throw new Error(`Download failed (${response.status}): ${file}`)
@@ -138,26 +126,31 @@ export class WhisperEngine implements Transcriber {
         throw new Error(`${file} did not download correctly; try again`)
       }
       if (part === 'program') {
-        await fs.mkdir(this.bin, { recursive: true })
+        await fs.mkdir(bin, { recursive: true })
         // Windows' own tar unpacks zip files.
         await run(path.join(process.env['WINDIR'] ?? 'C:\\Windows', 'System32', 'tar.exe'), [
           '-xf',
           temp,
           '-C',
-          this.bin
+          bin
         ])
         await fs.rm(temp, { force: true })
       } else {
-        await fs.rename(temp, this.target(part))
+        await fs.rename(temp, partPath(this.downloads, part))
       }
     }
   }
 
   async transcribe(wav: string, options: TranscribeOptions): Promise<Segment[]> {
     const out = `${wav}.result`
+    const [cli, model, vad] = await Promise.all([
+      this.need('program'),
+      this.need(options.model),
+      this.need('vad')
+    ])
     const args = [
       '-m',
-      this.target(options.model),
+      model,
       '-f',
       wav,
       '-l',
@@ -167,7 +160,7 @@ export class WhisperEngine implements Transcriber {
       String(Math.max(2, Math.floor(os.cpus().length / 2))),
       '--vad',
       '--vad-model',
-      this.target('vad'),
+      vad,
       '-oj',
       '-of',
       out,
@@ -176,7 +169,7 @@ export class WhisperEngine implements Transcriber {
     ]
     if (options.prompt) args.push('--prompt', options.prompt)
     await new Promise<void>((resolve, reject) => {
-      const child = spawn(this.cli, args, { windowsHide: true, signal: options.signal })
+      const child = spawn(cli, args, { windowsHide: true, signal: options.signal })
       if (child.pid) os.setPriority(child.pid, os.constants.priority.PRIORITY_BELOW_NORMAL)
       let errors = ''
       child.stderr.on('data', (data: Buffer) => {
