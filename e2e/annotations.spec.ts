@@ -110,6 +110,57 @@ test('annotations follow the PDF to another section', async () => {
   await expect(strokes()).toHaveCount(1)
 })
 
+test('a pasted screenshot goes where I clicked and follows the PDF', async () => {
+  await openSlides()
+  await app.evaluate(async ({ clipboard, nativeImage, ClipboardItem }) => {
+    const width = 400
+    const height = 200
+    const pixels = Buffer.alloc(width * height * 4, 0x90)
+    const png = nativeImage.createFromBitmap(pixels, { width, height }).toPNG()
+    const blob = new Blob([new Uint8Array(png)], { type: 'image/png' })
+    await clipboard.write([new ClipboardItem({ 'image/png': blob })])
+  })
+  const box = (await firstPage().boundingBox())!
+  await page.mouse.click(box.x + box.width * 0.2, box.y + box.height * 0.3)
+  await page.keyboard.press('Control+v')
+
+  const image = firstPage().locator('.page-image')
+  await expect(image.locator('img')).toBeVisible()
+  await expect(image).toHaveClass(/selected/)
+  const placed = (await image.boundingBox())!
+  expect(placed.x).toBeCloseTo(box.x + box.width * 0.2, -1)
+  await expect
+    .poll(async () => (await readSidecar().catch(() => null))?.pages['1']?.images?.length)
+    .toBe(1)
+  const [saved] = (await readSidecar()).pages['1'].images as { src: string; width: number }[]
+  expect(saved.src).toMatch(/^assets\/.+\.png$/)
+  await fs.access(path.join(env.vault, section, saved.src))
+
+  // The corner grip makes it bigger and keeps its shape.
+  const grip = (await image.locator('.page-image-resize').boundingBox())!
+  await page.mouse.move(grip.x + grip.width / 2, grip.y + grip.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(grip.x + 60, grip.y + grip.height / 2, { steps: 6 })
+  await page.mouse.up()
+  await expect
+    .poll(async () => ((await readSidecar()).pages['1'].images?.[0] as { width: number }).width)
+    .toBeGreaterThan(saved.width + 20)
+  const resized = (await image.boundingBox())!
+  expect(resized.width / resized.height).toBeCloseTo(2, 1)
+
+  await page.keyboard.press('Delete')
+  await expect(image).toHaveCount(0)
+  await page.keyboard.press('Control+z')
+  await expect(image).toHaveCount(1)
+
+  // Moved to another section, the image comes along.
+  await expect.poll(async () => (await readSidecar()).pages['1']?.images?.length).toBe(1)
+  await row('slides.pdf').dragTo(row('B3 Ensembles'))
+  await row('slides.pdf').click()
+  await expect(firstPage().locator('.page-image img')).toBeVisible()
+  await fs.access(path.join(env.vault, 'Machine Learning/B3 Ensembles', saved.src))
+})
+
 test('undo, redo and the eraser', async () => {
   await openSlides()
   await page.keyboard.press('p')

@@ -1,6 +1,6 @@
-import { PDFDocument, StandardFonts, degrees } from 'pdf-lib'
+import { PDFDict, PDFDocument, PDFName, StandardFonts, degrees } from 'pdf-lib'
 import { describe, expect, it } from 'vitest'
-import type { AnnotationFile } from '../../shared/annotations'
+import type { AnnotationFile, PageAnnotations } from '../../shared/annotations'
 import { exportAnnotated } from './exportPdf'
 
 async function slides(count: number, rotateLast = false): Promise<Uint8Array> {
@@ -88,6 +88,55 @@ describe('exportAnnotated', { timeout: 20_000 }, () => {
     expect(first).toContain('Slide 1')
     expect(first.replace(/\s+/g, '')).toContain('Entropiedaalt:ΔH=∑ᵢpᵢ')
     expect(second).toBe('Slide 2')
+  })
+
+  it('draws images once per file and counts the ones whose file is gone', async () => {
+    // A 1x1 PNG.
+    const png = Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+      'base64'
+    )
+    const image = (
+      id: string,
+      src: string,
+      x = 100
+    ): NonNullable<PageAnnotations['images']>[0] => ({
+      id,
+      x,
+      y: 50,
+      width: 200,
+      height: 100,
+      src,
+      author: 'me'
+    })
+    const loaded: string[] = []
+    const result = await exportAnnotated(
+      await slides(2),
+      annotations({
+        '1': { strokes: [], highlights: [], textBoxes: [], images: [image('a', 'assets/a.png')] },
+        '2': {
+          strokes: [],
+          highlights: [],
+          textBoxes: [],
+          images: [image('b', 'assets/a.png', 1000), image('c', 'assets/gone.png')]
+        }
+      }),
+      async (src) => {
+        loaded.push(src)
+        return src === 'assets/a.png' ? png : null
+      }
+    )
+    expect(loaded).toEqual(['assets/a.png', 'assets/gone.png'])
+    expect(result.missingImages).toBe(1)
+    const out = await PDFDocument.load(result.bytes)
+    // The image at x=1000 sits in the margin, so pages are widened.
+    expect(Math.round(out.getPages()[0].getWidth())).toBe(1536)
+    const xObjects = out.getPages().map((p) => {
+      const resources = p.node.Resources()!
+      const dict = resources.lookup(PDFName.of('XObject'), PDFDict)
+      return dict.keys().length
+    })
+    expect(xObjects).toEqual([1, 1])
   })
 
   it('keeps the page size without margin notes and skips rotated pages', async () => {

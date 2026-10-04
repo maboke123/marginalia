@@ -1,8 +1,10 @@
 import { memo, useCallback, useContext, useRef, useState } from 'react'
 import { useStore } from 'zustand'
 import type { PDFDocumentProxy } from 'pdfjs-dist'
-import type { Stroke, TextBox } from '../../../shared/annotations'
+import type { PageImage, Stroke, TextBox } from '../../../shared/annotations'
+import { vaultUrl } from '../editor/links'
 import { useApp } from '../store'
+import { addImageFiles, rememberClick } from './addImages'
 import { AnnotationContext } from './context'
 import {
   addItem,
@@ -27,6 +29,8 @@ import {
 } from './geometry'
 import { applyChanges, planWrite, type WriteAnswer } from '../claude/writePlan'
 import { GhostView } from './GhostView'
+import { ImageView } from './ImageView'
+import { imagePath, resizeImage } from './images'
 import { strokePath } from './ink'
 import { HIGHLIGHT_OPACITY, HIGHLIGHTER_WIDTH, pageUnit, TEXT_SIZES } from '../../../shared/palette'
 import { TextBoxView } from './TextBoxView'
@@ -34,6 +38,8 @@ import { TextLayerView } from './TextLayerView'
 
 interface Props {
   pdf: PDFDocumentProxy
+  /** Vault path of the PDF; images on its pages are stored next to it. */
+  path: string
   number: number
   /** Page size in points, without the margin. */
   width: number
@@ -82,6 +88,7 @@ const DEFAULT_TEXT_SIZE = TEXT_SIZES[1].value
 
 function AnnotatedOverlay({
   pdf,
+  path,
   number,
   width,
   height,
@@ -198,6 +205,37 @@ function AnnotatedOverlay({
         })
       )
     )
+  }
+
+  function moveImage(e: React.PointerEvent, image: PageImage): void {
+    select('images', image.id)
+    drag(e, (dx, dy) =>
+      doc.getState().update((p) =>
+        replaceItem(p, number, 'images', {
+          ...image,
+          x: round(image.x + dx),
+          y: round(image.y + dy)
+        })
+      )
+    )
+  }
+
+  function resizeImageBy(e: React.PointerEvent, image: PageImage): void {
+    select('images', image.id)
+    drag(e, (dx) =>
+      doc
+        .getState()
+        .update((p) => replaceItem(p, number, 'images', resizeImage(image, dx, 20 * unit)))
+    )
+  }
+
+  // Images dropped from Explorer land where they are dropped. preventDefault tells the
+  // workspace, which would otherwise try to import them as PDFs, that they were taken care of.
+  function onDrop(e: React.DragEvent): void {
+    const files = [...e.dataTransfer.files]
+    if (!files.length || !files.every((f) => f.type.startsWith('image/'))) return
+    e.preventDefault()
+    addImageFiles(doc, path, files, { page: number, width, height, margin, at: toPoint(e) })
   }
 
   function startEditing(box: TextBox): void {
@@ -354,10 +392,12 @@ function AnnotatedOverlay({
       ref={rootRef}
       className={`page-overlay tool-${tool}`}
       style={{ ...style, fontSize: DEFAULT_TEXT_SIZE * unit }}
+      onPointerDownCapture={(e) => rememberClick(doc, number, toPoint(e))}
       onPointerDown={() => {
         if (tool === 'select') doc.getState().select(null)
       }}
       onPointerUp={onPointerUp}
+      onDrop={onDrop}
     >
       {page.highlights.map((h) =>
         h.rects.map(([x, y, w, rh], i) => (
@@ -383,6 +423,18 @@ function AnnotatedOverlay({
       )}
 
       <TextLayerView pdf={pdf} number={number} width={width} height={height} />
+
+      {page.images?.map((image) => (
+        <ImageView
+          key={image.id}
+          image={image}
+          url={vaultUrl(imagePath(path, image.src))}
+          selected={selection?.kind === 'images' && selection.id === image.id}
+          interactive={tool === 'select'}
+          onPointerDown={(e) => moveImage(e, image)}
+          onResizeStart={(e) => resizeImageBy(e, image)}
+        />
+      ))}
 
       <svg className="ink" width={totalWidth} height={height}>
         <g className="highlighter" style={{ opacity: HIGHLIGHT_OPACITY }}>

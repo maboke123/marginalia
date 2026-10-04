@@ -1,6 +1,7 @@
 import { CONTEXT_END, CONTEXT_START, type ChatImage } from '../../../shared/claude'
 import type { PageAnnotations } from '../../../shared/annotations'
 import { pageOf } from '../annotations/doc'
+import { imagePath } from '../annotations/images'
 import { textAround } from '../editor/sections'
 import { openNote, openPdf } from '../lib/open'
 import { renderPage } from '../pdf/snapshot'
@@ -75,8 +76,13 @@ function describeAnnotations(page: PageAnnotations): string[] {
   }
   const ink = page.strokes.filter((s) => s.tool === 'pen').length
   if (ink) lines.push(`- ${ink} handwritten pen stroke${ink === 1 ? '' : 's'} (see the image)`)
+  const images = page.images?.length ?? 0
+  if (images) lines.push(`- ${images} pasted image${images === 1 ? '' : 's'}`)
   return lines
 }
+
+// Screenshots are big; a few per slide is plenty of context.
+const MAX_PASTED_IMAGES = 3
 
 const block = (tag: string, text: string): string => `<${tag}>\n${text}\n</${tag}>`
 
@@ -95,16 +101,24 @@ export async function slideContext(
   let imageKey: string | null = null
   if (!open) return { lines, images, imageKey }
   const key = `${path}#${page}`
+  const annotations = open.doc ? pageOf(open.doc.getState().pages, page) : null
   if (key !== lastImage) {
     images.push({ mediaType: 'image/png', data: await renderPage(open.pdf, page) })
     imageKey = key
     lines.push('An image of this page is attached.')
+    const pasted = annotations?.images ?? []
+    for (const im of pasted.slice(0, MAX_PASTED_IMAGES)) {
+      const data = await window.api.vault.readFile(imagePath(path, im.src)).catch(() => null)
+      const mediaType = /\.png$/i.test(im.src) ? 'image/png' : 'image/jpeg'
+      if (data) images.push({ mediaType, data })
+    }
+    if (pasted.length) lines.push('The images I pasted on this page are attached after it.')
   } else {
     lines.push('The image of this page is in an earlier message.')
   }
   const text = await pageText(open.pdf, page)
   lines.push(block('page-text', text || '(this page has no text layer; use the image)'))
-  const notes = open.doc ? describeAnnotations(pageOf(open.doc.getState().pages, page)) : []
+  const notes = annotations ? describeAnnotations(annotations) : []
   if (notes.length) lines.push('My annotations on this page:', ...notes)
   return { lines, images, imageKey }
 }

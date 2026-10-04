@@ -457,6 +457,9 @@ export const useApp = create<AppState>((set, get) => {
         done.pdfChanged ? 'the PDF changed since you annotated it, so check the result' : '',
         done.skippedPages
           ? `${done.skippedPages} rotated ${done.skippedPages === 1 ? 'page was' : 'pages were'} copied without annotations`
+          : '',
+        done.missingImages
+          ? `${done.missingImages} ${done.missingImages === 1 ? 'image was' : 'images were'} left out because the file is gone`
           : ''
       ].filter(Boolean)
       get().showNotice(

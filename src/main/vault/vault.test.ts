@@ -195,6 +195,41 @@ describe('move', () => {
     expect(await list('ML/B3')).toEqual(['slides.pdf', 'slides.pdf.annotations.json'])
   })
 
+  it('copies the images on a moved PDF to its new folder', async () => {
+    const sidecar = (src: string, other: string): string =>
+      JSON.stringify({
+        version: 1,
+        pdf: 'slides.pdf',
+        pdfSha256: '',
+        marginWidth: 0.6,
+        pages: {
+          '2': {
+            strokes: [],
+            highlights: [],
+            textBoxes: [],
+            images: [
+              { id: 'i1', x: 0, y: 0, width: 10, height: 10, src, author: 'me' },
+              { id: 'i2', x: 0, y: 20, width: 10, height: 10, src: other, author: 'me' }
+            ]
+          }
+        }
+      })
+    await write('ML/B2/slides.pdf', 'pdf')
+    await write('ML/B2/slides.pdf.annotations.json', sidecar('assets/a.png', 'assets/b.png'))
+    await write('ML/B2/assets/a.png', 'mine')
+    await write('ML/B2/assets/b.png', 'also mine')
+    await write('ML/B3/assets/a.png', 'a different picture')
+
+    await vault.move('ML/B2/slides.pdf', 'ML/B3')
+
+    // The originals stay; the clash got a new name and the sidecar points at it.
+    expect(await list('ML/B2/assets')).toEqual(['a.png', 'b.png'])
+    expect(await list('ML/B3/assets')).toEqual(['a-2.png', 'a.png', 'b.png'])
+    expect(await fs.readFile(path.join(root, 'ML/B3/assets/a-2.png'), 'utf8')).toBe('mine')
+    const moved = (await vault.readAnnotations('ML/B3/slides.pdf')).file!
+    expect(moved.pages['2'].images!.map((im) => im.src)).toEqual(['assets/a-2.png', 'assets/b.png'])
+  })
+
   it('does not move a PDF onto an orphaned sidecar', async () => {
     await write('ML/B2/slides.pdf', 'pdf')
     await write('ML/B2/slides.pdf.annotations.json', 'mine')

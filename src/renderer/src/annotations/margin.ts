@@ -11,6 +11,20 @@ export function estimateHeight(box: Pick<TextBox, 'markdown' | 'width'>, fontSiz
   return lines * fontSize * 1.45 + fontSize
 }
 
+/** Just below the lowest note or image in the margin, or null when the margin is empty. */
+export function marginBottom(page: PageAnnotations, pageWidth: number): number | null {
+  const unit = pageUnit(pageWidth)
+  const gap = 8 * unit
+  const fontSize = round(TEXT_SIZES[1].value * unit)
+  const bottoms = [
+    ...page.textBoxes
+      .filter((box) => box.x >= pageWidth - gap)
+      .map((box) => box.y + estimateHeight(box, box.fontSize ?? fontSize)),
+    ...(page.images ?? []).filter((im) => im.x >= pageWidth - gap).map((im) => im.y + im.height)
+  ]
+  return bottoms.length ? round(Math.max(...bottoms) + gap) : null
+}
+
 /**
  * Where a new note goes in the margin next to a page: full margin width, under the notes
  * already there, so Claude's notes do not cover mine.
@@ -25,10 +39,7 @@ export function marginSlot(
   const gap = 8 * unit
   const fontSize = round(TEXT_SIZES[1].value * unit)
   const width = round(Math.max(60 * unit, pageWidth * margin - 2 * gap))
-  const bottoms = page.textBoxes
-    .filter((box) => box.x >= pageWidth - gap)
-    .map((box) => box.y + estimateHeight(box, box.fontSize ?? fontSize))
-  const y = bottoms.length ? Math.max(...bottoms) + gap : gap
+  const y = marginBottom(page, pageWidth) ?? gap
   return {
     x: round(pageWidth + gap),
     y: round(Math.min(y, pageHeight - 4 * fontSize)),

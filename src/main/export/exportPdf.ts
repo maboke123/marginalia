@@ -1,7 +1,7 @@
 import fontkit from '@pdf-lib/fontkit'
 import { promises as fs } from 'fs'
 import path from 'path'
-import type { PDFDocument, PDFFont, PDFPage, RGB } from 'pdf-lib'
+import type { PDFDocument, PDFFont, PDFImage, PDFPage, RGB } from 'pdf-lib'
 import type { AnnotationFile, PageAnnotations, TextBox } from '../../shared/annotations'
 import { strokeOutline } from '../../shared/ink'
 import { HIGHLIGHT_OPACITY, pageUnit, TEXT_SIZES } from '../../shared/palette'
@@ -24,7 +24,15 @@ export interface ExportResult {
   bytes: Uint8Array
   /** Rotated pages are copied without their annotations. */
   skippedPages: number
+  /** Images whose file is gone or is not a PNG or JPEG. */
+  missingImages: number
 }
+
+/** Reads an image placed on a page, by its `src`; null when the file is gone. */
+export type ImageLoader = (src: string) => Promise<Uint8Array | null>
+
+const isPng = (b: Uint8Array): boolean => b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e
+const isJpeg = (b: Uint8Array): boolean => b[0] === 0xff && b[1] === 0xd8
 
 interface Fonts {
   list: PDFFont[]
@@ -127,6 +135,7 @@ function drawPage(
   annotations: PageAnnotations,
   origin: { x: number; top: number },
   fonts: Fonts,
+  images: Map<string, PDFImage | null>,
   pageWidth: number
 ): void {
   // Annotations use points from the top-left of the visible page; PDF counts from the bottom.
@@ -157,6 +166,14 @@ function drawPage(
     }
   }
 
+  // Over the slide and highlights, under ink, like on screen.
+  for (const im of annotations.images ?? []) {
+    const embedded = images.get(im.src)
+    if (!embedded) continue
+    const [x, y] = toPdf(im.x, im.y + im.height)
+    page.drawImage(embedded, { x, y, width: im.width, height: im.height })
+  }
+
   // Highlighter under pen, like on screen.
   const strokes = [
     ...annotations.strokes.filter((s) => s.tool === 'highlighter'),
@@ -184,6 +201,7 @@ function usesMargin(file: AnnotationFile, widths: number[]): boolean {
     const w = widths[Number(n) - 1] ?? Infinity
     return (
       p.textBoxes.some((b) => b.x + b.width > w + 1) ||
+      (p.images ?? []).some((im) => im.x + im.width > w + 1) ||
       p.strokes.some((s) => s.points.some(([x]) => x > w + 1)) ||
       p.highlights.some((h) => h.rects.some(([x, , rw]) => x + rw > w + 1))
     )
@@ -196,7 +214,8 @@ function usesMargin(file: AnnotationFile, widths: number[]): boolean {
  */
 export async function exportAnnotated(
   source: Uint8Array,
-  annotations: AnnotationFile | null
+  annotations: AnnotationFile | null,
+  loadImage: ImageLoader = async () => null
 ): Promise<ExportResult> {
   // Loaded on first use; most sessions never export.
   const lib = await import('pdf-lib')
@@ -210,6 +229,25 @@ export async function exportAnnotated(
       boxes.map((b) => b.width)
     )
   const fonts = annotations ? await loadFonts(lib, doc) : null
+  // Each file is embedded once, however many pages show it.
+  const images = new Map<string, PDFImage | null>()
+  let missingImages = 0
+  for (const p of Object.values(annotations?.pages ?? {})) {
+    for (const { src } of p.images ?? []) {
+      if (!images.has(src)) {
+        const bytes = await loadImage(src)
+        images.set(
+          src,
+          bytes && isPng(bytes)
+            ? await doc.embedPng(bytes)
+            : bytes && isJpeg(bytes)
+              ? await doc.embedJpg(bytes)
+              : null
+        )
+      }
+      if (!images.get(src)) missingImages++
+    }
+  }
   let skippedPages = 0
 
   pages.forEach((page, i) => {
@@ -232,9 +270,10 @@ export async function exportAnnotated(
       })
     }
     if (pageAnnotations && fonts) {
-      drawPage(lib, page, pageAnnotations, { x: box.x, top: box.y + box.height }, fonts, box.width)
+      const origin = { x: box.x, top: box.y + box.height }
+      drawPage(lib, page, pageAnnotations, origin, fonts, images, box.width)
     }
   })
 
-  return { bytes: await doc.save(), skippedPages }
+  return { bytes: await doc.save(), skippedPages, missingImages }
 }

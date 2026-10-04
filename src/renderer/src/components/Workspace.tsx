@@ -36,9 +36,11 @@ export function Workspace(): React.JSX.Element {
       if (!e.currentTarget.contains(e.relatedTarget as Node)) setDropping(false)
     },
     onDrop(e: React.DragEvent) {
+      // Images dropped on a slide were already put there by the page.
+      const handled = e.defaultPrevented
       e.preventDefault()
       setDropping(false)
-      if (draggingFiles(e)) importDroppedFiles(e)
+      if (draggingFiles(e) && !handled) importDroppedFiles(e)
     }
   }
   const className = (extra: string): string =>

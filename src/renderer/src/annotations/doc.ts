@@ -4,16 +4,18 @@ import {
   type AnnotationPages,
   type Highlight,
   type PageAnnotations,
+  type PageImage,
   type Stroke,
   type TextBox
 } from '../../../shared/annotations'
 
-export type Kind = 'strokes' | 'highlights' | 'textBoxes'
+export type Kind = 'strokes' | 'highlights' | 'textBoxes' | 'images'
 
 export interface ItemOfKind {
   strokes: Stroke
   highlights: Highlight
   textBoxes: TextBox
+  images: PageImage
 }
 
 export interface Selection {
@@ -140,9 +142,10 @@ export function updatePage(
   page: number,
   fn: (p: PageAnnotations) => PageAnnotations
 ): AnnotationPages {
-  const next = fn(pageOf(pages, page))
+  const next = { ...fn(pageOf(pages, page)) }
+  if (!next.images?.length) delete next.images
   const copy = { ...pages }
-  if (!next.strokes.length && !next.highlights.length && !next.textBoxes.length) {
+  if (!next.strokes.length && !next.highlights.length && !next.textBoxes.length && !next.images) {
     delete copy[String(page)]
   } else {
     copy[String(page)] = next
@@ -156,7 +159,7 @@ export function addItem<K extends Kind>(
   kind: K,
   item: ItemOfKind[K]
 ): AnnotationPages {
-  return updatePage(pages, page, (p) => ({ ...p, [kind]: [...p[kind], item] }))
+  return updatePage(pages, page, (p) => ({ ...p, [kind]: [...itemsOf(p, kind), item] }))
 }
 
 export function removeItems(
@@ -169,7 +172,7 @@ export function removeItems(
   if (!remove.size) return pages
   return updatePage(pages, page, (p) => ({
     ...p,
-    [kind]: (p[kind] as { id: string }[]).filter((item) => !remove.has(item.id))
+    [kind]: itemsOf(p, kind).filter((item) => !remove.has(item.id))
   }))
 }
 
@@ -181,7 +184,7 @@ export function replaceItem<K extends Kind>(
 ): AnnotationPages {
   return updatePage(pages, page, (p) => ({
     ...p,
-    [kind]: (p[kind] as ItemOfKind[K][]).map((old) => (old.id === item.id ? item : old))
+    [kind]: itemsOf(p, kind).map((old) => (old.id === item.id ? item : old))
   }))
 }
 
@@ -189,9 +192,13 @@ export function findItem<K extends Kind>(
   pages: AnnotationPages,
   ref: { page: number; kind: K; id: string }
 ): ItemOfKind[K] | undefined {
-  return (pageOf(pages, ref.page)[ref.kind] as ItemOfKind[K][]).find((item) => item.id === ref.id)
+  return itemsOf(pageOf(pages, ref.page), ref.kind).find((item) => item.id === ref.id)
 }
 
-export function newId(prefix: 's' | 'h' | 't'): string {
+export function itemsOf<K extends Kind>(page: PageAnnotations, kind: K): ItemOfKind[K][] {
+  return (page[kind] ?? []) as ItemOfKind[K][]
+}
+
+export function newId(prefix: 's' | 'h' | 't' | 'i'): string {
   return `${prefix}_${crypto.randomUUID().slice(0, 8)}`
 }

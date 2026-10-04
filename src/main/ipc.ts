@@ -170,11 +170,15 @@ export function registerIpc(
     if (path.resolve(choice.filePath).toLowerCase() === source.toLowerCase()) {
       throw new VaultError('Choose another name: the original PDF is never overwritten')
     }
-    const result = await exportAnnotated(await v.readFile(p), loaded.file)
+    const folder = p.slice(0, p.lastIndexOf('/') + 1)
+    const result = await exportAnnotated(await v.readFile(p), loaded.file, (src) =>
+      v.readFile(folder + src).catch(() => null)
+    )
     await writeFileAtomic(choice.filePath, result.bytes)
     return {
       path: choice.filePath,
       skippedPages: result.skippedPages,
+      missingImages: result.missingImages,
       pdfChanged: !!loaded.file && loaded.file.pdfSha256 !== loaded.pdfSha256
     }
   })

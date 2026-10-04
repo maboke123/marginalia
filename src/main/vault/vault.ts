@@ -453,6 +453,50 @@ export class Vault {
       await renameWithRetry(to, from)
       throw err
     }
+    if (path.dirname(from) !== path.dirname(to)) {
+      // The move itself worked; a missing image shows as such and the old copy stays.
+      await this.copyPageImages(path.dirname(from), to).catch(console.error)
+    }
+  }
+
+  /**
+   * Images on a PDF's pages live in the assets folder next to it. After the PDF moved to
+   * another folder they are copied there (the originals stay, nothing is ever removed).
+   * A different file with the same name there gets a new name, and the sidecar follows.
+   */
+  private async copyPageImages(oldDir: string, pdf: string): Promise<void> {
+    const file: unknown = JSON.parse(await fs.readFile(pdf + SIDECAR_SUFFIX, 'utf8'))
+    if (!isAnnotationFile(file)) return
+    const renamed = new Map<string, string>()
+    const sources = new Set(
+      Object.values(file.pages).flatMap((p) => (p.images ?? []).map((im) => im.src))
+    )
+    for (const src of sources) {
+      if (!new RegExp(`^${ASSETS_DIR}/[^/\\\\]+$`).test(src)) continue
+      const data = await fs.readFile(path.join(oldDir, src)).catch(() => null)
+      if (!data) continue
+      const ext = path.extname(src)
+      const base = src.slice(0, -ext.length || undefined)
+      await fs.mkdir(path.join(path.dirname(pdf), ASSETS_DIR), { recursive: true })
+      for (let n = 1; ; n++) {
+        const name = n === 1 ? src : `${base}-${n}${ext}`
+        const target = path.join(path.dirname(pdf), name)
+        const existing = await fs.readFile(target).catch(() => null)
+        if (existing && Buffer.compare(existing, data) === 0) {
+          if (name !== src) renamed.set(src, name)
+          break
+        }
+        if (existing) continue
+        await fs.writeFile(target, data, { flag: 'wx' })
+        if (name !== src) renamed.set(src, name)
+        break
+      }
+    }
+    if (!renamed.size) return
+    for (const p of Object.values(file.pages)) {
+      p.images = p.images?.map((im) => ({ ...im, src: renamed.get(im.src) ?? im.src }))
+    }
+    await writeFileAtomic(pdf + SIDECAR_SUFFIX, formatAnnotations(file) + '\n')
   }
 
   private async existingPdf(rel: string): Promise<string> {

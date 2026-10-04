@@ -42,10 +42,24 @@ export interface TextBox {
   author: Author
 }
 
+/** A picture placed on a page, such as a pasted screenshot. */
+export interface PageImage {
+  id: string
+  x: number
+  y: number
+  width: number
+  height: number
+  /** Relative to the PDF's folder, like an image link in a note: `assets/2026-10-04_09-12-30.png`. */
+  src: string
+  author: Author
+}
+
 export interface PageAnnotations {
   strokes: Stroke[]
   highlights: Highlight[]
   textBoxes: TextBox[]
+  /** Missing in files from before images existed. */
+  images?: PageImage[]
 }
 
 /** Keyed by 1-based page number as a string, like the JSON file. */

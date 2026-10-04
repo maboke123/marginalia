@@ -3,6 +3,7 @@ import type { PDFDocumentLoadingTask, PDFDocumentProxy } from 'pdfjs-dist'
 import { type LoadedAnnotations, type TextMarkup } from '../../../shared/annotations'
 import { MARGIN_WIDTHS } from '../../../shared/settings'
 import { comboOf } from '../../../shared/hotkeys'
+import { addImageFiles, lastClick } from '../annotations/addImages'
 import { AnnotationToolbar } from '../annotations/AnnotationToolbar'
 import { AnnotationContext } from '../annotations/context'
 import { addItem, createAnnotationDoc, removeItems, type AnnotationDoc } from '../annotations/doc'
@@ -360,6 +361,26 @@ function Document({
     e.preventDefault()
   }
 
+  // Ctrl+V with a screenshot: where I last clicked if that is on the page in view,
+  // otherwise in the margin of that page.
+  function onPaste(e: React.ClipboardEvent): void {
+    const target = e.target as HTMLElement
+    if (!activeDoc || target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return
+    const files = [...e.clipboardData.files].filter((f) => f.type.startsWith('image/'))
+    if (!files.length) return
+    e.preventDefault()
+    const click = lastClick(activeDoc)
+    const on = click?.page === page ? click : null
+    const size = sizes[page - 1]
+    addImageFiles(activeDoc, path, files, {
+      page,
+      width: size.width,
+      height: size.height,
+      margin,
+      at: on?.point ?? null
+    })
+  }
+
   // Render the visible pages plus one screen above and below.
   const [first, last] = pagesBetween(
     layout,
@@ -465,6 +486,7 @@ function Document({
           tabIndex={0}
           onScroll={onScroll}
           onKeyDown={onKeyDown}
+          onPaste={onPaste}
           onPointerUp={() => setTimeout(updateSelectionAction)}
         >
           <div className="pdf-content" style={{ height: layout.totalHeight, width: contentWidth }}>
@@ -473,6 +495,7 @@ function Document({
                 <PdfPage
                   key={i}
                   pdf={pdf}
+                  path={path}
                   number={i + 1}
                   size={size}
                   margin={margin}

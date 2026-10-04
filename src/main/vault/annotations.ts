@@ -43,6 +43,7 @@ export function isAnnotationFile(value: unknown): value is AnnotationFile {
       page &&
       Array.isArray(page.strokes) &&
       Array.isArray(page.highlights) &&
-      Array.isArray(page.textBoxes)
+      Array.isArray(page.textBoxes) &&
+      (page.images === undefined || Array.isArray(page.images))
   )
 }

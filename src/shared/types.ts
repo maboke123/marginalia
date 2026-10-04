@@ -77,7 +77,7 @@ export interface MarginaliaApi {
     setLastPage(path: string, page: number): Promise<void>
     readText(note: string): Promise<string>
     writeText(note: string, text: string): Promise<void>
-    /** Saves image bytes into the note's assets folder; returns the link relative to the note. */
+    /** Saves image bytes into the assets folder next to a note or PDF; returns the path relative to it. */
     saveAsset(note: string, data: Uint8Array, extension: string): Promise<string>
     /** Asks for image files and copies them into the note's assets folder. */
     importImages(note: string): Promise<string[]>
@@ -148,6 +148,8 @@ export interface ExportedPdf {
   path: string
   /** Rotated pages, copied without their annotations. */
   skippedPages: number
+  /** Images on pages whose file was gone, left out of the copy. */
+  missingImages: number
   /** The PDF changed since it was annotated, so annotations may sit on the wrong slides. */
   pdfChanged: boolean
 }

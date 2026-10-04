@@ -5,6 +5,7 @@ import type { PageSize } from './layout'
 
 interface Props {
   pdf: PDFDocumentProxy
+  path: string
   number: number
   size: PageSize
   margin: number
@@ -16,7 +17,7 @@ interface Props {
 }
 
 export const PdfPage = memo(function PdfPage(props: Props): React.JSX.Element {
-  const { pdf, number, size, margin, top, left, scale, rendered } = props
+  const { pdf, path, number, size, margin, top, left, scale, rendered } = props
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const renderedScale = useRef<number | null>(null)
 
@@ -79,6 +80,7 @@ export const PdfPage = memo(function PdfPage(props: Props): React.JSX.Element {
       {rendered && (
         <PageOverlay
           pdf={pdf}
+          path={path}
           number={number}
           width={size.width}
           height={size.height}

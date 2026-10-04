@@ -459,6 +459,11 @@ h2 {
   padding: 64px 48px;
 }
 
+.welcome-logo {
+  display: block;
+  margin-bottom: 24px;
+}
+
 .welcome h1 {
   font-size: 24px;
   margin-bottom: 8px;
@@ -946,6 +951,63 @@ h2 {
 
 .text-box.selected .text-box-resize::after {
   background: var(--accent);
+}
+
+/* Images on a page */
+
+.page-image {
+  position: absolute;
+  border: 1px solid transparent;
+  cursor: move;
+}
+
+.page-image img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  user-select: none;
+}
+
+.page-image:hover {
+  border-color: var(--paper-rule);
+}
+
+.page-image.selected {
+  border-color: var(--accent);
+}
+
+.page-image.passive {
+  pointer-events: none;
+}
+
+.page-image-missing {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  padding: 4px;
+  border: 1px dashed var(--paper-rule);
+  color: var(--text-muted);
+  font-size: 0.8em;
+  text-align: center;
+}
+
+.page-image-resize {
+  position: absolute;
+  right: -5px;
+  bottom: -5px;
+  width: 10px;
+  height: 10px;
+  border: 1px solid var(--accent);
+  border-radius: 2px;
+  background: var(--margin-bg);
+  cursor: nwse-resize;
+  opacity: 0;
+}
+
+.page-image:hover .page-image-resize,
+.page-image.selected .page-image-resize {
+  opacity: 1;
 }
 
 /* PDF text layer, from pdfjs-dist/web/pdf_viewer.css (only the parts this app uses) */
