@@ -230,6 +230,51 @@ describe('move', () => {
     expect(moved.pages['2'].images!.map((im) => im.src)).toEqual(['assets/a-2.png', 'assets/b.png'])
   })
 
+  it('takes the note that belongs to a PDF along', async () => {
+    await write('ML/B2/slides.pdf', 'pdf')
+    await write('ML/B2/slides.md', 'same name')
+    await write('ML/B2/lecture.pdf', 'pdf')
+    await write('ML/B2/Summary.md', 'linked')
+    await write('ML/B2/Other.md', 'stays')
+    await fs.mkdir(path.join(root, 'ML/B3'))
+    await vault.setLinkedNote('ML/B2/lecture.pdf', 'ML/B2/Summary.md')
+
+    await vault.move('ML/B2/slides.pdf', 'ML/B3')
+    await vault.move('ML/B2/lecture.pdf', 'ML/B3')
+
+    expect(await list('ML/B2')).toEqual(['Other.md'])
+    expect(await list('ML/B3')).toEqual(['Summary.md', 'lecture.pdf', 'slides.md', 'slides.pdf'])
+    expect(await vault.linkedNote('ML/B3/lecture.pdf')).toBe('ML/B3/Summary.md')
+    expect((await vault.tree()).notes).toEqual({ 'ML/B3/lecture.pdf': 'ML/B3/Summary.md' })
+  })
+
+  it('moves neither when the note would overwrite one there', async () => {
+    await write('ML/B2/slides.pdf', 'pdf')
+    await write('ML/B2/slides.md', 'mine')
+    await write('ML/B3/slides.md', 'theirs')
+
+    await expect(vault.move('ML/B2/slides.pdf', 'ML/B3')).rejects.toThrow(
+      '"slides.md" already exists there'
+    )
+    expect(await list('ML/B2')).toEqual(['slides.md', 'slides.pdf'])
+    expect(await fs.readFile(path.join(root, 'ML/B3/slides.md'), 'utf8')).toBe('theirs')
+  })
+
+  it('copies the images a moved note shows', async () => {
+    await write('ML/B2/Summary.md', '![](assets/a.png)\ntext\n![](<assets/b c.png>)\n')
+    await write('ML/B2/assets/a.png', 'mine')
+    await write('ML/B2/assets/b c.png', 'also mine')
+    await write('ML/B3/assets/a.png', 'a different picture')
+
+    await vault.move('ML/B2/Summary.md', 'ML/B3')
+
+    expect(await list('ML/B2/assets')).toEqual(['a.png', 'b c.png'])
+    expect(await list('ML/B3/assets')).toEqual(['a-2.png', 'a.png', 'b c.png'])
+    expect(await fs.readFile(path.join(root, 'ML/B3/Summary.md'), 'utf8')).toBe(
+      '![](assets/a-2.png)\ntext\n![](<assets/b c.png>)\n'
+    )
+  })
+
   it('does not move a PDF onto an orphaned sidecar', async () => {
     await write('ML/B2/slides.pdf', 'pdf')
     await write('ML/B2/slides.pdf.annotations.json', 'mine')

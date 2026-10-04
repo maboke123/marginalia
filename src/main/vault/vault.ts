@@ -1,6 +1,7 @@
 import { constants as fsConstants, promises as fs } from 'fs'
 import path from 'path'
 import type { AnnotationFile, LoadedAnnotations } from '../../shared/annotations'
+import { pairNotes } from '../../shared/pairing'
 import type { NotebookColor, Position, VaultNode, VaultTree } from '../../shared/types'
 import { formatAnnotations, isAnnotationFile, sha256File } from './annotations'
 import { renameWithRetry, tempPathFor, writeFileAtomic } from './atomic'
@@ -391,11 +392,29 @@ export class Vault {
     const name = path.basename(abs)
     const oldParent = path.dirname(abs)
     const target = path.join(parent, name)
+    // A PDF's note goes with it to another folder, so the pair the sidebar shows stays together.
+    const note = !isDir && isPdf(abs) && oldParent !== parent ? await this.pairedNote(abs) : null
+    const noteName = note && path.basename(note)
+    const noteTarget = noteName && path.join(parent, noteName)
+    if (noteTarget && (await exists(noteTarget))) {
+      throw new VaultError(`"${noteName}" already exists there`)
+    }
     if (target !== abs) {
       await this.moveEntry(abs, target, isDir)
-      await updateOrder(oldParent, (names) => names.filter((n) => n !== name))
+      if (note && noteTarget) {
+        try {
+          await this.moveEntry(note, noteTarget, false)
+        } catch (err) {
+          await this.moveEntry(target, abs, false)
+          throw err
+        }
+      }
+      await updateOrder(oldParent, (names) => names.filter((n) => n !== name && n !== noteName))
       if (isDir && oldParent === this.root) await this.renameColor(name, null)
       await this.remapState(toRel(this.root, abs), toRel(this.root, target))
+      if (note && noteTarget) {
+        await this.remapState(toRel(this.root, note), toRel(this.root, noteTarget))
+      }
     }
 
     if (before !== undefined) {
@@ -447,41 +466,61 @@ export class Vault {
     }
 
     await renameWithRetry(from, to)
-    if (!hasSidecar) return
-    try {
-      await renameWithRetry(from + SIDECAR_SUFFIX, to + SIDECAR_SUFFIX)
-    } catch (err) {
-      await renameWithRetry(to, from)
-      throw err
+    if (hasSidecar) {
+      try {
+        await renameWithRetry(from + SIDECAR_SUFFIX, to + SIDECAR_SUFFIX)
+      } catch (err) {
+        await renameWithRetry(to, from)
+        throw err
+      }
     }
-    if (path.dirname(from) !== path.dirname(to)) {
+    if (!isDir && path.dirname(from) !== path.dirname(to)) {
       // The move itself worked; a missing image shows as such and the old copy stays.
-      await this.copyPageImages(path.dirname(from), to).catch(console.error)
+      const copied = hasSidecar
+        ? this.copyPageImages(path.dirname(from), to)
+        : isMarkdown(to)
+          ? this.copyNoteImages(path.dirname(from), to)
+          : null
+      await copied?.catch(console.error)
     }
   }
 
+  /** The note the sidebar shows under this PDF (`pairNotes`), if it has one. */
+  private async pairedNote(pdf: string): Promise<string | null> {
+    const dir = path.dirname(pdf)
+    const files = (await visibleEntries(dir))
+      .filter((e) => !e.isDir)
+      .map((e) => ({
+        name: e.name,
+        path: toRel(this.root, path.join(dir, e.name)),
+        kind: isPdf(e.name) ? ('pdf' as const) : ('markdown' as const)
+      }))
+    const state = await this.readState()
+    const note = pairNotes(files, state.notes ?? {}).get(toRel(this.root, pdf))
+    return note ? this.resolve(note.path) : null
+  }
+
   /**
-   * Images on a PDF's pages live in the assets folder next to it. After the PDF moved to
-   * another folder they are copied there (the originals stay, nothing is ever removed).
-   * A different file with the same name there gets a new name, and the sidecar follows.
+   * Copies images from `oldDir`'s assets folder to `newDir`'s; the originals stay, nothing is
+   * ever removed. A different file with the same name there gets a new name, returned as
+   * old src -> new src so the referring file can follow.
    */
-  private async copyPageImages(oldDir: string, pdf: string): Promise<void> {
-    const file: unknown = JSON.parse(await fs.readFile(pdf + SIDECAR_SUFFIX, 'utf8'))
-    if (!isAnnotationFile(file)) return
+  private async copyAssets(
+    oldDir: string,
+    newDir: string,
+    sources: Iterable<string>
+  ): Promise<Map<string, string>> {
     const renamed = new Map<string, string>()
-    const sources = new Set(
-      Object.values(file.pages).flatMap((p) => (p.images ?? []).map((im) => im.src))
-    )
     for (const src of sources) {
       if (!new RegExp(`^${ASSETS_DIR}/[^/\\\\]+$`).test(src)) continue
       const data = await fs.readFile(path.join(oldDir, src)).catch(() => null)
       if (!data) continue
       const ext = path.extname(src)
       const base = src.slice(0, -ext.length || undefined)
-      await fs.mkdir(path.join(path.dirname(pdf), ASSETS_DIR), { recursive: true })
+      await fs.mkdir(path.join(newDir, ASSETS_DIR), { recursive: true })
       for (let n = 1; ; n++) {
         const name = n === 1 ? src : `${base}-${n}${ext}`
-        const target = path.join(path.dirname(pdf), name)
+        const target = path.join(newDir, name)
         const existing = await fs.readFile(target).catch(() => null)
         if (existing && Buffer.compare(existing, data) === 0) {
           if (name !== src) renamed.set(src, name)
@@ -493,11 +532,51 @@ export class Vault {
         break
       }
     }
+    return renamed
+  }
+
+  /** After a PDF moved to another folder, the images on its pages follow it. */
+  private async copyPageImages(oldDir: string, pdf: string): Promise<void> {
+    const file: unknown = JSON.parse(await fs.readFile(pdf + SIDECAR_SUFFIX, 'utf8'))
+    if (!isAnnotationFile(file)) return
+    const sources = new Set(
+      Object.values(file.pages).flatMap((p) => (p.images ?? []).map((im) => im.src))
+    )
+    const renamed = await this.copyAssets(oldDir, path.dirname(pdf), sources)
     if (!renamed.size) return
     for (const p of Object.values(file.pages)) {
       p.images = p.images?.map((im) => ({ ...im, src: renamed.get(im.src) ?? im.src }))
     }
     await writeFileAtomic(pdf + SIDECAR_SUFFIX, formatAnnotations(file) + '\n')
+  }
+
+  /** After a note moved to another folder, the images it links to in assets/ follow it. */
+  private async copyNoteImages(oldDir: string, note: string): Promise<void> {
+    const text = await fs.readFile(note, 'utf8')
+    // ![](assets/x.png), possibly URL-encoded, and ![](<assets/x y.png>).
+    const link = new RegExp(
+      `\\]\\((?:(<)(${ASSETS_DIR}/[^>\\n]+)(>)|()(${ASSETS_DIR}/[^)\\s]+)())\\)`,
+      'g'
+    )
+    const decode = (raw: string): string => {
+      try {
+        return decodeURIComponent(raw)
+      } catch {
+        return raw
+      }
+    }
+    const sources = new Set([...text.matchAll(link)].map((m) => decode(m[2] ?? m[5])))
+    const renamed = await this.copyAssets(oldDir, path.dirname(note), sources)
+    if (!renamed.size) return
+    const next = text.replace(link, (whole, ...groups: (string | undefined)[]) => {
+      const [open, raw, close] = groups[1] !== undefined ? groups.slice(0, 3) : groups.slice(3, 6)
+      const to = renamed.get(decode(raw!))
+      if (!to) return whole
+      // Inside <...> a name may have spaces; a bare link needs them encoded.
+      const href = open ? to : to.split('/').map(encodeURIComponent).join('/')
+      return `](${open}${href}${close})`
+    })
+    await writeFileAtomic(note, next)
   }
 
   private async existingPdf(rel: string): Promise<string> {

@@ -1,3 +1,4 @@
+import { pairNotes } from '../../../shared/pairing'
 import type { VaultNode } from '../../../shared/types'
 
 export interface Row {
@@ -30,38 +31,7 @@ export function remap(path: string, from: string, to: string): string {
   return isWithin(path, from) ? to + path.slice(from.length) : path
 }
 
-const baseName = (node: VaultNode): string => node.name.replace(/\.(md|pdf)$/i, '').toLowerCase()
-
-/**
- * The note that belongs to each PDF in one folder: the note linked to it in lecture mode, else
- * the note with the same name. Notes in another folder are not paired; each note pairs once.
- */
-export function pairNotes(
-  children: VaultNode[],
-  links: Record<string, string>
-): Map<string, VaultNode> {
-  const pairs = new Map<string, VaultNode>()
-  const taken = new Set<string>()
-  const pdfs = children.filter((n) => n.kind === 'pdf')
-  const notes = children.filter((n) => n.kind === 'markdown')
-  // Links first, so a same-named note cannot take a note I linked on purpose.
-  for (const pdf of pdfs) {
-    const note = notes.find((n) => n.path === links[pdf.path] && !taken.has(n.path))
-    if (note) {
-      pairs.set(pdf.path, note)
-      taken.add(note.path)
-    }
-  }
-  for (const pdf of pdfs) {
-    if (pairs.has(pdf.path)) continue
-    const note = notes.find((n) => baseName(n) === baseName(pdf) && !taken.has(n.path))
-    if (note) {
-      pairs.set(pdf.path, note)
-      taken.add(note.path)
-    }
-  }
-  return pairs
-}
+export { pairNotes }
 
 /** Children in the order the sidebar shows them: each PDF directly followed by its note. */
 export function displayOrder(children: VaultNode[], links: Record<string, string>): VaultNode[] {

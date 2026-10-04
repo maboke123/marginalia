@@ -3,7 +3,7 @@ import { DEFAULT_SETTINGS, type AppSettings } from '../../shared/settings'
 import type { NotebookColor, Position, VaultInfo, VaultNode } from '../../shared/types'
 import { ERASER_SIZES, PEN_WIDTHS, TEXT_SIZES } from '../../shared/palette'
 import { flushAll } from './lib/flush'
-import { findNode, isFolder, parentOf, remap } from './lib/tree'
+import { childrenOf, findNode, isFolder, pairNotes, parentOf, remap } from './lib/tree'
 
 const api = window.api.vault
 
@@ -528,10 +528,17 @@ export const useApp = create<AppState>((set, get) => {
 
     async move(path, parent, before) {
       if (parentOf(path) === parent && before === undefined) return
+      // Main takes a PDF's note along to another folder; open panes and selection follow it.
+      const from = parentOf(path)
+      const note =
+        from !== parent
+          ? pairNotes(childrenOf(get().nodes, from), get().links).get(path)
+          : undefined
       const to = await attempt(() => api.move(path, parent, before))
       if (!to) return
       if (parent) get().setExpanded(parent, true)
       followMove(path, to)
+      if (note) followMove(note.path, `${parent}/${note.name}`)
       await get().refresh()
     },
 

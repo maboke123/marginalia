@@ -85,6 +85,17 @@ test('a note is shown right under the PDF it belongs to', async () => {
     'B3 Ensembles'
   ])
   await page.locator('.sidebar').screenshot({ path: path.join('test-results', 'paired-notes.png') })
+
+  // Dragging the PDF to another lesson takes its note along, still linked.
+  await row('slides.pdf').dragTo(row('B3 Ensembles'))
+  await expect
+    .poll(() => fs.readdir(path.join(vault, 'Machine Learning', 'B3 Ensembles')))
+    .toEqual(['A first look.md', 'slides.pdf'])
+  await expect(row('B3 Ensembles').locator('xpath=following-sibling::*[1]')).toHaveText(
+    'slides.pdf'
+  )
+  await expect(page.locator('.tree-row.paired', { hasText: 'A first look' })).toBeVisible()
+  expect(await order()).toContain('  A first look')
 })
 
 test('a notebook created in the app appears on disk', async () => {
