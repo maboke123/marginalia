@@ -104,6 +104,20 @@ export interface MarginaliaApi {
     pending(): Promise<PdfToIndex[]>
     storePdf(path: string, stamp: string, pages: string[]): Promise<void>
   }
+  transcribe: {
+    status(): Promise<TranscribeStatus>
+    /** Downloads the missing parts; progress arrives through onInstallProgress. */
+    install(parts: TranscribePart[]): Promise<void>
+    onInstallProgress(listener: (part: TranscribePart, done: number) => void): () => void
+    /** Starts a live recording into a new transcript note in `folder`; returns its path. */
+    start(folder: string): Promise<string>
+    /** Compressed audio of the recording, kept next to the transcript. */
+    audio(data: Uint8Array): Promise<void>
+    chunk(chunk: LiveChunk): Promise<void>
+    /** Resolves once everything sent so far is transcribed. */
+    stop(): Promise<void>
+    onStatus(listener: (status: RecordingStatus) => void): () => void
+  }
   terminal: {
     /** Starts the CLI in the vault folder, or attaches to the running one (with its output). */
     start(cols: number, rows: number): Promise<TerminalSession>
@@ -149,6 +163,39 @@ export interface MarginaliaApi {
 export interface TerminalSession {
   /** Recent output of a session that was already running, to redraw the screen. */
   output: string
+}
+
+/** Pieces of the speech-to-text setup, downloaded on first use. */
+export type TranscribePart = 'program' | 'vad' | 'small' | 'accurate'
+
+export interface TranscribeStatus {
+  installed: Record<TranscribePart, boolean>
+  /** Download sizes in bytes. */
+  sizes: Record<TranscribePart, number>
+}
+
+/** About 30 s of a lecture being recorded, cut at a pause. */
+export interface LiveChunk {
+  /** 16 kHz mono 16-bit samples. */
+  pcm: Uint8Array
+  /** Seconds from the start of the recording. */
+  at: number
+  /** "nl", "en" or "auto". */
+  language: string
+  /** Markdown link to the slide that was on screen, if any. */
+  marker?: string
+  /** Text of that slide, so course terms are spelled right. */
+  prompt?: string
+}
+
+export interface RecordingStatus {
+  /** Vault path of the transcript note. */
+  transcript: string
+  /** Chunks waiting to be transcribed. */
+  pending: number
+  /** Seconds of the recording that are in the transcript. */
+  transcribedTo: number
+  error: string | null
 }
 
 export interface FeedbackEntry {

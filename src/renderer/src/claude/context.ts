@@ -7,6 +7,7 @@ import { textAround } from '../editor/sections'
 import { openNote, openPdf } from '../lib/open'
 import { renderPage } from '../pdf/snapshot'
 import { pageText } from '../pdf/text'
+import { childrenOf } from '../lib/tree'
 import { useApp } from '../store'
 
 /** One removable piece of the context packet, shown above the chat input. */
@@ -150,6 +151,17 @@ export async function buildPacket(
   const { pdfView, pdfSelection, noteCursor } = useApp.getState()
   const ids = new Set(chips.map((c) => c.id))
   const lines = [CONTEXT_START, `Lesson folder: ${chat || '(vault root)'}`]
+  // Recorded lectures: Claude reads them itself (Read tool) when a question needs them.
+  const transcripts = childrenOf(useApp.getState().nodes, chat)
+    .filter((n) => n.kind === 'markdown' && /^Transcript /.test(n.name))
+    .map((n) => n.path)
+  if (transcripts.length) {
+    lines.push(
+      'Transcripts of this lesson (what the lecturer said, with times and the slide on screen; ' +
+        'read them when the question is about the lecture):',
+      ...transcripts.map((p) => `- ${p}`)
+    )
+  }
   const images: ChatImage[] = []
   let imageKey: string | null = null
 

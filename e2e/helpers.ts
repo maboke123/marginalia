@@ -38,10 +38,14 @@ export async function launch(
       // Tests never talk to the real Claude: a scripted agent answers instead.
       MARGINALIA_FAKE_CLAUDE: path.resolve('e2e/fakeClaude.mjs'),
       MARGINALIA_FAKE_LOG: fakeLog(env),
+      // Nor run whisper: a fake engine answers with numbered sentences.
+      MARGINALIA_FAKE_WHISPER: '1',
       ...extra
     }).filter((e): e is [string, string] => e[0] !== 'ELECTRON_RUN_AS_NODE' && e[1] !== undefined)
   )
-  const app = await electron.launch({ args: ['.'], env: vars })
+  // Chromium's fake microphone (a beeping tone) and no permission prompt.
+  const media = ['--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream']
+  const app = await electron.launch({ args: ['.', ...media], env: vars })
   const page = await app.firstWindow()
   return { app, page }
 }

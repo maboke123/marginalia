@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import type { ChatEvent, ToolCall } from '../shared/claude'
-import type { IpcResult, MarginaliaApi } from '../shared/types'
+import type { IpcResult, MarginaliaApi, RecordingStatus, TranscribePart } from '../shared/types'
 
 async function invoke<T>(channel: string, ...args: unknown[]): Promise<T> {
   const result: IpcResult<T> = await ipcRenderer.invoke(channel, ...args)
@@ -51,6 +51,25 @@ const api: MarginaliaApi = {
     query: (query) => invoke('search:query', query),
     pending: () => invoke('search:pending'),
     storePdf: (path, stamp, pages) => invoke('search:storePdf', path, stamp, pages)
+  },
+  transcribe: {
+    status: () => invoke('transcribe:status'),
+    install: (parts) => invoke('transcribe:install', parts),
+    onInstallProgress: (listener) => {
+      const handler = (_e: unknown, p: { part: TranscribePart; done: number }): void =>
+        listener(p.part, p.done)
+      ipcRenderer.on('transcribe:install-progress', handler)
+      return () => ipcRenderer.removeListener('transcribe:install-progress', handler)
+    },
+    start: (folder) => invoke('record:start', folder),
+    audio: (data) => invoke('record:audio', data),
+    chunk: (chunk) => invoke('record:chunk', chunk),
+    stop: () => invoke('record:stop'),
+    onStatus: (listener) => {
+      const handler = (_e: unknown, status: RecordingStatus): void => listener(status)
+      ipcRenderer.on('record:status', handler)
+      return () => ipcRenderer.removeListener('record:status', handler)
+    }
   },
   terminal: {
     start: (cols, rows) => invoke('terminal:start', cols, rows),

@@ -12,7 +12,17 @@ export interface AppSettings {
   hotkeys: Hotkeys
   /** Text boxes and images snap to slide text, page edges and each other while dragged. */
   snapping: boolean
+  /** Spoken language of lectures being recorded; "auto" lets whisper guess per chunk. */
+  transcribeLanguage: TranscribeLanguage
 }
+
+export type TranscribeLanguage = 'auto' | 'nl' | 'en'
+
+export const TRANSCRIBE_LANGUAGES: { value: TranscribeLanguage; name: string }[] = [
+  { value: 'auto', name: 'Any language' },
+  { value: 'nl', name: 'Dutch' },
+  { value: 'en', name: 'English' }
+]
 
 export const MARGIN_WIDTHS = [
   { name: 'Narrow', value: 0.3 },
@@ -46,7 +56,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   penColors: DEFAULT_PEN_COLORS,
   highlightColors: DEFAULT_HIGHLIGHT_COLORS,
   hotkeys: DEFAULT_HOTKEYS,
-  snapping: true
+  snapping: true,
+  transcribeLanguage: 'auto'
 }
 
 function colors(raw: unknown, fallback: string[]): string[] {
@@ -67,6 +78,9 @@ export function settingsFrom(raw: unknown): AppSettings {
     penColors: colors(r.penColors, DEFAULT_PEN_COLORS),
     highlightColors: colors(r.highlightColors, DEFAULT_HIGHLIGHT_COLORS),
     hotkeys: hotkeysFrom(r.hotkeys),
-    snapping: typeof r.snapping === 'boolean' ? r.snapping : DEFAULT_SETTINGS.snapping
+    snapping: typeof r.snapping === 'boolean' ? r.snapping : DEFAULT_SETTINGS.snapping,
+    transcribeLanguage: TRANSCRIBE_LANGUAGES.some((l) => l.value === r.transcribeLanguage)
+      ? (r.transcribeLanguage as TranscribeLanguage)
+      : DEFAULT_SETTINGS.transcribeLanguage
   }
 }

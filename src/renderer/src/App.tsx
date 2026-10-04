@@ -13,6 +13,9 @@ import { slideLink } from './editor/links'
 import { flushAll } from './lib/flush'
 import { indexPdfs } from './lib/indexer'
 import { useApp } from './store'
+import { RecordingBar } from './transcribe/RecordingBar'
+import { useRecording } from './transcribe/recording'
+import { TranscribeSetup } from './transcribe/TranscribeSetup'
 
 /** Insert current slide link: typed into the summary wherever focus is. */
 function insertCurrentSlideLink(): void {
@@ -48,7 +51,8 @@ const ACTIONS: Partial<Record<HotkeyAction, () => void>> = {
   snapshot: () => useApp.getState().startSnapshot(),
   switcher: () => toggleOverlay('switcher'),
   search: () => toggleOverlay('search'),
-  settings: () => toggleOverlay('settings')
+  settings: () => toggleOverlay('settings'),
+  record: () => void useRecording.getState().toggle()
 }
 
 export function App(): React.JSX.Element | null {
@@ -84,6 +88,8 @@ export function App(): React.JSX.Element | null {
   useEffect(
     () =>
       window.api.app.onBeforeClose(async () => {
+        // Keeps the audio of a lecture being recorded; its last part is not transcribed.
+        await useRecording.getState().abandon()
         await flushAll()
         window.api.app.readyToClose()
       }),
@@ -123,6 +129,7 @@ export function App(): React.JSX.Element | null {
     <>
       {vault ? (
         <div className="shell">
+          <RecordingBar />
           <div className="layout">
             {!lectureMode && <Sidebar />}
             <Workspace />
@@ -131,6 +138,7 @@ export function App(): React.JSX.Element | null {
           {overlay === 'switcher' && <QuickSwitcher />}
           {overlay === 'search' && <SearchPanel />}
           {overlay === 'settings' && <SettingsDialog />}
+          <TranscribeSetup />
         </div>
       ) : (
         <Welcome />

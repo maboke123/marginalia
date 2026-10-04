@@ -7,6 +7,7 @@ import { ConfigStore } from './config'
 import { registerClaude } from './claude/service'
 import { handle, registerIpc } from './ipc'
 import { registerTerminal } from './terminal'
+import { registerTranscription } from './transcribe/service'
 
 let mainWindow: BrowserWindow | null = null
 
@@ -113,6 +114,7 @@ app.whenReady().then(async () => {
   const currentVault = registerIpc(() => mainWindow, config, app.getPath('userData'))
   registerClaude(handle, () => mainWindow, config, currentVault)
   registerTerminal(handle, () => mainWindow, config, currentVault)
+  registerTranscription(handle, () => mainWindow, app.getPath('userData'), currentVault)
   protocol.handle('vault', (request) => {
     const vault = currentVault()
     if (!vault) return new Response('No vault open', { status: 404 })

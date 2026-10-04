@@ -2347,3 +2347,108 @@ h2 {
   margin: 24px 0 0;
   font-size: 12px;
 }
+
+/* Lecture recording */
+
+.recording-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 40px;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-sidebar);
+  flex-shrink: 0;
+}
+
+.recording-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--danger);
+}
+
+.recording-time {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.recording-level {
+  width: 60px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--border);
+  overflow: hidden;
+}
+
+.recording-level span {
+  display: block;
+  height: 100%;
+  background: var(--text-muted);
+}
+
+.recording-progress {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-muted);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.recording-progress.error {
+  color: var(--danger);
+}
+
+.setup-dialog {
+  position: absolute;
+  top: 96px;
+  left: 50%;
+  width: min(480px, calc(100vw - 32px));
+  padding: 20px 24px;
+  transform: translateX(-50%);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  box-shadow: var(--shadow-menu);
+}
+
+.setup-dialog h2 {
+  margin: 0 0 12px;
+  font-size: 16px;
+}
+
+.setup-dialog p {
+  margin: 0 0 10px;
+  line-height: 1.5;
+}
+
+.setup-progress {
+  height: 6px;
+  margin: 16px 0 8px;
+  border-radius: 3px;
+  background: var(--border);
+  overflow: hidden;
+}
+
+.setup-progress span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+}
+
+.setup-error {
+  color: var(--danger);
+}
+
+.setup-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.pane-note {
+  margin-right: 8px;
+  font-size: 12px;
+}

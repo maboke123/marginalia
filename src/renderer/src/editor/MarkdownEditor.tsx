@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
-import { Annotation, EditorState } from '@codemirror/state'
+import { Annotation, Compartment, EditorState, type Extension } from '@codemirror/state'
 import { EditorView } from '@codemirror/view'
 import { Icon } from '../components/Icon'
 import { registerFlush } from '../lib/flush'
 import { registerNote } from '../lib/open'
 import { useApp } from '../store'
+import { useRecording } from '../transcribe/recording'
 import { insertText } from './commands'
 import { resolveLink } from './links'
 import { headingPath } from './sections'
@@ -24,6 +25,8 @@ export function MarkdownEditor({
   const [error, setError] = useState<string | null>(null)
   const lectureMode = useApp((s) => s.lectureMode)
   const toggleLecture = useApp((s) => s.toggleLecture)
+  const recording = useRecording((s) => !!s.active)
+  const beingWritten = useRecording((s) => s.active?.transcript === path)
 
   useEffect(() => {
     const api = window.api.vault
@@ -34,6 +37,14 @@ export function MarkdownEditor({
     let saved = ''
     let dirty = false
     let timer: ReturnType<typeof setTimeout> | undefined
+    // A transcript being recorded is written by the app; edits here would be lost when the
+    // next part comes in, so it is read-only until the recording stops.
+    const lock = new Compartment()
+    const locked = (): boolean => useRecording.getState().active?.transcript === path
+    const lockedBy = (on: boolean): Extension => [
+      EditorState.readOnly.of(on),
+      EditorView.editable.of(!on)
+    ]
 
     const save = async (): Promise<void> => {
       clearTimeout(timer)
@@ -86,6 +97,7 @@ export function MarkdownEditor({
             selection: { anchor: text.length },
             extensions: [
               editorExtensions({ path, onOpenLink: openLink }),
+              lock.of(lockedBy(locked())),
               EditorView.updateListener.of((update) => {
                 if (update.docChanged || update.selectionSet) publishCursor(update.state)
                 if (!update.docChanged) return
@@ -122,6 +134,12 @@ export function MarkdownEditor({
       })
     })
     const unregister = registerFlush(save)
+    const stopLock = useRecording.subscribe((state, previous) => {
+      const was = previous.active?.transcript === path
+      if ((state.active?.transcript === path) !== was) {
+        view?.dispatch({ effects: lock.reconfigure(lockedBy(locked())) })
+      }
+    })
 
     // A search result in this note: put the cursor at the start of its paragraph.
     const goToLine = (line: number): void => {
@@ -141,6 +159,7 @@ export function MarkdownEditor({
     return () => {
       cancelled = true
       stopGoto()
+      stopLock()
       unregisterNote()
       if (useApp.getState().noteCursor?.path === path) setNoteCursor(null)
       stopWatching()
@@ -154,6 +173,16 @@ export function MarkdownEditor({
     <div className="md-pane">
       <div className="pane-toolbar">
         <span className="pane-title">{title}</span>
+        {beingWritten && <span className="muted pane-note">Being written while you record</span>}
+        <button
+          className={recording ? 'icon-button pressed' : 'icon-button'}
+          title={`${recording ? 'Stop recording' : 'Record the lecture'} (${useApp.getState().settings.hotkeys.record})`}
+          aria-label="Record lecture"
+          aria-pressed={recording}
+          onClick={() => void useRecording.getState().toggle()}
+        >
+          <Icon name="mic" />
+        </button>
         <button
           className={lectureMode ? 'icon-button pressed' : 'icon-button'}
           title={`Lecture mode (${useApp.getState().settings.hotkeys.lecture})`}

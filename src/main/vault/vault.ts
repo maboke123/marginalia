@@ -206,6 +206,21 @@ export class Vault {
     return toRel(this.root, target)
   }
 
+  /** Adds text to the end of a note, for transcripts written while a lecture goes on. */
+  async appendText(rel: string, text: string): Promise<void> {
+    const current = await this.readText(rel)
+    await this.writeText(rel, current + text)
+  }
+
+  /** Adds bytes to the end of a file in the assets folder next to `nearRel` (a recording). */
+  async appendAsset(nearRel: string, name: string, data: Uint8Array): Promise<string> {
+    if (!/^[\w.-]+$/.test(name)) throw new VaultError(`Bad asset name: ${name}`)
+    const dir = path.join(path.dirname(this.resolveItem(nearRel)), ASSETS_DIR)
+    await fs.mkdir(dir, { recursive: true })
+    await fs.appendFile(path.join(dir, name), data)
+    return `${ASSETS_DIR}/${name}`
+  }
+
   /** Copies a PDF into a section. The original is only read, never moved or changed. */
   async importPdf(parentRel: string, source: string): Promise<string> {
     if (!parentRel) throw new VaultError('PDFs go inside a notebook or section')
