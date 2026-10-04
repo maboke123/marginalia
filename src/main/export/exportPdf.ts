@@ -4,7 +4,7 @@ import path from 'path'
 import type { PDFDocument, PDFFont, PDFImage, PDFPage, RGB } from 'pdf-lib'
 import type { AnnotationFile, PageAnnotations, TextBox } from '../../shared/annotations'
 import { strokeOutline } from '../../shared/ink'
-import { HIGHLIGHT_OPACITY, pageUnit, TEXT_SIZES } from '../../shared/palette'
+import { HIGHLIGHT_OPACITY, pageUnit, DEFAULT_TEXT_SIZE } from '../../shared/palette'
 import { markdownToText } from '../../shared/plainText'
 
 type PdfLib = typeof import('pdf-lib')
@@ -109,7 +109,7 @@ function drawTextBox(
   fonts: Fonts,
   pageWidth: number
 ): void {
-  const size = box.fontSize ?? TEXT_SIZES[1].value * pageUnit(pageWidth)
+  const size = box.fontSize ?? DEFAULT_TEXT_SIZE * pageUnit(pageWidth)
   const lines = wrap(markdownToText(box.markdown), fonts, size, box.width - 2 * PADDING_X)
   const color = hex(lib, box.color && /^#[0-9a-f]{6}$/i.test(box.color) ? box.color : PAPER_TEXT)
   lines.forEach((line, i) => {

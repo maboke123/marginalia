@@ -209,10 +209,14 @@ test('text boxes can be resized, change text size and use bold', async () => {
   await expect.poll(async () => (await box.boundingBox())!.width).toBeGreaterThan(before.width + 60)
 
   const fontBefore = await box.evaluate((el) => parseFloat(getComputedStyle(el).fontSize))
-  await page.getByRole('button', { name: 'Huge text' }).click()
+  await page.getByRole('combobox', { name: 'Text size' }).selectOption('21')
   await expect
     .poll(() => box.evaluate((el) => parseFloat(getComputedStyle(el).fontSize)))
     .toBeGreaterThan(fontBefore * 1.4)
+  await page.getByRole('combobox', { name: 'Text size' }).selectOption('6')
+  await expect
+    .poll(() => box.evaluate((el) => parseFloat(getComputedStyle(el).fontSize)))
+    .toBeLessThan(fontBefore * 0.5)
 })
 
 test('in text mode a click on a box carries on typing in it', async () => {

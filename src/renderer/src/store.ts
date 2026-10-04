@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { DEFAULT_SETTINGS, type AppSettings } from '../../shared/settings'
 import type { NotebookColor, Position, VaultInfo, VaultNode } from '../../shared/types'
-import { ERASER_SIZES, PEN_WIDTHS, TEXT_SIZES } from '../../shared/palette'
+import { ERASER_SIZES, PEN_WIDTHS, DEFAULT_TEXT_SIZE } from '../../shared/palette'
 import { flushAll } from './lib/flush'
 import { childrenOf, findNode, isFolder, pairNotes, parentOf, remap } from './lib/tree'
 
@@ -325,7 +325,7 @@ export const useApp = create<AppState>((set, get) => {
       highlightColor: DEFAULT_SETTINGS.highlightColors[0],
       eraserMode: 'partial',
       eraserSize: ERASER_SIZES[1].value,
-      textSize: TEXT_SIZES[1].value,
+      textSize: DEFAULT_TEXT_SIZE,
       textColor: null
     },
 

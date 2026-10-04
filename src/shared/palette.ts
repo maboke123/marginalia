@@ -23,11 +23,8 @@ export const ERASER_SIZES = [
  */
 export const pageUnit = (pageWidth: number): number => pageWidth / 625
 
-// Text box font size in screen pixels at "fit width".
-export const TEXT_SIZES = [
-  { name: 'Small', value: 11 },
-  { name: 'Normal', value: 13 },
-  { name: 'Large', value: 16 },
-  { name: 'Huge', value: 21 }
-]
+// Text box font sizes for a 625-point wide page; on other pages they scale with pageUnit,
+// so a size looks the same on every deck.
+export const TEXT_SIZES = [6, 7, 8, 9, 10, 11, 12, 13, 14, 16, 18, 21, 24, 28]
+export const DEFAULT_TEXT_SIZE = 13
 export const HIGHLIGHT_OPACITY = 0.4

@@ -32,7 +32,12 @@ import { GhostView } from './GhostView'
 import { ImageView } from './ImageView'
 import { imagePath, resizeImage } from './images'
 import { strokePath } from './ink'
-import { HIGHLIGHT_OPACITY, HIGHLIGHTER_WIDTH, pageUnit, TEXT_SIZES } from '../../../shared/palette'
+import {
+  HIGHLIGHT_OPACITY,
+  HIGHLIGHTER_WIDTH,
+  pageUnit,
+  DEFAULT_TEXT_SIZE
+} from '../../../shared/palette'
 import { TextBoxView } from './TextBoxView'
 import { TextLayerView } from './TextLayerView'
 
@@ -83,8 +88,6 @@ function finishTyping(): void {
 
 const DRAG_THRESHOLD_PX = 3
 const DEFAULT_BOX_WIDTH = 180
-// Boxes from before text sizes existed have no fontSize.
-const DEFAULT_TEXT_SIZE = TEXT_SIZES[1].value
 
 function AnnotatedOverlay({
   pdf,

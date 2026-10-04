@@ -148,6 +148,11 @@ function TextStyle({
   const unit = selection ? pageUnit(pageWidth(selection.page)) : 1
   const current = box?.fontSize ? box.fontSize / unit : textSize
   const currentColor = (box ? box.color : textColor) ?? colors[0]
+  // A box can have a size that is not in the list (imported ones); show it as it is.
+  const shown = Math.round(current * 10) / 10
+  const sizes = TEXT_SIZES.some((s) => Math.abs(s - shown) < 0.05)
+    ? TEXT_SIZES
+    : [...TEXT_SIZES, shown].sort((a, b) => a - b)
 
   function changeBox(changes: { fontSize?: number; color?: string }): void {
     if (!selection || !box) return
@@ -170,20 +175,19 @@ function TextStyle({
     <>
       <span className="toolbar-divider" />
       <Swatches colors={colors} value={currentColor} onPick={pickColor} />
-      {TEXT_SIZES.map((size) => (
-        <button
-          key={size.value}
-          className={Math.abs(current - size.value) < 0.5 ? 'icon-button pressed' : 'icon-button'}
-          title={`${size.name} text`}
-          aria-label={`${size.name} text`}
-          aria-pressed={Math.abs(current - size.value) < 0.5}
-          onClick={() => pick(size.value)}
-        >
-          <span className="text-size" style={{ fontSize: size.value }}>
-            A
-          </span>
-        </button>
-      ))}
+      <select
+        className="toolbar-select"
+        title="Text size"
+        aria-label="Text size"
+        value={shown}
+        onChange={(e) => pick(Number(e.target.value))}
+      >
+        {sizes.map((size) => (
+          <option key={size} value={size}>
+            {size}
+          </option>
+        ))}
+      </select>
     </>
   )
 }

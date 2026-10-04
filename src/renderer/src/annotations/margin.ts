@@ -1,6 +1,6 @@
 import type { PageAnnotations, TextBox } from '../../../shared/annotations'
 import { round } from './geometry'
-import { pageUnit, TEXT_SIZES } from '../../../shared/palette'
+import { pageUnit, DEFAULT_TEXT_SIZE } from '../../../shared/palette'
 
 /** Rough height of a rendered text box: wrapped lines at about half an em per character. */
 export function estimateHeight(box: Pick<TextBox, 'markdown' | 'width'>, fontSize: number): number {
@@ -15,7 +15,7 @@ export function estimateHeight(box: Pick<TextBox, 'markdown' | 'width'>, fontSiz
 export function marginBottom(page: PageAnnotations, pageWidth: number): number | null {
   const unit = pageUnit(pageWidth)
   const gap = 8 * unit
-  const fontSize = round(TEXT_SIZES[1].value * unit)
+  const fontSize = round(DEFAULT_TEXT_SIZE * unit)
   const bottoms = [
     ...page.textBoxes
       .filter((box) => box.x >= pageWidth - gap)
@@ -37,7 +37,7 @@ export function marginSlot(
 ): Pick<TextBox, 'x' | 'y' | 'width' | 'fontSize'> {
   const unit = pageUnit(pageWidth)
   const gap = 8 * unit
-  const fontSize = round(TEXT_SIZES[1].value * unit)
+  const fontSize = round(DEFAULT_TEXT_SIZE * unit)
   const width = round(Math.max(60 * unit, pageWidth * margin - 2 * gap))
   const y = marginBottom(page, pageWidth) ?? gap
   return {
