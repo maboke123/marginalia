@@ -227,7 +227,7 @@ export const useApp = create<AppState>((set, get) => {
       renaming: null,
       recent: (await attempt(() => api.recent())) ?? get().recent
     })
-    document.title = `${vault.name} - marginalia-poc`
+    document.title = `${vault.name} - Marginalia`
     await get().refresh()
   }
 

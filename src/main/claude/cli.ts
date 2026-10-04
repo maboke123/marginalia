@@ -30,7 +30,7 @@ export async function storedApiKey(config: ConfigStore): Promise<string | null> 
 export function claudeEnvironment(apiKey: string | null): Record<string, string | undefined> {
   const env: Record<string, string | undefined> = {
     ...process.env,
-    CLAUDE_AGENT_SDK_CLIENT_APP: `marginalia-poc/${app.getVersion()}`
+    CLAUDE_AGENT_SDK_CLIENT_APP: `marginalia/${app.getVersion()}`
   }
   // The CLI's updater moves its running exe aside to replace it, which left the SDK without
   // its binary. This copy must stay at the version the SDK expects; npm updates it.

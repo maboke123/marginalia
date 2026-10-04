@@ -1,4 +1,5 @@
 import { app, BrowserWindow, ipcMain, Menu, nativeTheme, net, protocol, shell } from 'electron'
+import { cpSync, existsSync } from 'fs'
 import path from 'path'
 import { pathToFileURL } from 'url'
 import icon from '../../build/icon.ico?asset'
@@ -75,6 +76,23 @@ function createWindow(): void {
 // Lets UI tests run against a throwaway profile instead of the real list of recent vaults.
 if (process.env['MARGINALIA_USER_DATA']) {
   app.setPath('userData', process.env['MARGINALIA_USER_DATA'])
+} else {
+  adoptOldUserData()
+}
+
+// The app used to be called marginalia-poc, with its recent vaults, settings and saved key in
+// that folder. Electron has already created the new folder by now, so look for config.json.
+function adoptOldUserData(): void {
+  const old = path.join(app.getPath('appData'), 'marginalia-poc')
+  const current = app.getPath('userData')
+  if (existsSync(path.join(current, 'config.json')) || !existsSync(path.join(old, 'config.json'))) {
+    return
+  }
+  try {
+    cpSync(old, current, { recursive: true, force: false })
+  } catch (e) {
+    console.error('Could not copy the data of marginalia-poc', e)
+  }
 }
 
 // vault://local/<path in vault> serves images in notes. Only files inside the open vault.
@@ -89,7 +107,7 @@ Menu.setApplicationMenu(null)
 ipcMain.on('app:version', (e) => (e.returnValue = app.getVersion()))
 
 app.whenReady().then(async () => {
-  app.setAppUserModelId('be.kuleuven.mathiasbk.marginalia-poc')
+  app.setAppUserModelId('io.github.maboke123.marginalia')
   const config = new ConfigStore(path.join(app.getPath('userData'), 'config.json'))
   nativeTheme.themeSource = (await config.read()).settings.theme
   const currentVault = registerIpc(() => mainWindow, config, app.getPath('userData'))

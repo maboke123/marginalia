@@ -1,5 +1,4 @@
-appId: be.kuleuven.mathiasbk.marginalia-poc
-productName: marginalia-poc
+appId: io.github.maboke123.marginalia
 directories:
   buildResources: build
 # Only the built app; electron-builder adds the production dependencies itself.
@@ -12,7 +11,7 @@ asarUnpack:
   # node-pty's native module and its conpty helpers are loaded from disk as well.
   - node_modules/node-pty/**
 win:
-  executableName: marginalia-poc
+  executableName: marginalia
 nsis:
   artifactName: ${name}-${version}-setup.${ext}
   shortcutName: ${productName}

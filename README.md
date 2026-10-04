@@ -80,7 +80,7 @@ Writes are atomic (temp file, then rename), so a crash or power cut does not lea
 
 ## Install
 
-Download `marginalia-poc-<version>-setup.exe` from the releases page and run it. The installer is not signed, so Windows SmartScreen will warn you: choose "More info" and then "Run anyway".
+Download `marginalia-<version>-setup.exe` from the releases page and run it. The installer is not signed, so Windows SmartScreen will warn you: choose "More info" and then "Run anyway".
 
 Windows 11 only.
 
@@ -98,8 +98,8 @@ Everything except Claude works offline.
 Requires Node.js 22 or later and npm.
 
 ```sh
-git clone https://github.com/maboke123/marginalia-poc.git
-cd marginalia-poc
+git clone https://github.com/maboke123/marginalia.git
+cd marginalia
 npm install
 npm run dev          # run with hot reload
 npm run build:win    # build the installer into dist/
