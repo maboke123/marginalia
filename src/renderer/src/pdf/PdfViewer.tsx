@@ -1,6 +1,15 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { PDFDocumentLoadingTask, PDFDocumentProxy } from 'pdfjs-dist'
+import { useStore } from 'zustand'
 import { type LoadedAnnotations, type TextMarkup } from '../../../shared/annotations'
+import {
+  MAX_BLANKS_PER_SLIDE,
+  insertBlankPage,
+  isBlankPage,
+  removeBlankPage,
+  slideOf,
+  viewPages
+} from '../../../shared/blankPages'
 import { MARGIN_WIDTHS } from '../../../shared/settings'
 import { comboOf } from '../../../shared/hotkeys'
 import { addImageFiles, lastClick } from '../annotations/addImages'
@@ -8,6 +17,7 @@ import { AnnotationToolbar } from '../annotations/AnnotationToolbar'
 import { AnnotationContext } from '../annotations/context'
 import { addItem, createAnnotationDoc, removeItems, type AnnotationDoc } from '../annotations/doc'
 import { highlightFromSelection, selectedTextLayer } from '../annotations/selection'
+import { ContextMenu } from '../components/ContextMenu'
 import { Icon } from '../components/Icon'
 import { registerFlush } from '../lib/flush'
 import { registerPdf } from '../lib/open'
@@ -36,10 +46,14 @@ interface Loaded {
 
 /** Where the view is pinned while the scale changes: a point on a page at some height in the view. */
 interface Anchor {
-  page: number
+  /** Page key (3, or 3.1 for a blank page), so adding a blank page does not move the view. */
+  id: number
   fraction: number
   viewY: number
 }
+
+// Stands in for the annotation doc when annotations are off, so hooks stay unconditional.
+const NO_DOC = createAnnotationDoc({})
 
 export function PdfViewer({ path, title }: { path: string; title: string }): React.JSX.Element {
   const [loaded, setLoaded] = useState<Loaded | null>(null)
@@ -126,11 +140,31 @@ function Document({
   const [viewport, setViewport] = useState({ width: 0, height: 0 })
   const [zoom, setZoom] = useState<'fit' | number>('fit')
   const [scrollTop, setScrollTop] = useState(0)
-  const anchor = useRef<Anchor>({ page: startPage, fraction: 0, viewY: VIEW_PADDING })
+  const anchor = useRef<Anchor>({ id: startPage, fraction: 0, viewY: VIEW_PADDING })
   const setPdfView = useApp((s) => s.setPdfView)
+  const [pageMenu, setPageMenu] = useState<{ x: number; y: number; id: number } | null>(null)
 
-  const scale = zoom === 'fit' ? fitWidthScale(sizes, viewport.width, margin) : zoom
-  const layout = useMemo(() => layoutPages(sizes, scale, margin), [sizes, scale, margin])
+  // Blank pages added below slides sit between the PDF's own pages.
+  const blankKeys = useStore(activeDoc ?? NO_DOC, (s) =>
+    Object.keys(s.pages)
+      .filter((k) => isBlankPage(Number(k)))
+      .join(',')
+  )
+  const views = useMemo(
+    () => viewPages(sizes.length, Object.fromEntries(blankKeys.split(',').map((k) => [k, k]))),
+    [sizes.length, blankKeys]
+  )
+  const viewSizes = useMemo(() => views.map((v) => sizes[slideOf(v.id) - 1]), [views, sizes])
+  const indexOf = useCallback(
+    (id: number): number => {
+      const i = views.findIndex((v) => v.id === id)
+      return i !== -1 ? i : views.findIndex((v) => v.id === slideOf(id))
+    },
+    [views]
+  )
+
+  const scale = zoom === 'fit' ? fitWidthScale(viewSizes, viewport.width, margin) : zoom
+  const layout = useMemo(() => layoutPages(viewSizes, scale, margin), [viewSizes, scale, margin])
   const contentWidth = Math.max(viewport.width, layout.maxWidth + 2 * VIEW_PADDING)
 
   useLayoutEffect(() => {
@@ -150,10 +184,11 @@ function Document({
   useLayoutEffect(() => {
     const el = scrollRef.current!
     if (!viewport.width) return
-    const { page: p, fraction, viewY } = anchor.current
-    el.scrollTop = layout.tops[p - 1] + fraction * layout.heights[p - 1] - viewY
+    const { id, fraction, viewY } = anchor.current
+    const i = indexOf(id)
+    el.scrollTop = layout.tops[i] + fraction * layout.heights[i] - viewY
     setScrollTop(el.scrollTop)
-  }, [layout, viewport.width])
+  }, [layout, viewport.width, indexOf])
 
   const onScroll = useCallback(() => {
     const el = scrollRef.current!
@@ -161,13 +196,18 @@ function Document({
     setSelectionAt(null)
     const [first] = pagesBetween(layout, el.scrollTop, el.scrollTop + 1)
     anchor.current = {
-      page: first + 1,
+      id: views[first].id,
       fraction: (el.scrollTop - layout.tops[first]) / layout.heights[first],
       viewY: 0
     }
-  }, [layout])
+  }, [layout, views])
 
-  const page = viewport.height ? mostVisiblePage(layout, scrollTop, viewport.height) : startPage
+  const viewIndex = viewport.height
+    ? mostVisiblePage(layout, scrollTop, viewport.height) - 1
+    : indexOf(startPage)
+  const current = views[viewIndex] ?? views[0]
+  // The slide on screen; a blank page counts as the slide it was added after.
+  const page = slideOf(current.id)
 
   // Saved a second after scrolling stops, and once more when the viewer closes so a quick
   // switch to another file does not lose the position.
@@ -300,10 +340,14 @@ function Document({
       const el = scrollRef.current!
       const y = el.scrollTop + viewY
       const [i] = pagesBetween(layout, y, y + 1)
-      anchor.current = { page: i + 1, fraction: (y - layout.tops[i]) / layout.heights[i], viewY }
+      anchor.current = {
+        id: views[i].id,
+        fraction: (y - layout.tops[i]) / layout.heights[i],
+        viewY
+      }
       setZoom(clampScale(next))
     },
-    [layout]
+    [layout, views]
   )
 
   // Ctrl+wheel zooms around the mouse. React's wheel listener is passive and cannot
@@ -320,13 +364,45 @@ function Document({
     return () => el.removeEventListener('wheel', onWheel)
   }, [scale, zoomTo])
 
-  const goTo = useCallback(
-    (n: number) => {
-      const target = Math.min(Math.max(1, n), sizes.length)
-      scrollRef.current!.scrollTop = layout.tops[target - 1] - VIEW_PADDING
+  const goToView = useCallback(
+    (i: number) => {
+      const target = Math.min(Math.max(0, i), views.length - 1)
+      scrollRef.current!.scrollTop = layout.tops[target] - VIEW_PADDING
     },
-    [layout, sizes.length]
+    [layout, views.length]
   )
+
+  /** To a page of the PDF (a slide number, as in slide links). */
+  const goTo = useCallback(
+    (n: number) => goToView(indexOf(Math.min(Math.max(1, Math.round(n)), sizes.length))),
+    [goToView, indexOf, sizes.length]
+  )
+
+  function addBlankPage(below: number): void {
+    if (!activeDoc) return
+    const result = insertBlankPage(activeDoc.getState().pages, below)
+    if (!result) {
+      showError(`A slide can have at most ${MAX_BLANKS_PER_SLIDE} blank pages`)
+      return
+    }
+    // Once the new page is laid out, the view moves to it.
+    anchor.current = { id: result.id, fraction: 0, viewY: VIEW_PADDING }
+    activeDoc.getState().change(() => result.pages)
+    // Back to the slides, so T, P and the rest work on the new page right away.
+    scrollRef.current?.focus({ preventScroll: true })
+  }
+
+  function removeBlank(id: number): void {
+    activeDoc?.getState().change((p) => removeBlankPage(p, id))
+    scrollRef.current?.focus({ preventScroll: true })
+  }
+
+  function onPageContextMenu(e: React.MouseEvent): void {
+    const el = (e.target as Element).closest<HTMLElement>('.pdf-page')
+    if (!el || !activeDoc) return
+    e.preventDefault()
+    setPageMenu({ x: e.clientX, y: e.clientY, id: Number(el.dataset.page) })
+  }
 
   // Clicking a slide link while this PDF is already open.
   useEffect(
@@ -365,8 +441,8 @@ function Document({
     } else if (ctrl && (e.key === '=' || e.key === '+')) zoomTo(stepZoom(scale, 1))
     else if (ctrl && e.key === '-') zoomTo(stepZoom(scale, -1))
     else if (ctrl && e.key === '0') setZoom('fit')
-    else if (!ctrl && e.key === 'ArrowRight') goTo(page + 1)
-    else if (!ctrl && e.key === 'ArrowLeft') goTo(page - 1)
+    else if (!ctrl && e.key === 'ArrowRight') goToView(viewIndex + 1)
+    else if (!ctrl && e.key === 'ArrowLeft') goToView(viewIndex - 1)
     else return
     e.preventDefault()
   }
@@ -380,10 +456,10 @@ function Document({
     if (!files.length) return
     e.preventDefault()
     const click = lastClick(activeDoc)
-    const on = click?.page === page ? click : null
-    const size = sizes[page - 1]
+    const on = click?.page === current.id ? click : null
+    const size = viewSizes[viewIndex]
     addImageFiles(activeDoc, path, files, {
-      page,
+      page: current.id,
       width: size.width,
       height: size.height,
       margin,
@@ -401,7 +477,7 @@ function Document({
   return (
     <div className="pdf-viewer" ref={viewerRef}>
       <div className="pdf-toolbar">
-        <AnnotationToolbar doc={activeDoc} pageWidth={(n) => sizes[n - 1].width} />
+        <AnnotationToolbar doc={activeDoc} pageWidth={(n) => sizes[slideOf(n) - 1].width} />
         <span className="pdf-title" title={title}>
           {title}
         </span>
@@ -449,6 +525,15 @@ function Document({
               Fit width
             </button>
           </div>
+          <button
+            className="icon-button"
+            title="Add a blank page below this one, for notes that do not fit"
+            aria-label="Add blank page"
+            disabled={!activeDoc}
+            onClick={() => addBlankPage(current.id)}
+          >
+            <Icon name="addPage" />
+          </button>
           <button
             className="icon-button"
             title="Export a copy with the annotations drawn in"
@@ -503,16 +588,18 @@ function Document({
             if (!(e.target as Element).closest('.textLayer span')) clearTextSelection()
           }}
           onPointerUp={() => setTimeout(updateSelectionAction)}
+          onContextMenu={onPageContextMenu}
         >
           <div className="pdf-content" style={{ height: layout.totalHeight, width: contentWidth }}>
             {viewport.width > 0 &&
-              sizes.map((size, i) => (
+              views.map((view, i) => (
                 <PdfPage
-                  key={i}
+                  key={view.id}
                   pdf={pdf}
                   path={path}
-                  number={i + 1}
-                  size={size}
+                  number={view.id}
+                  blank={view.pdfPage === null}
+                  size={viewSizes[i]}
                   margin={margin}
                   top={layout.tops[i]}
                   left={(contentWidth - layout.widths[i]) / 2}
@@ -524,7 +611,8 @@ function Document({
               <SnapshotLayer
                 pdf={pdf}
                 layout={layout}
-                sizes={sizes}
+                views={views}
+                sizes={viewSizes}
                 scale={scale}
                 contentWidth={contentWidth}
               />
@@ -532,6 +620,27 @@ function Document({
           </div>
         </div>
       </AnnotationContext.Provider>
+
+      {pageMenu && (
+        <ContextMenu
+          x={pageMenu.x}
+          y={pageMenu.y}
+          onClose={() => setPageMenu(null)}
+          items={[
+            { label: 'Add blank page below', onSelect: () => addBlankPage(pageMenu.id) },
+            ...(isBlankPage(pageMenu.id)
+              ? [
+                  {
+                    label: 'Remove this blank page',
+                    danger: true,
+                    hint: 'Ctrl+Z brings it back',
+                    onSelect: () => removeBlank(pageMenu.id)
+                  }
+                ]
+              : [])
+          ]}
+        />
+      )}
 
       {selectionAt && (
         <div

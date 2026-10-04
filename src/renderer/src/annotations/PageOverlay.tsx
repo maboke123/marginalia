@@ -46,6 +46,8 @@ interface Props {
   /** Vault path of the PDF; images on its pages are stored next to it. */
   path: string
   number: number
+  /** A blank page I added: no PDF text to select. */
+  blank?: boolean
   /** Page size in points, without the margin. */
   width: number
   height: number
@@ -68,7 +70,9 @@ export const PageOverlay = memo(function PageOverlay(props: Props): React.JSX.El
   if (!doc) {
     return (
       <div className="page-overlay" style={style}>
-        <TextLayerView pdf={props.pdf} number={props.number} width={width} height={height} />
+        {!props.blank && (
+          <TextLayerView pdf={props.pdf} number={props.number} width={width} height={height} />
+        )}
       </div>
     )
   }
@@ -93,6 +97,7 @@ function AnnotatedOverlay({
   pdf,
   path,
   number,
+  blank,
   width,
   height,
   margin,
@@ -429,7 +434,7 @@ function AnnotatedOverlay({
         ))
       )}
 
-      <TextLayerView pdf={pdf} number={number} width={width} height={height} />
+      {!blank && <TextLayerView pdf={pdf} number={number} width={width} height={height} />}
 
       {page.images?.map((image) => (
         <ImageView

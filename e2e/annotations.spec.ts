@@ -161,6 +161,37 @@ test('a pasted screenshot goes where I clicked and follows the PDF', async () =>
   await fs.access(path.join(env.vault, 'Machine Learning/B3 Ensembles', saved.src))
 })
 
+test('a blank page below a slide takes notes and can be removed', async () => {
+  await openSlides()
+  await page.getByRole('button', { name: 'Add blank page' }).click()
+  const blank = page.locator('.pdf-page.blank[data-page="1.1"]')
+  await expect(blank).toBeVisible()
+  await expect(blank.locator('.textLayer')).toHaveCount(0)
+  // The PDF's own second page comes after it.
+  const order = await page
+    .locator('.pdf-page')
+    .evaluateAll((els) => els.slice(0, 3).map((el) => (el as HTMLElement).dataset.page))
+  expect(order).toEqual(['1', '1.1', '2'])
+
+  await page.keyboard.press('t')
+  const sheet = (await blank.boundingBox())!
+  await page.mouse.click(sheet.x + sheet.width * 0.1, sheet.y + sheet.height * 0.2)
+  await page.keyboard.type('More room for the proof')
+  await page.keyboard.press('Escape')
+  await expect(blank.locator('.text-box')).toHaveText('More room for the proof')
+  await expect
+    .poll(async () => (await readSidecar().catch(() => null))?.pages['1.1'])
+    .toMatchObject({ blank: true, textBoxes: [{ markdown: 'More room for the proof' }] })
+
+  await page.keyboard.press('v')
+  await blank.click({ button: 'right', position: { x: 20, y: 20 } })
+  await page.getByRole('menuitem', { name: /Remove this blank page/ }).click()
+  await expect(blank).toHaveCount(0)
+  await page.keyboard.press('Control+z')
+  await expect(blank.locator('.text-box')).toHaveText('More room for the proof')
+  await page.screenshot({ path: path.join('test-results', 'blank-page.png') })
+})
+
 test('undo, redo and the eraser', async () => {
   await openSlides()
   await page.keyboard.press('p')

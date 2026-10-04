@@ -6,7 +6,10 @@ import type { PageSize } from './layout'
 interface Props {
   pdf: PDFDocumentProxy
   path: string
+  /** Page key: the PDF page number, or 3.1 for a blank page added after page 3. */
   number: number
+  /** A page I added, with no PDF page to draw. */
+  blank?: boolean
   size: PageSize
   margin: number
   top: number
@@ -17,12 +20,12 @@ interface Props {
 }
 
 export const PdfPage = memo(function PdfPage(props: Props): React.JSX.Element {
-  const { pdf, path, number, size, margin, top, left, scale, rendered } = props
+  const { pdf, path, number, blank, size, margin, top, left, scale, rendered } = props
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const renderedScale = useRef<number | null>(null)
 
   useEffect(() => {
-    if (!rendered) {
+    if (!rendered || blank) {
       renderedScale.current = null
       return
     }
@@ -61,20 +64,20 @@ export const PdfPage = memo(function PdfPage(props: Props): React.JSX.Element {
       clearTimeout(timer)
       task?.cancel()
     }
-  }, [pdf, number, scale, rendered])
+  }, [pdf, number, blank, scale, rendered])
 
   const sheetWidth = Math.round(size.width * scale)
   const height = Math.round(size.height * scale)
 
   return (
     <div
-      className="pdf-page"
+      className={blank ? 'pdf-page blank' : 'pdf-page'}
       data-page={number}
       style={{ top, left, width: Math.round(size.width * (1 + margin) * scale), height }}
-      aria-label={`Page ${number}`}
+      aria-label={blank ? `Blank page after page ${Math.floor(number)}` : `Page ${number}`}
     >
       <div className="pdf-sheet" style={{ width: sheetWidth, height }}>
-        {rendered && <canvas ref={canvasRef} />}
+        {rendered && !blank && <canvas ref={canvasRef} />}
       </div>
       {margin > 0 && <div className="pdf-margin" style={{ left: sheetWidth, height }} />}
       {rendered && (
@@ -82,6 +85,7 @@ export const PdfPage = memo(function PdfPage(props: Props): React.JSX.Element {
           pdf={pdf}
           path={path}
           number={number}
+          blank={blank}
           width={size.width}
           height={size.height}
           margin={margin}

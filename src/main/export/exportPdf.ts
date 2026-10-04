@@ -3,6 +3,7 @@ import { promises as fs } from 'fs'
 import path from 'path'
 import type { PDFDocument, PDFFont, PDFImage, PDFPage, RGB } from 'pdf-lib'
 import type { AnnotationFile, PageAnnotations, TextBox } from '../../shared/annotations'
+import { isBlankPage, slideOf } from '../../shared/blankPages'
 import { strokeOutline } from '../../shared/ink'
 import { HIGHLIGHT_OPACITY, pageUnit, DEFAULT_TEXT_SIZE } from '../../shared/palette'
 import { markdownToText } from '../../shared/plainText'
@@ -198,7 +199,8 @@ function drawPage(
 /** True when anything sits to the right of its page, in the margin. */
 function usesMargin(file: AnnotationFile, widths: number[]): boolean {
   return Object.entries(file.pages).some(([n, p]) => {
-    const w = widths[Number(n) - 1] ?? Infinity
+    // A blank page has the width of the slide it follows.
+    const w = widths[slideOf(Number(n)) - 1] ?? Infinity
     return (
       p.textBoxes.some((b) => b.x + b.width > w + 1) ||
       (p.images ?? []).some((im) => im.x + im.width > w + 1) ||
@@ -274,6 +276,32 @@ export async function exportAnnotated(
       drawPage(lib, page, pageAnnotations, origin, fonts, images, box.width)
     }
   })
+
+  // Blank pages I added go right after their slide, the size of that slide as shown. From the
+  // last slide back, so the places of earlier ones do not shift.
+  const blanks = Object.keys(annotations?.pages ?? {})
+    .map(Number)
+    .filter((id) => isBlankPage(id) && slideOf(id) <= pages.length)
+    .sort((a, b) => a - b)
+  for (let n = pages.length; n >= 1 && fonts; n--) {
+    const box = boxes[n - 1]
+    const quarterTurn = pages[n - 1].getRotation().angle % 180 !== 0
+    const [w, h] = quarterTurn ? [box.height, box.width] : [box.width, box.height]
+    blanks
+      .filter((id) => slideOf(id) === n)
+      .forEach((id, j) => {
+        const page = doc.insertPage(n + j, [widen ? w * (1 + annotations!.marginWidth) : w, h])
+        if (widen) {
+          page.drawLine({
+            start: { x: w, y: 0 },
+            end: { x: w, y: h },
+            thickness: 0.5,
+            color: hex(lib, MARGIN_RULE)
+          })
+        }
+        drawPage(lib, page, annotations!.pages[String(id)], { x: 0, top: h }, fonts, images, w)
+      })
+  }
 
   return { bytes: await doc.save(), skippedPages, missingImages }
 }

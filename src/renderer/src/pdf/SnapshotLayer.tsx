@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { PDFDocumentProxy } from 'pdfjs-dist'
+import type { ViewPage } from '../../../shared/blankPages'
 import { useApp } from '../store'
 import { pagesBetween, type Layout, type PageSize } from './layout'
 import { renderRegion } from './snapshot'
@@ -7,6 +8,8 @@ import { renderRegion } from './snapshot'
 interface Props {
   pdf: PDFDocumentProxy
   layout: Layout
+  /** The pages in the viewer, blank pages included; `sizes` and `layout` follow them. */
+  views: ViewPage[]
   sizes: PageSize[]
   scale: number
   contentWidth: number
@@ -21,6 +24,7 @@ type Box = { x: number; y: number; w: number; h: number }
 export function SnapshotLayer({
   pdf,
   layout,
+  views,
   sizes,
   scale,
   contentWidth
@@ -58,8 +62,13 @@ export function SnapshotLayer({
 
     const { editor, showError } = useApp.getState()
     if (!editor) return
+    const pdfPage = views[index].pdfPage
+    if (pdfPage === null) {
+      showError('A blank page has no slide to take a snapshot of')
+      return
+    }
     try {
-      const png = await renderRegion(pdf, index + 1, [x0, y0, x1 - x0, y1 - y0])
+      const png = await renderRegion(pdf, pdfPage, [x0, y0, x1 - x0, y1 - y0])
       const link = await window.api.vault.saveAsset(editor.path, png, 'png')
       editor.insert(`![](${link})\n`)
     } catch (err) {

@@ -60,6 +60,8 @@ export interface PageAnnotations {
   textBoxes: TextBox[]
   /** Missing in files from before images existed. */
   images?: PageImage[]
+  /** A blank page I added after a slide (see blankPages.ts); kept even when empty. */
+  blank?: boolean
 }
 
 /** Keyed by 1-based page number as a string, like the JSON file. */

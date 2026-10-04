@@ -694,6 +694,16 @@ h2 {
   background: var(--margin-bg);
 }
 
+/* A blank page I added below a slide: labelled on screen only, not in exports. */
+.pdf-page.blank .pdf-sheet::after {
+  content: 'Added page';
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  color: var(--paper-rule);
+  font-size: 11px;
+}
+
 .pdf-sheet canvas {
   display: block;
   width: 100%;

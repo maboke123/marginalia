@@ -1,5 +1,6 @@
 import { CONTEXT_END, CONTEXT_START, type ChatImage } from '../../../shared/claude'
 import type { PageAnnotations } from '../../../shared/annotations'
+import { isBlankPage, slideOf } from '../../../shared/blankPages'
 import { pageOf } from '../annotations/doc'
 import { imagePath } from '../annotations/images'
 import { textAround } from '../editor/sections'
@@ -96,9 +97,15 @@ export async function slideContext(
   lastImage: string | null
 ): Promise<{ lines: string[]; images: ChatImage[]; imageKey: string | null }> {
   const open = openPdf(path)
-  const lines = [`Slides: ${path}, page ${page} of ${open?.pdf.numPages ?? '?'}.`]
   const images: ChatImage[] = []
   let imageKey: string | null = null
+  if (isBlankPage(page)) {
+    const lines = [`A blank page I added after slide ${slideOf(page)} of ${path}, for extra notes.`]
+    const notes = open?.doc ? describeAnnotations(pageOf(open.doc.getState().pages, page)) : []
+    if (notes.length) lines.push('My annotations on this page:', ...notes)
+    return { lines, images, imageKey }
+  }
+  const lines = [`Slides: ${path}, page ${page} of ${open?.pdf.numPages ?? '?'}.`]
   if (!open) return { lines, images, imageKey }
   const key = `${path}#${page}`
   const annotations = open.doc ? pageOf(open.doc.getState().pages, page) : null

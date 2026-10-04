@@ -145,7 +145,10 @@ export function updatePage(
   const next = { ...fn(pageOf(pages, page)) }
   if (!next.images?.length) delete next.images
   const copy = { ...pages }
-  if (!next.strokes.length && !next.highlights.length && !next.textBoxes.length && !next.images) {
+  const empty =
+    !next.strokes.length && !next.highlights.length && !next.textBoxes.length && !next.images
+  // A blank page stays until it is removed on purpose, even with nothing on it.
+  if (empty && !next.blank) {
     delete copy[String(page)]
   } else {
     copy[String(page)] = next

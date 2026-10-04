@@ -139,6 +139,35 @@ describe('exportAnnotated', { timeout: 20_000 }, () => {
     expect(xObjects).toEqual([1, 1])
   })
 
+  it('puts blank pages right after their slide, with what is written on them', async () => {
+    const box = (markdown: string): PageAnnotations => ({
+      strokes: [],
+      highlights: [],
+      textBoxes: [{ id: markdown, x: 40, y: 40, width: 400, markdown, author: 'me' }],
+      blank: true
+    })
+    const result = await exportAnnotated(
+      await slides(3),
+      annotations({
+        '1.1': box('first extra page'),
+        '1.2': box('second extra page'),
+        '3.1': { strokes: [], highlights: [], textBoxes: [], blank: true }
+      })
+    )
+    const texts = await pageTexts(result.bytes)
+    expect(texts).toHaveLength(6)
+    expect(texts[0]).toContain('Slide 1')
+    expect(texts[1]).toContain('first extra page')
+    expect(texts[2]).toContain('second extra page')
+    expect(texts[3]).toContain('Slide 2')
+    expect(texts[4]).toContain('Slide 3')
+    expect(texts[5]).toBe('')
+    const out = await PDFDocument.load(result.bytes)
+    expect(out.getPages().map((p) => [p.getWidth(), p.getHeight()])).toEqual(
+      Array(6).fill([960, 540])
+    )
+  })
+
   it('keeps the page size without margin notes and skips rotated pages', async () => {
     const result = await exportAnnotated(
       await slides(2, true),
