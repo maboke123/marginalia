@@ -137,6 +137,8 @@ export interface MarginaliaApi {
     saveFeedback(entry: FeedbackEntry): Promise<void>
     /** Opens feedback.md in the default editor. */
     openFeedback(): Promise<void>
+    /** Build version, 0.1.<commit count> for a deployed build. */
+    version: string
   }
   files: {
     /** Absolute path of a file dropped from Explorer. */

@@ -17,7 +17,8 @@
     "test:watch": "vitest",
     "lint": "eslint --cache .",
     "format": "prettier --write .",
-    "test:e2e": "electron-vite build && playwright test"
+    "test:e2e": "electron-vite build && playwright test",
+    "deploy": "node scripts/deploy.mjs"
   },
   "devDependencies": {
     "@codemirror/autocomplete": "6.20.3",

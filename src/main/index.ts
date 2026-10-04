@@ -85,6 +85,9 @@ protocol.registerSchemesAsPrivileged([
 // The default menu binds Ctrl+Shift+I and Ctrl+R, which the app needs for its own hotkeys.
 Menu.setApplicationMenu(null)
 
+// Asked once by the preload when a window opens; shown in Settings.
+ipcMain.on('app:version', (e) => (e.returnValue = app.getVersion()))
+
 app.whenReady().then(async () => {
   app.setAppUserModelId('be.kuleuven.mathiasbk.marginalia-poc')
   const config = new ConfigStore(path.join(app.getPath('userData'), 'config.json'))

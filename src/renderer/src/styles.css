@@ -2342,3 +2342,8 @@ h2 {
   justify-content: space-between;
   align-items: center;
 }
+
+.settings-version {
+  margin: 24px 0 0;
+  font-size: 12px;
+}

@@ -227,6 +227,8 @@ export function SettingsDialog(): React.JSX.Element {
               under its gear button.
             </p>
           </section>
+
+          <p className="muted settings-version">Version {window.api.app.version}</p>
         </div>
       </div>
     </div>

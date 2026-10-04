@@ -48,6 +48,7 @@ async function openSlides(): Promise<void> {
 test('theme and hotkeys change at once and are kept', async () => {
   await page.keyboard.press('Control+,')
   const dialog = page.getByRole('dialog', { name: 'Settings' })
+  await expect(dialog.getByText(/^Version \d+\.\d+\.\d+$/)).toBeVisible()
   await dialog.getByRole('radio', { name: 'Dark' }).check()
   // Playwright pins prefers-color-scheme in the page, so ask Electron, which drives it.
   await expect

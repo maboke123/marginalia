@@ -97,7 +97,8 @@ const api: MarginaliaApi = {
     },
     readyToClose: () => ipcRenderer.send('app:ready-to-close'),
     saveFeedback: (entry) => invoke('app:feedback', entry),
-    openFeedback: () => invoke('app:openFeedback')
+    openFeedback: () => invoke('app:openFeedback'),
+    version: ipcRenderer.sendSync('app:version') as string
   },
   files: {
     pathFor: (file) => webUtils.getPathForFile(file)
