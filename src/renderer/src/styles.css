@@ -981,6 +981,14 @@ h2 {
   background: var(--accent);
 }
 
+/* Snapping: the line something lined up with while it is dragged */
+
+.snap-guide {
+  position: absolute;
+  background: var(--accent);
+  pointer-events: none;
+}
+
 /* Images on a page */
 
 .page-image {

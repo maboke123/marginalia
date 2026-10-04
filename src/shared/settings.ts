@@ -10,6 +10,8 @@ export interface AppSettings {
   penColors: string[]
   highlightColors: string[]
   hotkeys: Hotkeys
+  /** Text boxes and images snap to slide text, page edges and each other while dragged. */
+  snapping: boolean
 }
 
 export const MARGIN_WIDTHS = [
@@ -43,7 +45,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   marginWidth: 0.6,
   penColors: DEFAULT_PEN_COLORS,
   highlightColors: DEFAULT_HIGHLIGHT_COLORS,
-  hotkeys: DEFAULT_HOTKEYS
+  hotkeys: DEFAULT_HOTKEYS,
+  snapping: true
 }
 
 function colors(raw: unknown, fallback: string[]): string[] {
@@ -63,6 +66,7 @@ export function settingsFrom(raw: unknown): AppSettings {
       : DEFAULT_SETTINGS.marginWidth,
     penColors: colors(r.penColors, DEFAULT_PEN_COLORS),
     highlightColors: colors(r.highlightColors, DEFAULT_HIGHLIGHT_COLORS),
-    hotkeys: hotkeysFrom(r.hotkeys)
+    hotkeys: hotkeysFrom(r.hotkeys),
+    snapping: typeof r.snapping === 'boolean' ? r.snapping : DEFAULT_SETTINGS.snapping
   }
 }

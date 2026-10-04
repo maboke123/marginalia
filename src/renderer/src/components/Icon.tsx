@@ -24,7 +24,8 @@ const PATHS = {
   chat: 'M2.5 3.5h11v7.5H7l-3 2.5v-2.5H2.5z',
   search: 'M7 2.75a4.25 4.25 0 1 0 0 8.5 4.25 4.25 0 0 0 0-8.5zM10.1 10.1l3.4 3.4',
   export: 'M8 10V2.5M5 5.5l3-3 3 3M3 9v4.5h10V9',
-  addPage: 'M4 1.75h5.5L12.5 4.75v9.5H4zM9.5 1.75v3h3M8.25 7.5v4.5M6 9.75h4.5'
+  addPage: 'M4 1.75h5.5L12.5 4.75v9.5H4zM9.5 1.75v3h3M8.25 7.5v4.5M6 9.75h4.5',
+  magnet: 'M3.5 2.5h3v5.25a1.5 1.5 0 0 0 3 0V2.5h3v5.25a4.5 4.5 0 0 1-9 0zM3.5 5.5h3M9.5 5.5h3'
 } as const
 
 export type IconName = keyof typeof PATHS

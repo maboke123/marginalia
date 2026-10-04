@@ -31,6 +31,16 @@ import { applyChanges, planWrite, type WriteAnswer } from '../claude/writePlan'
 import { GhostView } from './GhostView'
 import { ImageView } from './ImageView'
 import { imagePath, resizeImage } from './images'
+import {
+  firstLineMiddle,
+  imageAnchors,
+  snapAxis,
+  textBoxAnchors,
+  textLines,
+  type Anchor,
+  type Rect,
+  type SnapTargets
+} from './snap'
 import { strokePath } from './ink'
 import {
   HIGHLIGHT_OPACITY,
@@ -91,6 +101,14 @@ function finishTyping(): void {
 }
 
 const DRAG_THRESHOLD_PX = 3
+// How close, in screen pixels, something has to come to snap.
+const SNAP_PX = 6
+
+interface Guides {
+  x: number | null
+  y: number | null
+}
+const NO_GUIDES: Guides = { x: null, y: null }
 const DEFAULT_BOX_WIDTH = 180
 
 function AnnotatedOverlay({
@@ -116,6 +134,8 @@ function AnnotatedOverlay({
   const [eraserAt, setEraserAt] = useState<Point | null>(null)
   const totalWidth = width * (1 + margin)
   const unit = pageUnit(width)
+  const snapping = useApp((s) => s.settings.snapping)
+  const [guides, setGuides] = useState<Guides>(NO_GUIDES)
 
   const toPoint = useCallback(
     (e: { clientX: number; clientY: number }): Point => {
@@ -135,7 +155,7 @@ function AnnotatedOverlay({
    */
   function drag(
     e: React.PointerEvent,
-    apply: (dx: number, dy: number) => void,
+    apply: (dx: number, dy: number, ev: PointerEvent) => void,
     onClick?: () => void
   ): void {
     if (e.button !== 0) return
@@ -145,19 +165,21 @@ function AnnotatedOverlay({
     focusViewer()
     const target = e.currentTarget as HTMLElement
     target.setPointerCapture(e.pointerId)
-    const start = toPoint(e)
+    // Measured on screen, not on the page: selecting can change the toolbar's height and move
+    // the page under the mouse, and the item should still follow the mouse.
+    const start = [e.clientX, e.clientY]
     let moved = false
     doc.getState().begin()
 
     const onMove = (ev: PointerEvent): void => {
-      const p = toPoint(ev)
-      const dx = p[0] - start[0]
-      const dy = p[1] - start[1]
+      const dx = (ev.clientX - start[0]) / scale
+      const dy = (ev.clientY - start[1]) / scale
       if (!moved && Math.hypot(dx, dy) * scale < DRAG_THRESHOLD_PX) return
       moved = true
-      apply(round(dx), round(dy))
+      apply(round(dx), round(dy), ev)
     }
     const onUp = (): void => {
+      setGuides(NO_GUIDES)
       target.removeEventListener('pointermove', onMove)
       target.removeEventListener('pointerup', onUp)
       target.removeEventListener('pointercancel', onUp)
@@ -171,6 +193,54 @@ function AnnotatedOverlay({
     target.addEventListener('pointermove', onMove)
     target.addEventListener('pointerup', onUp)
     target.addEventListener('pointercancel', onUp)
+  }
+
+  /**
+   * What an item can line up with on this page, measured from the page as drawn: slide and
+   * margin edges, the other boxes and images, and the lines of slide text.
+   */
+  function snapTargets(exclude: string): SnapTargets {
+    const root = rootRef.current!
+    const origin = root.getBoundingClientRect()
+    const local = (b: DOMRect): Rect => ({
+      x: (b.left - origin.left) / scale,
+      y: (b.top - origin.top) / scale,
+      width: b.width / scale,
+      height: b.height / scale
+    })
+    const items = [
+      ...root.querySelectorAll<HTMLElement>('.text-box[data-id], .page-image[data-id]')
+    ]
+      .filter((el) => el.dataset.id !== exclude)
+      .map((el) => local(el.getBoundingClientRect()))
+    const lines = textLines(
+      [...root.querySelectorAll('.textLayer span')].map((el) => local(el.getBoundingClientRect()))
+    )
+    return {
+      edgesX: [0, width, totalWidth, ...items.flatMap((i) => [i.x, i.x + i.width])],
+      edgesY: [0, height, ...items.flatMap((i) => [i.y, i.y + i.height])],
+      textLefts: lines.map((l) => l.left),
+      lineTops: lines.map((l) => l.top),
+      lineMiddles: lines.map((l) => l.middle)
+    }
+  }
+
+  /** Snaps a position unless snapping is off or Alt is held; shows what it snapped to. */
+  function snapTo(
+    ev: { altKey: boolean },
+    x: number,
+    y: number,
+    anchors: { x: Anchor[]; y: Anchor[] }
+  ): [number, number] {
+    if (!snapping || ev.altKey) {
+      setGuides(NO_GUIDES)
+      return [x, y]
+    }
+    const threshold = SNAP_PX / scale
+    const sx = snapAxis(x, anchors.x, threshold)
+    const sy = snapAxis(y, anchors.y, threshold)
+    setGuides({ x: sx.guide, y: sy.guide })
+    return [round(sx.pos), round(sy.pos)]
   }
 
   function select(kind: Kind, id: string): void {
@@ -197,48 +267,51 @@ function AnnotatedOverlay({
       return
     }
     select('textBoxes', box.id)
-    drag(e, (dx, dy) =>
-      doc.getState().update((p) =>
-        replaceItem(p, number, 'textBoxes', {
-          ...box,
-          x: round(box.x + dx),
-          y: round(box.y + dy)
-        })
-      )
-    )
+    const anchors = textBoxAnchors(snapTargets(box.id), {
+      width: box.width,
+      height: (e.currentTarget as HTMLElement).offsetHeight,
+      fontSize: box.fontSize ?? DEFAULT_TEXT_SIZE * unit
+    })
+    drag(e, (dx, dy, ev) => {
+      const [x, y] = snapTo(ev, box.x + dx, box.y + dy, anchors)
+      doc.getState().update((p) => replaceItem(p, number, 'textBoxes', { ...box, x, y }))
+    })
   }
 
   function resizeBox(e: React.PointerEvent, box: TextBox): void {
-    drag(e, (dx) =>
+    const edges = snapTargets(box.id).edgesX
+    drag(e, (dx, _dy, ev) => {
+      const [right] = snapTo(ev, box.x + box.width + dx, 0, {
+        x: [{ offset: 0, targets: edges }],
+        y: []
+      })
       doc.getState().update((p) =>
         replaceItem(p, number, 'textBoxes', {
           ...box,
-          width: Math.max(40 * unit, round(box.width + dx))
+          width: Math.max(40 * unit, round(right - box.x))
         })
       )
-    )
+    })
   }
 
   function moveImage(e: React.PointerEvent, image: PageImage): void {
     select('images', image.id)
-    drag(e, (dx, dy) =>
-      doc.getState().update((p) =>
-        replaceItem(p, number, 'images', {
-          ...image,
-          x: round(image.x + dx),
-          y: round(image.y + dy)
-        })
-      )
-    )
+    const anchors = imageAnchors(snapTargets(image.id), image)
+    drag(e, (dx, dy, ev) => {
+      const [x, y] = snapTo(ev, image.x + dx, image.y + dy, anchors)
+      doc.getState().update((p) => replaceItem(p, number, 'images', { ...image, x, y }))
+    })
   }
 
   function resizeImageBy(e: React.PointerEvent, image: PageImage): void {
     select('images', image.id)
-    drag(e, (dx) =>
-      doc
-        .getState()
-        .update((p) => replaceItem(p, number, 'images', resizeImage(image, dx, 20 * unit)))
-    )
+    const edges = snapTargets(image.id).edgesX
+    drag(e, (dx, _dy, ev) => {
+      const right = image.x + image.width + dx
+      const [snapped] = snapTo(ev, right, 0, { x: [{ offset: 0, targets: edges }], y: [] })
+      const next = resizeImage(image, snapped - image.x - image.width, 20 * unit)
+      doc.getState().update((p) => replaceItem(p, number, 'images', next))
+    })
   }
 
   // Images dropped from Explorer land where they are dropped. preventDefault tells the
@@ -303,12 +376,23 @@ function AnnotatedOverlay({
         60 * unit,
         Math.min(DEFAULT_BOX_WIDTH * unit, totalWidth - start[0] - 4 * unit)
       )
+      const fontSize = round(ink.textSize * unit)
+      // The first line of text goes where I click (not the box's edge), then snaps to the
+      // slide line it was put next to, like a moved box.
+      const anchors = textBoxAnchors(snapTargets(''), {
+        width: boxWidth,
+        height: fontSize * 1.35 + 8,
+        fontSize
+      })
+      const top = Math.max(0, start[1] - firstLineMiddle(fontSize))
+      const [x, y] = snapTo(e, Math.min(start[0], totalWidth - boxWidth), top, anchors)
+      setGuides(NO_GUIDES)
       const box: TextBox = {
         id: newId('t'),
-        x: Math.min(start[0], totalWidth - boxWidth),
-        y: start[1],
+        x,
+        y,
         width: boxWidth,
-        fontSize: round(ink.textSize * unit),
+        fontSize,
         ...(ink.textColor && { color: ink.textColor }),
         markdown: '',
         author: 'me'
@@ -504,6 +588,16 @@ function AnnotatedOverlay({
       ))}
 
       {ghost && <GhostView ghost={ghost} scale={scale} />}
+
+      {guides.x !== null && (
+        <div className="snap-guide" style={{ left: guides.x, top: 0, width: 1 / scale, height }} />
+      )}
+      {guides.y !== null && (
+        <div
+          className="snap-guide"
+          style={{ left: 0, top: guides.y, width: totalWidth, height: 1 / scale }}
+        />
+      )}
     </div>
   )
 }

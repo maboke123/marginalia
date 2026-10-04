@@ -32,7 +32,16 @@ export function AnnotationToolbar({ doc, pageWidth }: Props): React.JSX.Element 
   const settings = useApp((s) => s.settings)
 
   return (
-    <div className="annotation-toolbar" role="toolbar" aria-label="Annotation tools">
+    <div
+      className="annotation-toolbar"
+      role="toolbar"
+      aria-label="Annotation tools"
+      // Buttons keep the keyboard on the slides, so P, H, T and V still work after a click.
+      // Dropdowns do need focus to open.
+      onPointerDown={(e) => {
+        if ((e.target as Element).closest('button')) e.preventDefault()
+      }}
+    >
       {TOOLS.map((t) => (
         <button
           key={t.tool}
@@ -119,6 +128,15 @@ export function AnnotationToolbar({ doc, pageWidth }: Props): React.JSX.Element 
         <>
           <span className="toolbar-divider" />
           <History doc={doc} />
+          <button
+            className={settings.snapping ? 'icon-button pressed' : 'icon-button'}
+            title="Snap boxes and images to slide text, edges and each other (hold Alt to skip once)"
+            aria-label="Snapping"
+            aria-pressed={settings.snapping}
+            onClick={() => useApp.getState().saveSettings({ snapping: !settings.snapping })}
+          >
+            <Icon name="magnet" />
+          </button>
         </>
       )}
     </div>

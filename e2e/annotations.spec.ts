@@ -250,6 +250,66 @@ test('text boxes can be resized, change text size and use bold', async () => {
     .toBeLessThan(fontBefore * 0.5)
 })
 
+test('text boxes snap onto lines of slide text, unless Alt is held or snapping is off', async () => {
+  await openSlides()
+  const span = firstPage().locator('.textLayer span', { hasText: 'Information gain' })
+  // Measured each time: switching tools can make the toolbar wrap and move the page.
+  const line = async (): Promise<{ right: number; middle: number }> => {
+    const r = (await span.boundingBox())!
+    return { right: r.x + r.width, middle: r.y + r.height / 2 }
+  }
+  const firstLineMiddle = async (box: Locator): Promise<number> => {
+    const r = (await box.locator('.text-box-content > :first-child').boundingBox())!
+    return r.y + r.height / 2
+  }
+
+  // Put next to the line, a little too high: it lands on the line.
+  await page.keyboard.press('t')
+  let l = await line()
+  await page.mouse.click(l.right + 60, l.middle - 2)
+  await page.keyboard.type('Gain')
+  await page.keyboard.press('Escape')
+  const box = firstPage().locator('.text-box')
+  expect(Math.abs((await firstLineMiddle(box)) - (await line()).middle)).toBeLessThan(1.5)
+
+  // Dragged a few pixels with Alt held, it stays where it is dropped.
+  await page.keyboard.press('Escape')
+  const b = (await box.boundingBox())!
+  await page.keyboard.down('Alt')
+  await page.mouse.move(b.x + 10, b.y + b.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(b.x + 10, b.y + b.height / 2 + 5, { steps: 5 })
+  await page.mouse.up()
+  await page.keyboard.up('Alt')
+  expect((await firstLineMiddle(box)) - (await line()).middle).toBeGreaterThan(3)
+
+  // Without Alt it goes back onto the line.
+  const c = (await box.boundingBox())!
+  await page.mouse.move(c.x + 10, c.y + c.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(c.x + 10, c.y + c.height / 2 - 3, { steps: 5 })
+  await expect(firstPage().locator('.snap-guide')).toHaveCount(1)
+  await page.screenshot({ path: path.join('test-results', 'snapping.png') })
+  await page.mouse.up()
+  await expect(firstPage().locator('.snap-guide')).toHaveCount(0)
+  expect(Math.abs((await firstLineMiddle(box)) - (await line()).middle)).toBeLessThan(1.5)
+
+  // With snapping switched off, a new box stays where it is put.
+  await page.getByRole('button', { name: 'Snapping' }).click()
+  await expect(page.getByRole('button', { name: 'Snapping' })).toHaveAttribute(
+    'aria-pressed',
+    'false'
+  )
+  await page.keyboard.press('t')
+  l = await line()
+  await page.mouse.click(l.right - 100, l.middle + 4)
+  await page.keyboard.type('Free')
+  await page.keyboard.press('Escape')
+  const free = firstPage().locator('.text-box', { hasText: 'Free' })
+  // Its first line of text is where I clicked.
+  expect(Math.abs((await firstLineMiddle(free)) - ((await line()).middle + 4))).toBeLessThan(1.5)
+})
+
 test('V goes back to the select tool', async () => {
   await openSlides()
   const tool = (name: string): Locator =>
