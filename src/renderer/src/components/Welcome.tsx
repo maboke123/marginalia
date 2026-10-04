@@ -1,4 +1,3 @@
-import logo from '../../../../build/icon.svg'
 import { useApp } from '../store'
 
 export function Welcome(): React.JSX.Element {
@@ -7,7 +6,6 @@ export function Welcome(): React.JSX.Element {
 
   return (
     <main className="welcome">
-      <img className="welcome-logo" src={logo} alt="" width={56} height={56} />
       <h1>Open a vault</h1>
       <p className="muted">
         A vault is an ordinary folder. Each folder at the top becomes a notebook for one course, and

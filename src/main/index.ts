@@ -1,7 +1,6 @@
 import { app, BrowserWindow, ipcMain, Menu, nativeTheme, net, protocol, shell } from 'electron'
 import path from 'path'
 import { pathToFileURL } from 'url'
-import icon from '../../build/icon.ico?asset'
 import { ConfigStore } from './config'
 import { registerClaude } from './claude/service'
 import { handle, registerIpc } from './ipc'
@@ -18,7 +17,6 @@ function createWindow(): void {
     height: 800,
     minWidth: 720,
     minHeight: 480,
-    icon,
     show: false,
     ...(offscreen ? { x: -20000, y: 0, skipTaskbar: true } : {}),
     // Matches --bg in the renderer so the window does not flash white on start.
