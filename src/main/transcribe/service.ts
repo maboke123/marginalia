@@ -159,6 +159,20 @@ export function registerTranscription(
     queue = queue.then(async () => {
       if (abort.signal.aborted) return
       try {
+        // The accurate model does not ship with the app; it comes the first time it is used.
+        const { installed, sizes } = await engine.status()
+        const missing = (['program', 'vad', request.model] as TranscribePart[]).filter(
+          (p) => !installed[p]
+        )
+        if (missing.length) {
+          const total = missing.reduce((n, p) => n + sizes[p], 0)
+          const done: Partial<Record<TranscribePart, number>> = {}
+          await engine.install(missing, (part, bytes) => {
+            done[part] = bytes
+            const got = Object.values(done).reduce((n, b) => n + (b ?? 0), 0)
+            update(id, { phase: 'downloading', percent: Math.round((got / total) * 100) })
+          })
+        }
         const transcript = await transcribeFile(vault, engine, {
           ...request,
           signal: abort.signal,

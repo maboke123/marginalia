@@ -80,3 +80,57 @@ test('recording starts without asking, even when speech to text was missing', as
   await bar.getByRole('button', { name: 'Stop' }).click()
   await expect(bar).toBeHidden()
 })
+
+/** A WAV of a few seconds of tone, as a stand-in for a lecture recording. */
+async function toneWav(file: string, seconds: number): Promise<void> {
+  const rate = 16000
+  const samples = Buffer.alloc(seconds * rate * 2)
+  for (let i = 0; i < seconds * rate; i++) {
+    samples.writeInt16LE(Math.round(8000 * Math.sin((2 * Math.PI * 440 * i) / rate)), i * 2)
+  }
+  const header = Buffer.alloc(44)
+  header.write('RIFF', 0)
+  header.writeUInt32LE(36 + samples.length, 4)
+  header.write('WAVEfmt ', 8)
+  header.writeUInt32LE(16, 16)
+  header.writeUInt16LE(1, 20)
+  header.writeUInt16LE(1, 22)
+  header.writeUInt32LE(rate, 24)
+  header.writeUInt32LE(rate * 2, 28)
+  header.writeUInt16LE(2, 32)
+  header.writeUInt16LE(16, 34)
+  header.write('data', 36)
+  header.writeUInt32LE(samples.length, 40)
+  await fs.writeFile(file, Buffer.concat([header, samples]))
+}
+
+test('a recording file is transcribed in the background into the lesson', async () => {
+  await start()
+  const source = path.join(env.dir, 'lecture 2.wav')
+  await toneWav(source, 4)
+  await app.evaluate(({ dialog }, file) => {
+    dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [file] })
+  }, source)
+
+  await row('B2 Decision trees').click({ button: 'right' })
+  await page.getByRole('menuitem', { name: 'Transcribe a recording...' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Transcribe a recording' })
+  await expect(dialog).toContainText('Transcribe lecture 2.wav')
+  await dialog.getByRole('radio', { name: /Fast/ }).check()
+  await dialog.getByRole('button', { name: 'Transcribe' }).click()
+
+  const job = page.getByRole('status', { name: 'Transcribing' })
+  await expect(job).toContainText('Transcript ready', { timeout: 30_000 })
+  const name = (await fs.readdir(path.join(env.vault, section))).find((f) =>
+    f.startsWith('Transcript ')
+  )!
+  const text = await fs.readFile(path.join(env.vault, section, name), 'utf8')
+  expect(text).toContain('Transcribed from lecture 2.wav.')
+  expect(text).toMatch(/\*\*00:00\*\* Spoken part 1, 4 seconds, language auto\./)
+  const audio = text.match(/Audio: \[[^\]]+\]\((assets\/recording-[^)]+\.webm)\)/)![1]
+  expect((await fs.stat(path.join(env.vault, section, audio))).size).toBeGreaterThan(1000)
+
+  await job.getByRole('button', { name: 'Show transcript' }).click()
+  await expect(page.locator('.cm-content')).toContainText('Spoken part 1')
+  await expect(job).toBeHidden()
+})

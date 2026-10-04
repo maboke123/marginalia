@@ -4,6 +4,7 @@ import { draggingFiles, importDroppedFiles } from '../lib/drop'
 import { childrenOf, displayOrder, isFolder, isWithin, visibleRows, type Row } from '../lib/tree'
 import { useApp } from '../store'
 import { ContextMenu, type MenuItem } from './ContextMenu'
+import { useFiles } from '../transcribe/files'
 import { FeedbackBox } from './FeedbackBox'
 import { Icon } from './Icon'
 import { TreeRow, type DropZone } from './TreeRow'
@@ -108,6 +109,10 @@ export function Sidebar(): React.JSX.Element {
           label: 'Import PDF...',
           hint: app.settings.hotkeys.importPdf,
           onSelect: () => app.importPdfs(undefined, node.path)
+        },
+        {
+          label: 'Transcribe a recording...',
+          onSelect: () => void useFiles.getState().transcribe(node.path)
         },
         { separator: true }
       )

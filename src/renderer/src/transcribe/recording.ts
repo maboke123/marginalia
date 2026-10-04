@@ -31,7 +31,7 @@ interface RecordingState {
 }
 
 /** The lesson being worked on: the folder of the slides or note on screen. */
-function lessonFolder(): string | null {
+export function lessonFolder(): string | null {
   const { lectureMode, slidesFile, summaryFile, activeFile, selected, nodes } = useApp.getState()
   const file = lectureMode ? (slidesFile ?? summaryFile) : activeFile
   if (file) return parentOf(file)

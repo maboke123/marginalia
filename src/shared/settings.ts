@@ -14,6 +14,8 @@ export interface AppSettings {
   snapping: boolean
   /** Spoken language of lectures being recorded; "auto" lets whisper guess per chunk. */
   transcribeLanguage: TranscribeLanguage
+  /** Last choice for transcribing a recording file. */
+  transcribeModel: 'small' | 'accurate'
 }
 
 export type TranscribeLanguage = 'auto' | 'nl' | 'en'
@@ -57,7 +59,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   highlightColors: DEFAULT_HIGHLIGHT_COLORS,
   hotkeys: DEFAULT_HOTKEYS,
   snapping: true,
-  transcribeLanguage: 'auto'
+  transcribeLanguage: 'auto',
+  transcribeModel: 'accurate'
 }
 
 function colors(raw: unknown, fallback: string[]): string[] {
@@ -81,6 +84,7 @@ export function settingsFrom(raw: unknown): AppSettings {
     snapping: typeof r.snapping === 'boolean' ? r.snapping : DEFAULT_SETTINGS.snapping,
     transcribeLanguage: TRANSCRIBE_LANGUAGES.some((l) => l.value === r.transcribeLanguage)
       ? (r.transcribeLanguage as TranscribeLanguage)
-      : DEFAULT_SETTINGS.transcribeLanguage
+      : DEFAULT_SETTINGS.transcribeLanguage,
+    transcribeModel: r.transcribeModel === 'small' ? 'small' : 'accurate'
   }
 }

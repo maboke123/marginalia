@@ -203,7 +203,7 @@ export interface TranscribeFileRequest {
   language: string
 }
 
-export type TranscribeJobPhase = 'waiting' | 'reading' | 'transcribing' | 'writing'
+export type TranscribeJobPhase = 'waiting' | 'downloading' | 'reading' | 'transcribing' | 'writing'
 
 /** A recording file being transcribed in the background. */
 export interface TranscribeJob {

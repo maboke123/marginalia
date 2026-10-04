@@ -2404,3 +2404,56 @@ h2 {
   margin-right: 8px;
   font-size: 12px;
 }
+
+.transcribe-dialog {
+  position: absolute;
+  top: 96px;
+  left: 50%;
+  width: min(480px, calc(100vw - 32px));
+  padding: 20px 24px;
+  transform: translateX(-50%);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  box-shadow: var(--shadow-menu);
+}
+
+.transcribe-dialog h2 {
+  margin: 0 0 8px;
+  overflow: hidden;
+  font-size: 16px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.transcribe-dialog > p {
+  margin: 0 0 16px;
+  line-height: 1.5;
+}
+
+.transcribe-choice {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 8px 0;
+}
+
+.transcribe-choice > span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.transcribe-language {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.transcribe-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 20px;
+}
