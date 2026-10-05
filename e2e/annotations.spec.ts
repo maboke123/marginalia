@@ -310,7 +310,7 @@ test('text boxes snap onto lines of slide text, unless Alt is held or snapping i
   expect(Math.abs((await firstLineMiddle(free)) - ((await line()).middle + 4))).toBeLessThan(1.5)
 })
 
-test('V goes back to the select tool', async () => {
+test('V and M go back to the select tool', async () => {
   await openSlides()
   const tool = (name: string): Locator =>
     page
@@ -320,7 +320,20 @@ test('V goes back to the select tool', async () => {
   await expect(tool('Text box')).toHaveAttribute('aria-pressed', 'true')
   await page.keyboard.press('v')
   await expect(tool('Select')).toHaveAttribute('aria-pressed', 'true')
-  await expect(tool('Select')).toHaveAttribute('title', 'Select (V or Esc)')
+  await expect(tool('Select')).toHaveAttribute('title', 'Select (V, M or Esc)')
+
+  await page.keyboard.press('t')
+  await page.keyboard.press('m')
+  await expect(tool('Select')).toHaveAttribute('aria-pressed', 'true')
+
+  // After typing in a box, Escape leaves the box and M picks the mouse.
+  await page.keyboard.press('t')
+  await drawOnPage([0.7, 0.2], [0.7, 0.2])
+  await page.keyboard.type('Entropy')
+  await page.keyboard.press('Escape')
+  await page.keyboard.press('m')
+  await expect(tool('Select')).toHaveAttribute('aria-pressed', 'true')
+  await expect(firstPage().locator('.text-box')).toHaveText('Entropy')
 })
 
 test('in text mode a click on a box carries on typing in it', async () => {

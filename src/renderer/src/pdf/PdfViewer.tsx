@@ -436,6 +436,8 @@ function Document({
       markSelection('highlight')
     } else if (state && !ctrl && key === 'u' && selectedTextLayer()) markSelection('underline')
     else if (state && toolKey) setTool(toolKey)
+    // M for the mouse, unless a tool was given that key.
+    else if (combo === 'M') setTool('select')
     else if (e.key === 'Escape') {
       setTool('select')
       clearTextSelection()
