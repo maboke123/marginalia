@@ -1,15 +1,8 @@
 import { useEffect, useState } from 'react'
 import { TRANSCRIBE_LANGUAGES, type TranscribeLanguage } from '../../../shared/settings'
 import { useApp } from '../store'
+import { clock } from './clock'
 import { useRecording } from './recording'
-
-const pad = (n: number): string => String(n).padStart(2, '0')
-const clock = (seconds: number): string => {
-  const s = Math.max(0, Math.floor(seconds))
-  const h = Math.floor(s / 3600)
-  const m = Math.floor((s % 3600) / 60)
-  return h ? `${h}:${pad(m)}:${pad(s % 60)}` : `${pad(m)}:${pad(s % 60)}`
-}
 
 /** How long the current recording has been going, updated every second. */
 export function RecordingClock({ startedAt }: { startedAt: number }): React.JSX.Element {

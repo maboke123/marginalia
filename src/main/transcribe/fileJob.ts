@@ -32,7 +32,8 @@ export interface FileJob {
   /** Small renders of the slides the video may show, to find out which one it shows when. */
   slides?: SlideThumb[]
   signal: AbortSignal
-  onProgress(phase: TranscribeJobPhase, percent: number): void
+  /** `read`: seconds of sound read so far, for a recording that does not say how long it is. */
+  onProgress(phase: TranscribeJobPhase, percent: number, read?: number): void
 }
 
 /** "01:23:45.67" -> seconds */
@@ -41,14 +42,15 @@ const seconds = (hms: string): number =>
 
 /**
  * Reads the sound of a recording with ffmpeg: 16 kHz WAV for whisper, and a small opus copy
- * to keep with the transcript. Reports how far it got.
+ * to keep with the transcript. Reports how far it got: a percentage, or null when the file
+ * does not say how long it is (webm from the app's own recorder), with the seconds read.
  */
 export function extractAudio(
   source: string,
   wav: string,
   opus: string,
   signal: AbortSignal,
-  onProgress: (percent: number) => void
+  onProgress: (percent: number | null, read: number) => void
 ): Promise<void> {
   const args = [
     '-hide_banner',
@@ -70,7 +72,9 @@ export function extractAudio(
       const total = /Duration: (\d+:\d+:[\d.]+)/.exec(text)
       if (total) duration = seconds(total[1])
       const at = [...text.matchAll(/time=(\d+:\d+:[\d.]+)/g)].pop()
-      if (at && duration) onProgress(Math.min(100, (seconds(at[1]) / duration) * 100))
+      if (!at) return
+      const read = seconds(at[1])
+      onProgress(duration ? Math.min(100, (read / duration) * 100) : null, read)
     })
     child.on('error', (err: NodeJS.ErrnoException) =>
       reject(
@@ -166,7 +170,9 @@ export async function transcribeFile(
   const wav = path.join(temp, 'audio.wav')
   const opus = path.join(temp, 'audio.webm')
   try {
-    await extractAudio(job.source, wav, opus, job.signal, (p) => job.onProgress('reading', p))
+    await extractAudio(job.source, wav, opus, job.signal, (p, read) =>
+      p === null ? job.onProgress('reading', 0, read) : job.onProgress('reading', p)
+    )
     // Which slide the video shows when, for the slide links (only for a video).
     let timeline = job.timeline
     if (job.slides?.length) {

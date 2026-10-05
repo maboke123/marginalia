@@ -230,6 +230,8 @@ export interface TranscribeJob {
   phase: TranscribeJobPhase
   /** Of the current phase, 0 to 100. */
   percent: number
+  /** Seconds of sound read so far, while reading a recording whose length is unknown. */
+  read?: number
   /** Set when done. */
   transcript?: string
   error?: string

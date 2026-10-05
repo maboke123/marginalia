@@ -3,6 +3,7 @@ import { TRANSCRIBE_LANGUAGES, type TranscribeLanguage } from '../../../shared/s
 import type { TranscribeJob } from '../../../shared/types'
 import { useApp } from '../store'
 import { useFiles, VIDEO_FILE } from './files'
+import { clock } from './clock'
 
 const MODELS = [
   {
@@ -112,10 +113,17 @@ export function TranscribeFileDialog(): React.JSX.Element | null {
 const PHASES: Record<TranscribeJob['phase'], string> = {
   waiting: 'waiting for the one before it',
   downloading: 'downloading the accurate model',
-  reading: 'reading the sound',
+  reading: 'reading the recording',
   matching: 'finding the slides in the video',
   transcribing: 'transcribing',
   writing: 'writing the transcript'
+}
+
+function progressText(job: TranscribeJob): string {
+  const phase = PHASES[job.phase]
+  if (job.read !== undefined) return `${phase}, ${clock(job.read)} so far`
+  if (job.phase === 'waiting' || job.phase === 'writing') return phase
+  return `${phase} ${job.percent}%`
 }
 
 /** Progress of recording files being transcribed, under the recording bar. */
@@ -153,10 +161,7 @@ export function TranscribeJobs(): React.JSX.Element | null {
               <span className="recording-level" aria-hidden>
                 <span style={{ width: `${job.percent}%` }} />
               </span>
-              <span className="recording-progress">
-                {PHASES[job.phase]}
-                {job.phase !== 'waiting' && job.phase !== 'writing' ? ` ${job.percent}%` : ''}
-              </span>
+              <span className="recording-progress">{progressText(job)}</span>
             </>
           )}
           {job.transcript && (

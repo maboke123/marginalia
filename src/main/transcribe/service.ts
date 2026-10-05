@@ -207,6 +207,7 @@ export function registerTranscription(
     send('transcribe:job', job)
     queue = queue.then(async () => {
       if (abort.signal.aborted) return
+      update(id, { phase: 'reading', percent: 0 })
       try {
         // The accurate model does not ship with the app; it comes the first time it is used.
         const { installed, sizes } = await engine.status()
@@ -225,7 +226,8 @@ export function registerTranscription(
         const transcript = await transcribeFile(vault, engine, {
           ...request,
           signal: abort.signal,
-          onProgress: (phase, percent) => update(id, { phase, percent: Math.round(percent) })
+          onProgress: (phase, percent, read) =>
+            update(id, { phase, percent: Math.round(percent), read })
         })
         update(id, { transcript, phase: 'writing', percent: 100 })
       } catch (err) {
