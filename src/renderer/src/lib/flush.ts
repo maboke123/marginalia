@@ -8,5 +8,7 @@ export function registerFlush(flush: () => Promise<void>): () => void {
 }
 
 export async function flushAll(): Promise<void> {
+  // A text box being typed in only saves its text when it loses focus.
+  if (document.activeElement instanceof HTMLElement) document.activeElement.blur()
   await Promise.allSettled([...pending].map((flush) => flush()))
 }

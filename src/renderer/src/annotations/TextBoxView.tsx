@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useRef, useState } from 'react'
+import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { TextBox } from '../../../shared/annotations'
 import { Cancelled, cancelWrite, findRequest, newRequestId, writeWithClaude } from '../claude/write'
 import { mapPosition, planWrite, type WriteAnswer } from '../claude/writePlan'
@@ -183,11 +183,23 @@ function Editor({
     el.setSelectionRange(el.value.length, el.value.length)
   }, [])
 
+  const commit = useRef(onCommit)
+  useLayoutEffect(() => {
+    commit.current = onCommit
+  })
+
   const finish = (value: string): void => {
     if (done.current) return
     done.current = true
-    onCommit(value.trim())
+    commit.current(value.trim())
   }
+
+  // Scrolling far away or opening another file removes the box without a blur. A layout
+  // cleanup runs before the viewer's save on unmount, so the text is part of that save.
+  useLayoutEffect(() => {
+    const el = ref.current!
+    return () => finish(el.value)
+  }, [])
 
   return (
     <>

@@ -342,6 +342,34 @@ test('in text mode a click on a box carries on typing in it', async () => {
   await expect(box).toHaveCount(1)
 })
 
+test('a text box keeps its text when I scroll away while typing', async () => {
+  await openSlides()
+  await page.keyboard.press('t')
+  await drawOnPage([0.7, 0.2], [0.7, 0.2])
+  await page.keyboard.type('Gini impurity')
+  const scroller = page.locator('.pdf-scroll')
+  await scroller.evaluate((el) => (el.scrollTop = el.scrollHeight))
+  await expect(firstPage().locator('.page-overlay')).toHaveCount(0)
+  await scroller.evaluate((el) => (el.scrollTop = 0))
+
+  const box = firstPage().locator('.text-box')
+  await expect(box).toHaveText('Gini impurity')
+  await expect(box.locator('textarea')).toHaveCount(0)
+  await expect
+    .poll(async () => (await readSidecar().catch(() => null))?.pages['1']?.textBoxes?.length)
+    .toBe(1)
+
+  // Closing the app while still typing in a second box.
+  await drawOnPage([0.7, 0.6], [0.7, 0.6])
+  await page.keyboard.type('Entropy')
+  await app.close()
+  expect((await readSidecar()).pages['1'].textBoxes).toMatchObject([
+    { markdown: 'Gini impurity' },
+    { markdown: 'Entropy' }
+  ])
+  ;({ app, page } = await launch(env))
+})
+
 test('text boxes take a colour from the toolbar', async () => {
   await openSlides()
   await page.keyboard.press('t')
