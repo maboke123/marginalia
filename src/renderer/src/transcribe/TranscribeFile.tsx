@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { TRANSCRIBE_LANGUAGES, type TranscribeLanguage } from '../../../shared/settings'
 import type { TranscribeJob } from '../../../shared/types'
 import { useApp } from '../store'
-import { useFiles } from './files'
+import { useFiles, VIDEO_FILE } from './files'
 
 const MODELS = [
   {
@@ -23,6 +23,7 @@ export function TranscribeFileDialog(): React.JSX.Element | null {
   const settings = useApp((s) => s.settings)
   const [model, setModel] = useState(settings.transcribeModel)
   const [language, setLanguage] = useState<TranscribeLanguage>(settings.transcribeLanguage)
+  const [linkSlides, setLinkSlides] = useState(true)
   if (!choosing) return null
   const file = (p: string): string => p.split(/[\\/]/).pop()!
   const title =
@@ -62,6 +63,21 @@ export function TranscribeFileDialog(): React.JSX.Element | null {
             </label>
           ))}
         </div>
+        {choosing.kind === 'file' && VIDEO_FILE.test(choosing.source) && (
+          <label className="transcribe-choice">
+            <input
+              type="checkbox"
+              checked={linkSlides}
+              onChange={(e) => setLinkSlides(e.target.checked)}
+            />
+            <span>
+              <strong>Link to the slides in the video</strong>
+              <span className="muted">
+                Finds which slide is shown when, also in other lessons of this course.
+              </span>
+            </span>
+          </label>
+        )}
         <label className="transcribe-language">
           Spoken language
           <select
@@ -83,7 +99,7 @@ export function TranscribeFileDialog(): React.JSX.Element | null {
           <button
             className="button primary"
             autoFocus
-            onClick={() => void useFiles.getState().confirm(model, language)}
+            onClick={() => void useFiles.getState().confirm(model, language, linkSlides)}
           >
             Transcribe
           </button>
@@ -97,6 +113,7 @@ const PHASES: Record<TranscribeJob['phase'], string> = {
   waiting: 'waiting for the one before it',
   downloading: 'downloading the accurate model',
   reading: 'reading the sound',
+  matching: 'finding the slides in the video',
   transcribing: 'transcribing',
   writing: 'writing the transcript'
 }

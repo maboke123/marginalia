@@ -85,14 +85,14 @@ export interface SlideMoment {
   page: number
 }
 
-/** The slide open at `seconds`, if any was. */
+/** The slide open at `seconds`, if any was (a moment with no `pdf` means none was). */
 export function slideAt(timeline: SlideMoment[], seconds: number): SlideMoment | null {
   let current: SlideMoment | null = null
   for (const moment of timeline) {
     if (moment.at > seconds) break
     current = moment
   }
-  return current
+  return current?.pdf ? current : null
 }
 
 /** `[slide 14](B2%20trees.pdf#page=14)`, relative to the note, like links in notes. */

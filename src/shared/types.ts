@@ -2,6 +2,7 @@ export type NodeKind = 'notebook' | 'section' | 'markdown' | 'pdf'
 
 import type { AnnotationFile, LoadedAnnotations } from './annotations'
 import type { AppSettings } from './settings'
+import type { SlideThumb } from './slideMatch'
 import type {
   CompleteRequest,
   ChatEvent,
@@ -205,6 +206,8 @@ export interface TranscribeFileRequest {
   model: 'small' | 'accurate'
   /** "nl", "en" or "auto". */
   language: string
+  /** Small renders of the slides a video may show, to link paragraphs to them. */
+  slides?: SlideThumb[]
 }
 
 /** A transcript recorded without live transcription, to be transcribed from its audio. */
@@ -215,7 +218,8 @@ export interface TranscribeRecordedRequest {
   language: string
 }
 
-export type TranscribeJobPhase = 'waiting' | 'downloading' | 'reading' | 'transcribing' | 'writing'
+export type TranscribeJobPhase =
+  'waiting' | 'downloading' | 'reading' | 'matching' | 'transcribing' | 'writing'
 
 /** A recording file being transcribed in the background. */
 export interface TranscribeJob {

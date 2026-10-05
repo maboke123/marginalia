@@ -53,6 +53,14 @@ class FakeTranscriber implements Transcriber {
   async transcribe(wav: string, options: { language: string }): Promise<Segment[]> {
     const seconds = ((await fs.stat(wav)).size - 44) / 32_000
     this.count++
+    // A longer recording: a sentence every 8 s with a pause between, so it gets paragraphs.
+    if (seconds > 10) {
+      return Array.from({ length: Math.floor(seconds / 8) }, (_, i) => ({
+        from: i * 8000,
+        to: i * 8000 + 5000,
+        text: ` Sentence ${i + 1}.`
+      }))
+    }
     return [
       {
         from: 0,

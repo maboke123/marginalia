@@ -2,10 +2,12 @@ import { spawn } from 'child_process'
 import { promises as fs } from 'fs'
 import os from 'os'
 import path from 'path'
+import { THUMB_HEIGHT, THUMB_WIDTH, type SlideThumb } from '../../shared/slideMatch'
 import type { TranscribeJobPhase } from '../../shared/types'
 import { VaultError } from '../vault/names'
 import { timestamp, type Vault } from '../vault/vault'
 import type { Model, Transcriber } from './engine'
+import createMatchWorker from './matchWorker?nodeWorker'
 import {
   headerOf,
   paragraphs,
@@ -27,6 +29,8 @@ export interface FileJob {
   into?: string
   /** Which slide was open when, for slide links in the paragraphs. */
   timeline?: SlideMoment[]
+  /** Small renders of the slides the video may show, to find out which one it shows when. */
+  slides?: SlideThumb[]
   signal: AbortSignal
   onProgress(phase: TranscribeJobPhase, percent: number): void
 }
@@ -87,6 +91,67 @@ export function extractAudio(
   })
 }
 
+/** A frame is compared with the slides every this many seconds. */
+const SECONDS_PER_FRAME = 4
+
+/**
+ * Small grayscale frames of a video, one every few seconds, for slide matching. An audio file
+ * has none: then this gives an empty list instead of failing the transcription.
+ */
+export function extractFrames(
+  source: string,
+  signal: AbortSignal,
+  onProgress: (percent: number) => void
+): Promise<Uint8Array[]> {
+  const w = THUMB_WIDTH
+  const h = THUMB_HEIGHT
+  const size = w * h
+  const filter =
+    `fps=1/${SECONDS_PER_FRAME},scale=${w}:${h}:force_original_aspect_ratio=decrease,` +
+    `pad=${w}:${h}:(ow-iw)/2:(oh-ih)/2:color=white,format=gray`
+  const args = ['-hide_banner', '-nostdin', '-i', source, '-an', '-vf', filter]
+  return new Promise((resolve, reject) => {
+    const child = spawn('ffmpeg', [...args, '-f', 'rawvideo', '-pix_fmt', 'gray', 'pipe:1'], {
+      windowsHide: true,
+      signal
+    })
+    if (child.pid) os.setPriority(child.pid, os.constants.priority.PRIORITY_BELOW_NORMAL)
+    const chunks: Buffer[] = []
+    let duration = 0
+    child.stdout.on('data', (data: Buffer) => chunks.push(data))
+    child.stderr.on('data', (data: Buffer) => {
+      const text = data.toString()
+      const total = /Duration: (\d+:\d+:[\d.]+)/.exec(text)
+      if (total) duration = seconds(total[1])
+      const at = [...text.matchAll(/time=(\d+:\d+:[\d.]+)/g)].pop()
+      if (at && duration) onProgress(Math.min(100, (seconds(at[1]) / duration) * 100))
+    })
+    child.on('error', reject)
+    child.on('close', () => {
+      const all = Buffer.concat(chunks)
+      const frames: Uint8Array[] = []
+      for (let i = 0; i + size <= all.length; i += size) {
+        frames.push(new Uint8Array(all.subarray(i, i + size)))
+      }
+      resolve(frames)
+    })
+  })
+}
+
+/** Runs the matching in a worker thread: it takes seconds for a whole lecture. */
+function matchInWorker(frames: Uint8Array[], slides: SlideThumb[]): Promise<SlideMoment[]> {
+  const worker = createMatchWorker({
+    workerData: { frames, slides, secondsPerFrame: SECONDS_PER_FRAME }
+  })
+  return new Promise((resolve, reject) => {
+    worker.once('message', (moments: SlideMoment[]) => {
+      void worker.terminate()
+      resolve(moments)
+    })
+    worker.once('error', reject)
+  })
+}
+
 /**
  * A video or audio recording of a lecture to a transcript note in `folder`, with the sound
  * kept as a small opus file next to it. Returns the note's vault path.
@@ -102,6 +167,14 @@ export async function transcribeFile(
   const opus = path.join(temp, 'audio.webm')
   try {
     await extractAudio(job.source, wav, opus, job.signal, (p) => job.onProgress('reading', p))
+    // Which slide the video shows when, for the slide links (only for a video).
+    let timeline = job.timeline
+    if (job.slides?.length) {
+      const frames = await extractFrames(job.source, job.signal, (p) =>
+        job.onProgress('matching', p)
+      )
+      if (frames.length) timeline = await matchInWorker(frames, job.slides)
+    }
     const segments = await engine.transcribe(wav, {
       model: job.model,
       language: job.language,
@@ -126,7 +199,7 @@ export async function transcribeFile(
     }
     const body = paragraphs(segments)
       .map((p) => {
-        const slide = job.timeline && slideAt(job.timeline, p.at)
+        const slide = timeline && slideAt(timeline, p.at)
         const marker = slide ? slideMarker(transcript, slide.pdf, slide.page) : undefined
         return transcriptParagraph(p.at, p.segments, marker)
       })

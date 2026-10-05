@@ -1,5 +1,7 @@
 import { expect, test, type ElectronApplication, type Locator, type Page } from '@playwright/test'
+import { execFileSync } from 'child_process'
 import { promises as fs } from 'fs'
+import { PDFDocument } from 'pdf-lib'
 import path from 'path'
 import { createEnv, fakeLog, launch, makeSlides, type TestEnv } from './helpers'
 
@@ -180,4 +182,62 @@ test('by default only the audio is recorded, and transcribed afterwards with sli
   expect(text).not.toContain('Not transcribed yet')
   expect(text).toMatch(/^# Transcript /)
   expect(text).toMatch(/\*\*00:00\*\* · \[slide 1\]\(slides\.pdf#page=1\) Spoken part 1/)
+})
+
+test('a lecture video gets links to the slides it shows, also out of order', async () => {
+  await start()
+  // Three very different pictures as slides, and a video that shows 1, then 3, then 2.
+  const dir = path.join(env.dir, 'video')
+  await fs.mkdir(dir)
+  const sources = ['testsrc', 'smptebars', 'mandelbrot']
+  for (const [i, src] of sources.entries()) {
+    execFileSync('ffmpeg', [
+      '-v',
+      'error',
+      '-f',
+      'lavfi',
+      '-i',
+      `${src}=size=960x540`,
+      '-frames:v',
+      '1',
+      path.join(dir, `${i + 1}.png`)
+    ])
+  }
+  const pdf = await PDFDocument.create()
+  for (let i = 1; i <= 3; i++) {
+    const png = await pdf.embedPng(await fs.readFile(path.join(dir, `${i}.png`)))
+    pdf.addPage([960, 540]).drawImage(png, { x: 0, y: 0, width: 960, height: 540 })
+  }
+  const deck = path.join(env.vault, section, 'pictures.pdf')
+  await fs.writeFile(deck, await pdf.save())
+  const video = path.join(dir, 'lecture.mp4')
+  execFileSync('ffmpeg', [
+    ...['-v', 'error', '-y'],
+    ...['-loop', '1', '-t', '8', '-i', path.join(dir, '1.png')],
+    ...['-loop', '1', '-t', '8', '-i', path.join(dir, '3.png')],
+    ...['-loop', '1', '-t', '8', '-i', path.join(dir, '2.png')],
+    ...['-f', 'lavfi', '-t', '24', '-i', 'sine=frequency=440'],
+    ...['-filter_complex', '[0:v][1:v][2:v]concat=n=3:v=1:a=0,format=yuv420p[v]'],
+    ...['-map', '[v]', '-map', '3:a', '-r', '10', '-shortest', video]
+  ])
+
+  await expect(row('pictures.pdf')).toBeVisible()
+  await app.evaluate(({ dialog }, file) => {
+    dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [file] })
+  }, video)
+  await row('pictures.pdf').click({ button: 'right' })
+  await page.getByRole('menuitem', { name: 'Transcribe a recording of this...' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Transcribe a recording' })
+  await expect(dialog.getByRole('checkbox', { name: /Link to the slides/ })).toBeChecked()
+  await dialog.getByRole('button', { name: 'Transcribe' }).click()
+
+  const job = page.getByRole('status', { name: 'Transcribing' })
+  await expect(job).toContainText('Transcript ready', { timeout: 60_000 })
+  const name = (await fs.readdir(path.join(env.vault, section))).find((f) =>
+    f.startsWith('Transcript ')
+  )!
+  const text = await fs.readFile(path.join(env.vault, section, name), 'utf8')
+  expect(text).toContain('Transcribed from lecture.mp4.')
+  const links = [...text.matchAll(/\*\*(\d\d:\d\d)\*\* · \[slide (\d)\]\(pictures\.pdf#page=\d\)/g)]
+  expect(links.map((m) => `${m[1]} ${m[2]}`)).toEqual(['00:00 1', '00:08 3', '00:16 2'])
 })

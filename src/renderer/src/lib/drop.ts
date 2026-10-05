@@ -10,7 +10,12 @@ export function draggingFiles(e: React.DragEvent): boolean {
  * Imports the PDFs among the dropped files into `parent` (or the current section); a video or
  * audio recording is offered for transcription into that lesson.
  */
-export async function importDroppedFiles(e: React.DragEvent, parent?: string): Promise<void> {
+export async function importDroppedFiles(
+  e: React.DragEvent,
+  parent?: string,
+  /** Dropped on this PDF: a video is about this deck. */
+  pdf?: string
+): Promise<void> {
   const files = [...e.dataTransfer.files]
   const pdfs = files.filter((f) => /\.pdf$/i.test(f.name))
   const recordings = files.filter((f) => MEDIA_FILE.test(f.name))
@@ -26,7 +31,7 @@ export async function importDroppedFiles(e: React.DragEvent, parent?: string): P
   }
   // One at a time: each gets the choice between fast and accurate.
   if (recordings.length) {
-    await useFiles.getState().transcribe(parent, window.api.files.pathFor(recordings[0]))
+    await useFiles.getState().transcribe(parent, window.api.files.pathFor(recordings[0]), pdf)
   }
   const skipped = [...others, ...recordings.slice(1).map((f) => f.name)]
   if (skipped.length) {

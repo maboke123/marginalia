@@ -1,7 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { NOTEBOOK_COLORS, type Position, type VaultNode } from '../../../shared/types'
 import { draggingFiles, importDroppedFiles } from '../lib/drop'
-import { childrenOf, displayOrder, isFolder, isWithin, visibleRows, type Row } from '../lib/tree'
+import {
+  childrenOf,
+  displayOrder,
+  isFolder,
+  isWithin,
+  parentOf,
+  visibleRows,
+  type Row
+} from '../lib/tree'
 import { useApp } from '../store'
 import { ContextMenu, type MenuItem } from './ContextMenu'
 import { isTranscript, useFiles } from '../transcribe/files'
@@ -121,6 +129,13 @@ export function Sidebar(): React.JSX.Element {
       if (node.kind === 'pdf') {
         items.push({ label: 'Export annotated PDF...', onSelect: () => app.exportPdf(node.path) })
       }
+      if (node.kind === 'pdf') {
+        items.push({
+          label: 'Transcribe a recording of this...',
+          onSelect: () =>
+            void useFiles.getState().transcribe(parentOf(node.path), undefined, node.path)
+        })
+      }
       if (isTranscript(node.path)) {
         items.push({
           label: 'Transcribe the recording',
@@ -180,9 +195,10 @@ export function Sidebar(): React.JSX.Element {
   function onDragOver(e: React.DragEvent, row: Row): void {
     const node = dragged.current
     if (!node) {
-      // PDFs dragged in from Explorer can be dropped on a notebook or section.
+      // PDFs dragged in from Explorer can be dropped on a notebook or section; a lecture video
+      // also on a PDF, to say which deck it is about.
       if (!draggingFiles(e)) return
-      if (!isFolder(row.node)) {
+      if (!isFolder(row.node) && row.node.kind !== 'pdf') {
         setDrop(null)
         return
       }
@@ -209,7 +225,9 @@ export function Sidebar(): React.JSX.Element {
     e.stopPropagation()
     setDrop(null)
     if (!node) {
-      if (draggingFiles(e) && isFolder(row.node)) importDroppedFiles(e, row.node.path)
+      if (!draggingFiles(e)) return
+      if (isFolder(row.node)) void importDroppedFiles(e, row.node.path)
+      else if (row.node.kind === 'pdf') void importDroppedFiles(e, row.parent, row.node.path)
       return
     }
     const { parent, before } = dropTarget(row, zoneFor(e, row))
