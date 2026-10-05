@@ -79,6 +79,11 @@ function followSlides(startedAt: number): () => void {
 
 export const useRecording = create<RecordingState>((set, get) => {
   window.api.transcribe.onStatus((status) => set({ status }))
+  window.api.transcribe.onSleep(async () => {
+    if (!get().active) return
+    await get().stop()
+    useApp.getState().showNotice('Recording stopped because the laptop went to sleep')
+  })
   // Bytes per part of a download in progress, for the percentage.
   let downloading: { sizes: Record<string, number>; done: Record<string, number> } | null = null
   window.api.transcribe.onInstallProgress((part, done) => {

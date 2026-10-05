@@ -77,6 +77,11 @@ const api: MarginaliaApi = {
       ipcRenderer.on('record:status', handler)
       return () => ipcRenderer.removeListener('record:status', handler)
     },
+    onSleep: (listener) => {
+      const handler = (): void => listener()
+      ipcRenderer.on('record:sleep', handler)
+      return () => ipcRenderer.removeListener('record:sleep', handler)
+    },
     pickRecording: () => invoke('transcribe:pickRecording'),
     transcribeFile: (request) => invoke('transcribe:file', request),
     transcribeRecorded: (request) => invoke('transcribe:recorded', request),

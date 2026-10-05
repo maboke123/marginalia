@@ -334,3 +334,18 @@ test('transcriptions wait in a queue that can be reordered and emptied', async (
   await bar.getByRole('button', { name: 'Cancel' }).click()
   await expect(bar).toBeHidden()
 })
+
+test('recording stops and is kept when the laptop goes to sleep', async () => {
+  await start()
+  await page.keyboard.press('Control+Shift+R')
+  const bar = page.getByRole('status', { name: 'Recording', exact: true })
+  await expect(bar).toContainText('Recording 00:0')
+  await page.waitForTimeout(1500)
+  await app.evaluate(({ powerMonitor }) => powerMonitor.emit('suspend'))
+
+  await expect(bar).toBeHidden()
+  await expect(page.getByText('Recording stopped because the laptop went to sleep')).toBeVisible()
+  await expect(page.getByRole('status', { name: 'Recording saved' })).toBeVisible()
+  const assets = await fs.readdir(path.join(env.vault, section, 'assets'))
+  expect(assets.some((f) => f.endsWith('.webm'))).toBe(true)
+})

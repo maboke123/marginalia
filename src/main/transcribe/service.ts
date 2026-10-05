@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog } from 'electron'
+import { app, BrowserWindow, dialog, powerMonitor } from 'electron'
 import { randomUUID } from 'crypto'
 import { promises as fs } from 'fs'
 import path from 'path'
@@ -296,6 +296,14 @@ export function registerTranscription(
     waiting.splice(to, 0, id)
     renumber()
   })
+
+  // Asleep, the microphone stops and the slide times drift from the audio, so the recording
+  // ends there. Also on waking, in case the window could not act before the laptop slept.
+  const onSleep = (): void => {
+    if (live) send('record:sleep', null)
+  }
+  powerMonitor.on('suspend', onSleep)
+  powerMonitor.on('resume', onSleep)
 
   // Quitting mid-lecture keeps the audio; chunks still waiting are skipped.
   app.on('before-quit', () => {

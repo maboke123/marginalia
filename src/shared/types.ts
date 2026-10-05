@@ -120,6 +120,8 @@ export interface MarginaliaApi {
     /** Resolves once everything sent so far is transcribed. */
     stop(): Promise<void>
     onStatus(listener: (status: RecordingStatus) => void): () => void
+    /** The laptop goes to sleep (or wakes up) during a recording. */
+    onSleep(listener: () => void): () => void
     /** Asks for a video or audio file; null when cancelled. */
     pickRecording(): Promise<string | null>
     /** Queues a recording file for transcription; returns the job id. Progress via onJob. */
