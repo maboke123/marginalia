@@ -2472,6 +2472,39 @@ h2 {
   margin-top: 20px;
 }
 
+.queue-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.queue-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 10px 0;
+  border-top: 1px solid var(--border);
+}
+
+.queue-item:last-child {
+  border-bottom: 1px solid var(--border);
+}
+
+.queue-name {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  margin-right: 8px;
+}
+
+.queue-name > * {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
 .recording-live {
   display: flex;
   align-items: center;

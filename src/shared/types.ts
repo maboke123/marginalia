@@ -126,7 +126,10 @@ export interface MarginaliaApi {
     transcribeFile(request: TranscribeFileRequest): Promise<string>
     /** Queues a transcript recorded without live transcription; returns the job id. */
     transcribeRecorded(request: TranscribeRecordedRequest): Promise<string>
+    /** Takes a waiting job out of the queue, or stops the running one. */
     cancelJob(id: string): Promise<void>
+    /** Moves a waiting job `by` places in the queue; negative is sooner. */
+    moveJob(id: string, by: number): Promise<void>
     onJob(listener: (job: TranscribeJob) => void): () => void
   }
   terminal: {
@@ -227,6 +230,10 @@ export interface TranscribeJob {
   /** File name of the recording. */
   name: string
   folder: string
+  model: 'small' | 'accurate'
+  language: string
+  /** Place in the queue while waiting, 1 is next. */
+  place?: number
   phase: TranscribeJobPhase
   /** Of the current phase, 0 to 100. */
   percent: number

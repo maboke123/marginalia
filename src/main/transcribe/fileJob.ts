@@ -181,6 +181,7 @@ export async function transcribeFile(
       )
       if (frames.length) timeline = await matchInWorker(frames, job.slides)
     }
+    job.onProgress('transcribing', 0)
     const segments = await engine.transcribe(wav, {
       model: job.model,
       language: job.language,

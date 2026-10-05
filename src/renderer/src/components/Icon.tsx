@@ -1,5 +1,7 @@
 const PATHS = {
   chevron: 'M6 4l4 4-4 4',
+  up: 'M4 10l4-4 4 4',
+  down: 'M4 6l4 4 4-4',
   notebook: 'M4 2.5h8.5v11H4zM4 2.5v11M2.5 5h2M2.5 8h2M2.5 11h2',
   folder: 'M2 4.5a1 1 0 0 1 1-1h3l1.5 1.5H13a1 1 0 0 1 1 1V12a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1z',
   page: 'M4 1.75h5.5L12.5 4.75v9.5H4zM9.5 1.75v3h3M6 8h4.5M6 10.5h4.5',

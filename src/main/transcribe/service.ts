@@ -50,7 +50,21 @@ class FakeTranscriber implements Transcriber {
     this.installed = true
   }
 
-  async transcribe(wav: string, options: { language: string }): Promise<Segment[]> {
+  async transcribe(
+    wav: string,
+    options: { language: string; signal?: AbortSignal }
+  ): Promise<Segment[]> {
+    // MARGINALIA_FAKE_WHISPER_MS: takes this long, so a test can see the queue.
+    const delay = Number(process.env['MARGINALIA_FAKE_WHISPER_MS'] ?? 0)
+    if (delay) {
+      await new Promise((resolve, reject) => {
+        const timer = setTimeout(resolve, delay)
+        options.signal?.addEventListener('abort', () => {
+          clearTimeout(timer)
+          reject(new Error('Cancelled'))
+        })
+      })
+    }
     const seconds = ((await fs.stat(wav)).size - 44) / 32_000
     this.count++
     // A longer recording: a sentence every 8 s with a pause between, so it gets paragraphs.
@@ -139,14 +153,24 @@ export function registerTranscription(
   })
 
   // Recordings from a file, one at a time: whisper already uses half the cores.
-  const jobs = new Map<string, { job: TranscribeJob; abort: AbortController }>()
-  let queue: Promise<void> = Promise.resolve()
+  interface Entry {
+    job: TranscribeJob
+    vault: Vault
+    request: Omit<FileJob, 'signal' | 'onProgress'>
+    abort: AbortController
+  }
+  const jobs = new Map<string, Entry>()
+  /** Jobs not started yet, next one first. */
+  let waiting: string[] = []
+  let running: string | null = null
+  // A cancelled job sends nothing more: the renderer has already let it go.
   const update = (id: string, change: Partial<TranscribeJob>): void => {
     const entry = jobs.get(id)
-    if (!entry) return
+    if (!entry || entry.abort.signal.aborted) return
     entry.job = { ...entry.job, ...change }
     send('transcribe:job', entry.job)
   }
+  const renumber = (): void => waiting.forEach((id, i) => update(id, { place: i + 1 }))
 
   handle('transcribe:pickRecording', async () => {
     const options: Electron.OpenDialogOptions = {
@@ -195,56 +219,82 @@ export function registerTranscription(
     const vault = getVault()
     if (!vault) throw new VaultError('No vault is open')
     const id = randomUUID()
-    const abort = new AbortController()
     const job: TranscribeJob = {
       id,
       name,
       folder: request.folder,
+      model: request.model,
+      language: request.language,
       phase: 'waiting',
-      percent: 0
+      percent: 0,
+      place: waiting.length + 1
     }
-    jobs.set(id, { job, abort })
+    jobs.set(id, { job, vault, request, abort: new AbortController() })
+    waiting.push(id)
     send('transcribe:job', job)
-    queue = queue.then(async () => {
-      if (abort.signal.aborted) return
-      update(id, { phase: 'reading', percent: 0 })
-      try {
-        // The accurate model does not ship with the app; it comes the first time it is used.
-        const { installed, sizes } = await engine.status()
-        const missing = (['program', 'vad', request.model] as TranscribePart[]).filter(
-          (p) => !installed[p]
-        )
-        if (missing.length) {
-          const total = missing.reduce((n, p) => n + sizes[p], 0)
-          const done: Partial<Record<TranscribePart, number>> = {}
-          await engine.install(missing, (part, bytes) => {
-            done[part] = bytes
-            const got = Object.values(done).reduce((n, b) => n + (b ?? 0), 0)
-            update(id, { phase: 'downloading', percent: Math.round((got / total) * 100) })
-          })
-        }
-        const transcript = await transcribeFile(vault, engine, {
-          ...request,
-          signal: abort.signal,
-          onProgress: (phase, percent, read) =>
-            update(id, { phase, percent: Math.round(percent), read })
-        })
-        update(id, { transcript, phase: 'writing', percent: 100 })
-      } catch (err) {
-        update(id, { error: abort.signal.aborted ? 'Cancelled' : (err as Error).message })
-      } finally {
-        jobs.delete(id)
-      }
-    })
+    void runNext()
     return id
   }
 
+  async function runNext(): Promise<void> {
+    if (running || !waiting.length) return
+    const id = waiting.shift()!
+    running = id
+    renumber()
+    const { vault, request, abort } = jobs.get(id)!
+    update(id, { phase: 'reading', percent: 0, place: undefined })
+    try {
+      // The accurate model does not ship with the app; it comes the first time it is used.
+      const { installed, sizes } = await engine.status()
+      const missing = (['program', 'vad', request.model] as TranscribePart[]).filter(
+        (p) => !installed[p]
+      )
+      if (missing.length) {
+        const total = missing.reduce((n, p) => n + sizes[p], 0)
+        const done: Partial<Record<TranscribePart, number>> = {}
+        await engine.install(missing, (part, bytes) => {
+          done[part] = bytes
+          const got = Object.values(done).reduce((n, b) => n + (b ?? 0), 0)
+          update(id, { phase: 'downloading', percent: Math.round((got / total) * 100) })
+        })
+      }
+      const transcript = await transcribeFile(vault, engine, {
+        ...request,
+        signal: abort.signal,
+        onProgress: (phase, percent, read) =>
+          update(id, { phase, percent: Math.round(percent), read })
+      })
+      update(id, { transcript, phase: 'writing', percent: 100 })
+    } catch (err) {
+      update(id, { error: (err as Error).message })
+    } finally {
+      jobs.delete(id)
+      running = null
+      void runNext()
+    }
+  }
+
+  // A waiting job just leaves the queue; the running one stops whisper or ffmpeg, and the
+  // next one starts once that has exited.
   handle('transcribe:cancel', (id: string) => {
     const entry = jobs.get(id)
     if (!entry) return
     entry.abort.abort()
-    update(id, { error: 'Cancelled' })
-    jobs.delete(id)
+    if (waiting.includes(id)) {
+      waiting = waiting.filter((w) => w !== id)
+      jobs.delete(id)
+      renumber()
+    }
+  })
+
+  /** Moves a waiting job `by` places, negative is sooner. */
+  handle('transcribe:move', (id: string, by: number) => {
+    const from = waiting.indexOf(id)
+    if (from === -1) return
+    const to = Math.max(0, Math.min(waiting.length - 1, from + by))
+    waiting.splice(from, 1)
+    waiting.splice(to, 0, id)
+    renumber()
   })
 
   // Quitting mid-lecture keeps the audio; chunks still waiting are skipped.

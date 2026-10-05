@@ -81,6 +81,7 @@ const api: MarginaliaApi = {
     transcribeFile: (request) => invoke('transcribe:file', request),
     transcribeRecorded: (request) => invoke('transcribe:recorded', request),
     cancelJob: (id) => invoke('transcribe:cancel', id),
+    moveJob: (id, by) => invoke('transcribe:move', id, by),
     onJob: (listener) => {
       const handler = (_e: unknown, job: TranscribeJob): void => listener(job)
       ipcRenderer.on('transcribe:job', handler)

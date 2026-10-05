@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { TRANSCRIBE_LANGUAGES, type TranscribeLanguage } from '../../../shared/settings'
 import type { TranscribeJob } from '../../../shared/types'
+import { Icon } from '../components/Icon'
 import { useApp } from '../store'
 import { useFiles, VIDEO_FILE } from './files'
 import { clock } from './clock'
@@ -111,7 +112,7 @@ export function TranscribeFileDialog(): React.JSX.Element | null {
 }
 
 const PHASES: Record<TranscribeJob['phase'], string> = {
-  waiting: 'waiting for the one before it',
+  waiting: 'waiting',
   downloading: 'downloading the accurate model',
   reading: 'reading the recording',
   matching: 'finding the slides in the video',
@@ -126,12 +127,33 @@ function progressText(job: TranscribeJob): string {
   return `${phase} ${job.percent}%`
 }
 
-/** Progress of recording files being transcribed, under the recording bar. */
+const LANGUAGE_NAMES: Record<string, string> = Object.fromEntries(
+  TRANSCRIBE_LANGUAGES.map((l) => [l.value, l.name])
+)
+
+/** "B2 Decision trees, accurate, Dutch" */
+function jobDetails(job: TranscribeJob): string {
+  const lesson = job.folder.split('/').pop()
+  const model = job.model === 'accurate' ? 'accurate' : 'fast'
+  return `${lesson}, ${model}, ${LANGUAGE_NAMES[job.language] ?? job.language}`
+}
+
+/**
+ * Under the recording bar: the recording being transcribed now, with the queue behind it,
+ * and finished ones until they are closed.
+ */
 export function TranscribeJobs(): React.JSX.Element | null {
   const jobs = useFiles((s) => s.jobs)
   const offers = useFiles((s) => s.offers)
+  const queueOpen = useFiles((s) => s.queueOpen)
   if (!jobs.length && !offers.length) return null
-  const { cancel, dismiss, transcribeRecorded, dismissOffer } = useFiles.getState()
+  const { cancel, dismiss, transcribeRecorded, dismissOffer, showQueue } = useFiles.getState()
+  const open = jobs.filter((j) => !j.transcript && !j.error)
+  const current = open.find((j) => j.phase !== 'waiting')
+  const waiting = open
+    .filter((j) => j.phase === 'waiting')
+    .sort((a, b) => (a.place ?? 0) - (b.place ?? 0))
+  const finished = jobs.filter((j) => j.transcript || j.error)
 
   return (
     <>
@@ -149,20 +171,38 @@ export function TranscribeJobs(): React.JSX.Element | null {
           </button>
         </div>
       ))}
-      {jobs.map((job) => (
+      {open.length > 0 && (
+        <div className="recording-bar" role="status" aria-label="Transcribing">
+          {current ? (
+            <>
+              <span className="recording-time">{current.name}</span>
+              {current.read === undefined && (
+                <span className="recording-level" aria-hidden>
+                  <span style={{ width: `${current.percent}%` }} />
+                </span>
+              )}
+              <span className="recording-progress">{progressText(current)}</span>
+            </>
+          ) : (
+            <span className="recording-progress">Starting the next transcription</span>
+          )}
+          <button className="text-button" onClick={() => showQueue(true)}>
+            {waiting.length ? `Queue (${waiting.length} waiting)` : 'Queue'}
+          </button>
+          {current && (
+            <button className="button" onClick={() => cancel(current.id)}>
+              Cancel
+            </button>
+          )}
+        </div>
+      )}
+      {finished.map((job) => (
         <div key={job.id} className="recording-bar" role="status" aria-label="Transcribing">
           <span className="recording-time">{job.name}</span>
           {job.error ? (
             <span className="recording-progress error">{job.error}</span>
-          ) : job.transcript ? (
-            <span className="recording-progress">Transcript ready</span>
           ) : (
-            <>
-              <span className="recording-level" aria-hidden>
-                <span style={{ width: `${job.percent}%` }} />
-              </span>
-              <span className="recording-progress">{progressText(job)}</span>
-            </>
+            <span className="recording-progress">Transcript ready</span>
           )}
           {job.transcript && (
             <button
@@ -175,17 +215,91 @@ export function TranscribeJobs(): React.JSX.Element | null {
               Show transcript
             </button>
           )}
-          {job.transcript || job.error ? (
-            <button className="button" onClick={() => dismiss(job.id)}>
-              Close
-            </button>
-          ) : (
-            <button className="button" onClick={() => cancel(job.id)}>
-              Cancel
-            </button>
-          )}
+          <button className="button" onClick={() => dismiss(job.id)}>
+            Close
+          </button>
         </div>
       ))}
+      {queueOpen && <TranscribeQueue current={current} waiting={waiting} />}
     </>
+  )
+}
+
+/** Every recording still to transcribe: stop the running one, reorder or remove the rest. */
+function TranscribeQueue({
+  current,
+  waiting
+}: {
+  current: TranscribeJob | undefined
+  waiting: TranscribeJob[]
+}): React.JSX.Element {
+  const { cancel, move, showQueue } = useFiles.getState()
+  const close = (): void => showQueue(false)
+  return (
+    <div className="overlay-backdrop" onMouseDown={close}>
+      <div
+        className="transcribe-dialog"
+        role="dialog"
+        aria-label="Transcription queue"
+        onMouseDown={(e) => e.stopPropagation()}
+        onKeyDown={(e) => e.key === 'Escape' && close()}
+      >
+        <h2>Transcription queue</h2>
+        <p className="muted">
+          One recording at a time, so the laptop stays usable. Stopping one throws away what it had
+          done so far.
+        </p>
+        {!current && !waiting.length && <p>Nothing left to transcribe.</p>}
+        <ol className="queue-list">
+          {current && (
+            <li className="queue-item" aria-label={current.name}>
+              <span className="queue-name">
+                <strong>{current.name}</strong>
+                <span className="muted">{jobDetails(current)}</span>
+                <span>Now {progressText(current)}</span>
+              </span>
+              <button className="button" onClick={() => cancel(current.id)}>
+                Stop
+              </button>
+            </li>
+          )}
+          {waiting.map((job, i) => (
+            <li key={job.id} className="queue-item" aria-label={job.name}>
+              <span className="queue-name">
+                <strong>{job.name}</strong>
+                <span className="muted">{jobDetails(job)}</span>
+                <span>{i === 0 ? 'Next' : `Waiting, ${i + 1} in line`}</span>
+              </span>
+              <button
+                className="icon-button"
+                title="Sooner"
+                aria-label="Sooner"
+                disabled={i === 0}
+                onClick={() => move(job.id, -1)}
+              >
+                <Icon name="up" />
+              </button>
+              <button
+                className="icon-button"
+                title="Later"
+                aria-label="Later"
+                disabled={i === waiting.length - 1}
+                onClick={() => move(job.id, 1)}
+              >
+                <Icon name="down" />
+              </button>
+              <button className="text-button" onClick={() => cancel(job.id)}>
+                Remove
+              </button>
+            </li>
+          ))}
+        </ol>
+        <div className="transcribe-actions">
+          <button className="button" autoFocus onClick={close}>
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
   )
 }

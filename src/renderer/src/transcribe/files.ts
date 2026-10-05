@@ -38,14 +38,25 @@ interface FilesState {
   /** `linkSlides`: find the slides a video shows, for links in the transcript. */
   confirm(model: 'small' | 'accurate', language: string, linkSlides: boolean): Promise<void>
   cancelChoice(): void
+  /** Takes a job out of the queue, or stops it if it is running. */
   cancel(id: string): void
+  move(id: string, by: number): void
   dismiss(id: string): void
+  queueOpen: boolean
+  showQueue(open: boolean): void
 }
 
 export const useFiles = create<FilesState>((set, get) => {
+  // Progress sent just before a cancel reached main must not bring the job back.
+  const cancelled = new Set<string>()
   window.api.transcribe.onJob((job) => {
-    const others = get().jobs.filter((j) => j.id !== job.id)
-    set({ jobs: [...others, job] })
+    if (cancelled.has(job.id)) return
+    const jobs = get().jobs
+    set({
+      jobs: jobs.some((j) => j.id === job.id)
+        ? jobs.map((j) => (j.id === job.id ? job : j))
+        : [...jobs, job]
+    })
     if (job.transcript) void useApp.getState().refresh()
   })
 
@@ -53,6 +64,7 @@ export const useFiles = create<FilesState>((set, get) => {
     jobs: [],
     offers: [],
     choosing: null,
+    queueOpen: false,
 
     async transcribe(folder, source, pdf) {
       const { showError } = useApp.getState()
@@ -98,7 +110,13 @@ export const useFiles = create<FilesState>((set, get) => {
     },
 
     cancelChoice: () => set({ choosing: null }),
-    cancel: (id) => void window.api.transcribe.cancelJob(id),
+    cancel(id) {
+      cancelled.add(id)
+      void window.api.transcribe.cancelJob(id)
+      get().dismiss(id)
+    },
+    move: (id, by) => void window.api.transcribe.moveJob(id, by),
+    showQueue: (queueOpen) => set({ queueOpen }),
     dismiss: (id) => set({ jobs: get().jobs.filter((j) => j.id !== id) })
   }
 })

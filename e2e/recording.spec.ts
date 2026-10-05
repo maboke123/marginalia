@@ -285,3 +285,52 @@ test('the recording bar can be hidden, and stays hidden for the next recording',
   await expect(chip).toBeHidden()
   await bar.getByRole('button', { name: 'Stop' }).click()
 })
+
+test('transcriptions wait in a queue that can be reordered and emptied', async () => {
+  await start({ MARGINALIA_FAKE_WHISPER_MS: '60000' })
+  for (const name of ['week 1', 'week 2', 'week 3']) {
+    const source = path.join(env.dir, `${name}.wav`)
+    await toneWav(source, 2)
+    await app.evaluate(({ dialog }, file) => {
+      dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [file] })
+    }, source)
+    await row('B2 Decision trees').click({ button: 'right' })
+    await page.getByRole('menuitem', { name: 'Transcribe a recording...' }).click()
+    await page.getByRole('button', { name: 'Transcribe', exact: true }).click()
+  }
+
+  const bar = page.getByRole('status', { name: 'Transcribing' })
+  await expect(bar).toContainText('week 1.wav')
+  await expect(bar).toContainText('transcribing')
+  await bar.getByRole('button', { name: 'Queue (2 waiting)' }).click()
+  const queue = page.getByRole('dialog', { name: 'Transcription queue' })
+  const items = queue.getByRole('listitem')
+  await expect(items).toHaveText([
+    /week 1\.wav.*Now/,
+    /week 2\.wav.*Next/,
+    /week 3\.wav.*2 in line/
+  ])
+  await page.screenshot({ path: path.join('test-results', 'queue.png') })
+
+  await queue
+    .getByRole('listitem', { name: 'week 3.wav' })
+    .getByRole('button', { name: 'Sooner' })
+    .click()
+  await expect(items).toHaveText([/week 1/, /week 3/, /week 2/])
+  await queue
+    .getByRole('listitem', { name: 'week 2.wav' })
+    .getByRole('button', { name: 'Remove' })
+    .click()
+  await expect(items).toHaveText([/week 1/, /week 3.*Next/])
+
+  // Stopping the running one starts the next.
+  await queue
+    .getByRole('listitem', { name: 'week 1.wav' })
+    .getByRole('button', { name: 'Stop' })
+    .click()
+  await expect(items).toHaveText([/week 3\.wav.*Now/])
+  await queue.getByRole('button', { name: 'Close' }).click()
+  await expect(bar).toContainText('week 3.wav')
+  await bar.getByRole('button', { name: 'Cancel' }).click()
+  await expect(bar).toBeHidden()
+})
