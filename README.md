@@ -4,6 +4,11 @@
 
 A Windows desktop app for lecture notes. Import the slide PDF, write on it, and keep a Markdown summary with LaTeX next to it. Everything is stored as plain files in a folder you choose.
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/lecture-dark.png">
+  <img src="docs/screenshots/lecture-light.png" alt="Lecture mode: annotated slides on the left, the Markdown summary with rendered formulas and a table on the right">
+</picture>
+
 I built it for my own courses at KU Leuven, to replace a mix of OneNote (for scribbling on slides), Obsidian (for summaries) and a separate chat window for asking Claude about the slides.
 
 Claude is built in two ways:
@@ -12,6 +17,11 @@ Claude is built in two ways:
 - **`/claude` inside your notes.** While taking notes, type `/claude` and a request in your summary or in a text box on a slide. Claude edits or adds to the text right there, and you keep writing.
 
 ## Features
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/slides-dark.png">
+  <img src="docs/screenshots/slides-light.png" alt="A slide with pen circles, a note with a formula on the slide and text in the margin, next to the course sidebar">
+</picture>
 
 **Organise**
 - Open any folder as a vault. Top-level folders are courses, subfolders are lectures, nested as deep as you like.
@@ -41,6 +51,11 @@ Claude is built in two ways:
 ## Claude in the app
 
 Claude is built into the places you already work, and it always knows where you are. With every message it gets the open file, the slide on screen (its text and an image of it), your annotations on that slide, any text you selected and the part of your summary around your cursor. You don't have to copy anything over or explain which slide you mean.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/claude-dark.png">
+  <img src="docs/screenshots/claude-light.png" alt="The Claude panel under the slides, answering why Outlook is the root of the tree on slide 3">
+</picture>
 
 **Ask questions in the chat panel (Ctrl+L)**
 - "Explain the formula on this slide" or "Why is entropy maximal here?" works without any setup.
@@ -114,6 +129,7 @@ npm test             # unit tests (Vitest)
 npm run test:e2e     # end-to-end tests that drive the built app (Playwright)
 npm run typecheck
 npm run lint
+npm run screenshots  # rebuild the README screenshots from a demo vault
 ```
 
 End-to-end tests run against temporary vaults and a scripted fake of Claude, so they never touch your own notes or use your Claude plan.

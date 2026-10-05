@@ -19,7 +19,8 @@
     "lint": "eslint --cache .",
     "format": "prettier --write .",
     "test:e2e": "electron-vite build && playwright test",
-    "deploy": "node scripts/deploy.mjs"
+    "deploy": "node scripts/deploy.mjs",
+    "screenshots": "electron-vite build && node scripts/screenshots/capture.mjs"
   },
   "devDependencies": {
     "@codemirror/autocomplete": "6.20.3",
