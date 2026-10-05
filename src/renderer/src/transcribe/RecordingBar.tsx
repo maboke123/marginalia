@@ -45,7 +45,7 @@ export function RecordingBar(): React.JSX.Element | null {
   const progress = stopping
     ? 'Finishing...'
     : !live
-      ? 'Saving the audio and which slide is open; transcribe it afterwards'
+      ? 'Saving the audio and which slide is open; transcribe it afterwards in any language'
       : status?.transcribedTo
         ? `Transcript up to ${clock(status.transcribedTo)}${pending > 1 ? `, ${pending} parts waiting` : ''}`
         : 'The first text appears after about half a minute'
@@ -75,23 +75,26 @@ export function RecordingBar(): React.JSX.Element | null {
         />
         Live transcript
       </label>
-      <select
-        className="toolbar-select"
-        aria-label="Spoken language"
-        title="Language of the lecture, for the parts still to come"
-        value={language}
-        onChange={(e) =>
-          useApp
-            .getState()
-            .saveSettings({ transcribeLanguage: e.target.value as TranscribeLanguage })
-        }
-      >
-        {TRANSCRIBE_LANGUAGES.map((l) => (
-          <option key={l.value} value={l.value}>
-            {l.name}
-          </option>
-        ))}
-      </select>
+      {/* Without a live transcript the language is chosen when the audio is transcribed. */}
+      {live && (
+        <select
+          className="toolbar-select"
+          aria-label="Spoken language"
+          title="Language of the lecture, for the parts still to come"
+          value={language}
+          onChange={(e) =>
+            useApp
+              .getState()
+              .saveSettings({ transcribeLanguage: e.target.value as TranscribeLanguage })
+          }
+        >
+          {TRANSCRIBE_LANGUAGES.map((l) => (
+            <option key={l.value} value={l.value}>
+              {l.name}
+            </option>
+          ))}
+        </select>
+      )}
       <button className="text-button" onClick={() => useApp.getState().openFile(active.transcript)}>
         Show transcript
       </button>

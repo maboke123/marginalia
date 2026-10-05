@@ -39,6 +39,7 @@ test('with live transcription on, the transcript is written while recording', as
   await page.keyboard.press('Control+Shift+R')
   const bar = page.getByRole('status', { name: 'Recording', exact: true })
   await expect(bar).toContainText('Recording 00:0')
+  await expect(bar.getByRole('combobox', { name: 'Spoken language' })).toBeVisible()
 
   // The transcript appears in the lesson and cannot be edited while it is being written.
   await expect(row('Transcript ')).toBeVisible()
@@ -149,6 +150,8 @@ test('by default only the audio is recorded, and transcribed afterwards with sli
   const bar = page.getByRole('status', { name: 'Recording', exact: true })
   await expect(bar).toContainText('Saving the audio and which slide is open')
   await expect(bar.getByRole('checkbox', { name: 'Live transcript' })).not.toBeChecked()
+  // The language is chosen when the audio is transcribed.
+  await expect(bar.getByRole('combobox', { name: 'Spoken language' })).toHaveCount(0)
 
   // Slide 2 from about 3 s on: the timeline gives the transcript its slide links.
   await page.waitForTimeout(3000)
