@@ -272,7 +272,7 @@ export function Sidebar(): React.JSX.Element {
         >
           <Icon name="settings" />
         </button>
-        <RecordButton />
+        <RecordButton showTime={false} />
         <button
           className="icon-button"
           title="New notebook"

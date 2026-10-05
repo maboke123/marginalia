@@ -11,7 +11,17 @@ const clock = (seconds: number): string => {
   return h ? `${h}:${pad(m)}:${pad(s % 60)}` : `${pad(m)}:${pad(s % 60)}`
 }
 
-/** Shown across the top of the window while a lecture is recorded. */
+/** How long the current recording has been going, updated every second. */
+export function RecordingClock({ startedAt }: { startedAt: number }): React.JSX.Element {
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 1000)
+    return () => clearInterval(timer)
+  }, [])
+  return <>{clock((now - startedAt) / 1000)}</>
+}
+
+/** Shown across the top of the window while a lecture is recorded, unless I hid it. */
 export function RecordingBar(): React.JSX.Element | null {
   const active = useRecording((s) => s.active)
   const status = useRecording((s) => s.status)
@@ -20,13 +30,7 @@ export function RecordingBar(): React.JSX.Element | null {
   const preparing = useRecording((s) => s.preparing)
   const language = useApp((s) => s.settings.transcribeLanguage)
   const live = useApp((s) => s.settings.transcribeLive)
-  const [now, setNow] = useState(() => Date.now())
-
-  useEffect(() => {
-    if (!active) return
-    const timer = setInterval(() => setNow(Date.now()), 1000)
-    return () => clearInterval(timer)
-  }, [active])
+  const shown = useApp((s) => s.settings.recordingBar)
 
   if (preparing !== null) {
     return (
@@ -35,8 +39,8 @@ export function RecordingBar(): React.JSX.Element | null {
       </div>
     )
   }
-  if (!active) return null
-  const elapsed = (now - active.startedAt) / 1000
+  // A failure still shows, also when the bar is hidden.
+  if (!active || (!shown && !status?.error)) return null
   const pending = status?.pending ?? 0
   const progress = stopping
     ? 'Finishing...'
@@ -49,7 +53,9 @@ export function RecordingBar(): React.JSX.Element | null {
   return (
     <div className="recording-bar" role="status" aria-label="Recording">
       <span className="recording-dot" aria-hidden />
-      <span className="recording-time">Recording {clock(elapsed)}</span>
+      <span className="recording-time">
+        Recording <RecordingClock startedAt={active.startedAt} />
+      </span>
       <span className="recording-level" aria-hidden>
         <span style={{ width: `${Math.round(level * 100)}%` }} />
       </span>
@@ -88,6 +94,13 @@ export function RecordingBar(): React.JSX.Element | null {
       </select>
       <button className="text-button" onClick={() => useApp.getState().openFile(active.transcript)}>
         Show transcript
+      </button>
+      <button
+        className="text-button"
+        title="Hide this bar. The record buttons show the time; click it to bring the bar back."
+        onClick={() => void useApp.getState().saveSettings({ recordingBar: false })}
+      >
+        Hide
       </button>
       <button
         className="button"

@@ -21,6 +21,8 @@ export interface AppSettings {
    * recording can be transcribed afterwards.
    */
   transcribeLive: boolean
+  /** The bar across the window while recording; when hidden, the record buttons show the time. */
+  recordingBar: boolean
 }
 
 export type TranscribeLanguage = 'auto' | 'nl' | 'en'
@@ -66,7 +68,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   snapping: true,
   transcribeLanguage: 'auto',
   transcribeModel: 'accurate',
-  transcribeLive: false
+  transcribeLive: false,
+  recordingBar: true
 }
 
 function colors(raw: unknown, fallback: string[]): string[] {
@@ -92,6 +95,7 @@ export function settingsFrom(raw: unknown): AppSettings {
       ? (r.transcribeLanguage as TranscribeLanguage)
       : DEFAULT_SETTINGS.transcribeLanguage,
     transcribeModel: r.transcribeModel === 'small' ? 'small' : 'accurate',
-    transcribeLive: r.transcribeLive === true
+    transcribeLive: r.transcribeLive === true,
+    recordingBar: r.recordingBar !== false
   }
 }
