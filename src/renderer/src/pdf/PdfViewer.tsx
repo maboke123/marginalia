@@ -169,8 +169,13 @@ function Document({
 
   useLayoutEffect(() => {
     const el = scrollRef.current!
-    const observer = new ResizeObserver(() =>
-      setViewport({ width: el.clientWidth, height: el.clientHeight })
+    // clientWidth rounds, so a pane of 782.5 px would report 783 and fit width would overflow
+    // by half a pixel, which shows a horizontal scrollbar.
+    const observer = new ResizeObserver(([entry]) =>
+      setViewport({
+        width: Math.floor(entry.contentRect.width),
+        height: Math.floor(entry.contentRect.height)
+      })
     )
     observer.observe(el)
     return () => observer.disconnect()
