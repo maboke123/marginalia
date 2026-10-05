@@ -20,7 +20,10 @@
     "format": "prettier --write .",
     "test:e2e": "electron-vite build && playwright test",
     "deploy": "node scripts/deploy.mjs",
-    "screenshots": "electron-vite build && node scripts/screenshots/capture.mjs"
+    "screenshots": "electron-vite build && node scripts/screenshots/capture.mjs",
+    "video": "npm --prefix videos run dev",
+    "video:capture": "electron-vite build && node videos/scripts/capture.mjs",
+    "video:render": "npm --prefix videos run render"
   },
   "devDependencies": {
     "@codemirror/autocomplete": "6.20.3",

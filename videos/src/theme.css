@@ -1,0 +1,43 @@
+/*
+  Values copied from the app's light theme in src/renderer/src/styles.css (not imported: that file is
+  a whole stylesheet whose dark-mode media query would flip the video with the OS theme, while the
+  screens are light). inverse and accent-2 are the two colours of build/icon.svg.
+*/
+@theme {
+  --color-background: #ffffff;
+  --color-surface: #f6f6f5;
+  --color-foreground: #1f1f1e;
+  --color-heading: #1f1f1e;
+  --color-primary: #2b65c4;
+  --color-muted-foreground: #6e6e6b;
+  --color-border: #c9c9c5;
+  --color-accent-1: #1b7c83;
+  --color-accent-2: #f2c14e;
+
+  --color-inverse: #1f2633;
+  --color-inverse-foreground: #f4f5f6;
+  --color-inverse-heading: #ffffff;
+  --color-inverse-muted: #aab2c0;
+
+  --font-sans: 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif;
+  --font-heading: 'Segoe UI Variable Display', 'Segoe UI', system-ui, sans-serif;
+  --font-mono: 'Cascadia Mono', Consolas, monospace;
+}
+
+@layer base {
+  body {
+    background: var(--color-background);
+    color: var(--color-foreground);
+    font-family: var(--font-sans);
+  }
+
+  h1,
+  h2,
+  h3 {
+    font-family: var(--font-heading);
+    color: var(--color-heading);
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    text-wrap: balance;
+  }
+}
