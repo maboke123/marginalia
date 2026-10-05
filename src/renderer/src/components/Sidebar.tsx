@@ -13,6 +13,7 @@ import {
 import { useApp } from '../store'
 import { ContextMenu, type MenuItem } from './ContextMenu'
 import { isTranscript, useFiles } from '../transcribe/files'
+import { RecordButton } from '../transcribe/RecordButton'
 import { FeedbackBox } from './FeedbackBox'
 import { Icon } from './Icon'
 import { TreeRow, type DropZone } from './TreeRow'
@@ -271,6 +272,7 @@ export function Sidebar(): React.JSX.Element {
         >
           <Icon name="settings" />
         </button>
+        <RecordButton />
         <button
           className="icon-button"
           title="New notebook"

@@ -5,6 +5,7 @@ import { Icon } from '../components/Icon'
 import { registerFlush } from '../lib/flush'
 import { registerNote } from '../lib/open'
 import { useApp } from '../store'
+import { RecordButton } from '../transcribe/RecordButton'
 import { useRecording } from '../transcribe/recording'
 import { insertText } from './commands'
 import { resolveLink } from './links'
@@ -25,7 +26,6 @@ export function MarkdownEditor({
   const [error, setError] = useState<string | null>(null)
   const lectureMode = useApp((s) => s.lectureMode)
   const toggleLecture = useApp((s) => s.toggleLecture)
-  const recording = useRecording((s) => !!s.active)
   const beingWritten = useRecording((s) => s.active?.transcript === path)
 
   useEffect(() => {
@@ -174,15 +174,7 @@ export function MarkdownEditor({
       <div className="pane-toolbar">
         <span className="pane-title">{title}</span>
         {beingWritten && <span className="muted pane-note">Being written while you record</span>}
-        <button
-          className={recording ? 'icon-button pressed' : 'icon-button'}
-          title={`${recording ? 'Stop recording' : 'Record the lecture'} (${useApp.getState().settings.hotkeys.record})`}
-          aria-label="Record lecture"
-          aria-pressed={recording}
-          onClick={() => void useRecording.getState().toggle()}
-        >
-          <Icon name="mic" />
-        </button>
+        <RecordButton />
         <button
           className={lectureMode ? 'icon-button pressed' : 'icon-button'}
           title={`Lecture mode (${useApp.getState().settings.hotkeys.lecture})`}

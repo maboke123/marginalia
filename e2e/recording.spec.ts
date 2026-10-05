@@ -241,3 +241,23 @@ test('a lecture video gets links to the slides it shows, also out of order', asy
   const links = [...text.matchAll(/\*\*(\d\d:\d\d)\*\* · \[slide (\d)\]\(pictures\.pdf#page=\d\)/g)]
   expect(links.map((m) => `${m[1]} ${m[2]}`)).toEqual(['00:00 1', '00:08 3', '00:16 2'])
 })
+
+test('recording works from the slides toolbar, and twice in a row gives two transcripts', async () => {
+  // Within one minute: the second note gets "(2)" in its name, its audio has seconds in it.
+  await start()
+  const record = page.locator('.pdf-viewer').getByRole('button', { name: 'Record lecture' })
+  const bar = page.getByRole('status', { name: 'Recording', exact: true })
+  for (let i = 0; i < 2; i++) {
+    await record.click()
+    await expect(bar).toBeVisible()
+    await expect(record).toHaveAttribute('aria-pressed', 'true')
+    await page.waitForTimeout(1500)
+    await record.click()
+    await expect(bar).toBeHidden()
+  }
+  const transcripts = (await fs.readdir(path.join(env.vault, section))).filter((f) =>
+    f.startsWith('Transcript ')
+  )
+  expect(transcripts).toHaveLength(2)
+  await expect(page.locator('.tree-row', { hasText: 'Transcript ' })).toHaveCount(2)
+})

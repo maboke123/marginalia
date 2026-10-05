@@ -34,6 +34,7 @@ import {
 } from './layout'
 import { loadPdf, pageSizes } from './pdfjs'
 import { PdfPage } from './PdfPage'
+import { RecordButton } from '../transcribe/RecordButton'
 import { SnapshotLayer } from './SnapshotLayer'
 
 interface Loaded {
@@ -530,6 +531,7 @@ function Document({
               Fit width
             </button>
           </div>
+          <RecordButton />
           <button
             className="icon-button"
             title="Add a blank page below this one, for notes that do not fit"
