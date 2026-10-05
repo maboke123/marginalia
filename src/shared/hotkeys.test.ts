@@ -3,9 +3,11 @@ import { comboOf, DEFAULT_HOTKEYS, hotkeyProblem, hotkeysFrom } from './hotkeys'
 
 const press = (
   code: string,
-  mods: Partial<Record<'ctrl' | 'shift' | 'alt', boolean>> = {}
+  mods: Partial<Record<'ctrl' | 'shift' | 'alt', boolean>> = {},
+  key = ''
 ): Parameters<typeof comboOf>[0] => ({
   code,
+  key,
   ctrlKey: !!mods.ctrl,
   shiftKey: !!mods.shift,
   altKey: !!mods.alt,
@@ -19,6 +21,16 @@ describe('comboOf', () => {
     expect(comboOf(press('KeyP'))).toBe('P')
     expect(comboOf(press('F2'))).toBe('F2')
     expect(comboOf(press('ControlLeft', { ctrl: true }))).toBeNull()
+  })
+
+  it('takes letters from the keyboard layout, as typed', () => {
+    // AZERTY: M is on the QWERTY ; key, A and Q are swapped.
+    expect(comboOf(press('Semicolon', { ctrl: true, shift: true }, 'M'))).toBe('Ctrl+Shift+M')
+    expect(comboOf(press('Semicolon', {}, 'm'))).toBe('M')
+    expect(comboOf(press('KeyQ', {}, 'a'))).toBe('A')
+    // Not a letter: the physical key, so Shift does not change the name.
+    expect(comboOf(press('Digit1', { ctrl: true }, '&'))).toBe('Ctrl+1')
+    expect(comboOf(press('KeyE', { ctrl: true, alt: true }, '€'))).toBe('Ctrl+Alt+E')
   })
 })
 

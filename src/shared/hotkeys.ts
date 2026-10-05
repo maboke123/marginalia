@@ -49,8 +49,9 @@ const NAMED: Record<string, string> = {
 }
 
 /**
- * "Ctrl+Shift+M" for a key press, from the physical key so it does not depend on the keyboard
- * layout's shifted characters. Null for a lone modifier or a key that cannot be a hotkey.
+ * "Ctrl+Shift+M" for a key press. A letter is the one the keyboard layout types (M on AZERTY
+ * sits where QWERTY has ;). Other keys go by their physical place, so they do not depend on
+ * the layout's shifted characters. Null for a lone modifier or a key that cannot be a hotkey.
  */
 export function comboOf(e: {
   ctrlKey: boolean
@@ -58,9 +59,11 @@ export function comboOf(e: {
   altKey: boolean
   metaKey: boolean
   code: string
+  key: string
 }): string | null {
   let key: string | null = null
-  if (/^Key[A-Z]$/.test(e.code)) key = e.code.slice(3)
+  if (/^[a-z]$/i.test(e.key)) key = e.key.toUpperCase()
+  else if (/^Key[A-Z]$/.test(e.code)) key = e.code.slice(3)
   else if (/^Digit[0-9]$/.test(e.code)) key = e.code.slice(5)
   else if (/^F([1-9]|1[0-2])$/.test(e.code)) key = e.code
   else key = NAMED[e.code] ?? null
