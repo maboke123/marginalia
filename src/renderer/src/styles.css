@@ -1216,8 +1216,10 @@ h2 {
   min-height: 0;
 }
 
+/* min-width: 0 so a wide formula or table scrolls by itself instead of widening the pane. */
 .md-editor .cm-editor {
   flex: 1;
+  min-width: 0;
   height: 100%;
   background: var(--bg);
   color: var(--text);
@@ -1235,6 +1237,7 @@ h2 {
 }
 
 .md-editor .cm-content {
+  min-width: 0;
   max-width: 760px;
   padding: 28px 40px 40vh;
   caret-color: var(--text);
@@ -1471,6 +1474,10 @@ h2 {
 .cm-table-preview,
 .cm-math-block {
   padding-left: 6px;
+}
+
+.cm-table-preview {
+  overflow-x: auto;
 }
 
 .cm-table-preview table {

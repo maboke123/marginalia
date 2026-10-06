@@ -140,6 +140,22 @@ test('lecture mode, slide links and snapshots', async () => {
   await page.screenshot({ path: path.join('test-results', 'lecture.png') })
 })
 
+test('a wide formula scrolls inside a narrow note pane', async () => {
+  const sum = Array.from({ length: 30 }, (_, i) => `C_{${i}}`).join(' + ')
+  await fs.writeFile(path.join(env.vault, section, 'slides.md'), `Intro\n\n$$\n${sum}\n$$\n`)
+  await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setSize(1000, 700))
+  await openSection()
+  await row('slides.pdf').click()
+  await page.keyboard.press('Control+Shift+M')
+  await expect(page.locator('.cm-math-block .katex')).toBeVisible()
+
+  const pane = (await page.locator('.lecture-pane').nth(1).boundingBox())!
+  const editorBox = (await page.locator('.md-editor .cm-editor').boundingBox())!
+  expect(editorBox.x + editorBox.width).toBeLessThanOrEqual(pane.x + pane.width + 1)
+  const math = page.locator('.cm-math-block')
+  expect(await math.evaluate((el) => el.scrollWidth > el.clientWidth)).toBe(true)
+})
+
 test('each PDF keeps its own note in lecture mode', async () => {
   for (const name of ['les_1.pdf', 'les_2.pdf']) {
     await fs.copyFile(slides, path.join(env.vault, section, name))
