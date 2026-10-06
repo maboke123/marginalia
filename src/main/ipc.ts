@@ -83,6 +83,11 @@ export function registerIpc(
     if (error) throw new VaultError(`Could not open feedback.md: ${error}`)
   })
 
+  handle('app:toggleFullScreen', () => {
+    const win = getWindow()
+    win?.setFullScreen(!win.isFullScreen())
+  })
+
   handle('settings:get', async () => (await config.read()).settings)
   handle('settings:set', async (change: Partial<AppSettings>) => {
     let next: AppSettings | undefined

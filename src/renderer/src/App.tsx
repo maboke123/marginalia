@@ -46,6 +46,8 @@ function toggleOverlay(overlay: 'switcher' | 'search' | 'settings'): void {
 const ACTIONS: Partial<Record<HotkeyAction, () => void>> = {
   claude: toggleClaude,
   lecture: () => useApp.getState().toggleLecture(),
+  sidebar: () => useApp.getState().toggleSidebar(),
+  fullScreen: () => void window.api.app.toggleFullScreen(),
   importPdf: () => useApp.getState().importPdfs(),
   slideLink: insertCurrentSlideLink,
   snapshot: () => useApp.getState().startSnapshot(),
@@ -59,6 +61,7 @@ export function App(): React.JSX.Element | null {
   const ready = useApp((s) => s.ready)
   const vault = useApp((s) => s.vault)
   const lectureMode = useApp((s) => s.lectureMode)
+  const sidebarHidden = useApp((s) => s.sidebarHidden)
   const overlay = useApp((s) => s.overlay)
   const error = useApp((s) => s.error)
   const notice = useApp((s) => s.notice)
@@ -132,7 +135,7 @@ export function App(): React.JSX.Element | null {
           <RecordingBar />
           <TranscribeJobs />
           <div className="layout">
-            {!lectureMode && <Sidebar />}
+            {!lectureMode && !sidebarHidden && <Sidebar />}
             <Workspace />
           </div>
           {claudeOpen && <ClaudePanel />}

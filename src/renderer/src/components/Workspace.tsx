@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import logo from '../../../../build/icon.svg'
 import { MarkdownEditor } from '../editor/MarkdownEditor'
+import { SidebarButton } from './SidebarButton'
 import { draggingFiles, importDroppedFiles } from '../lib/drop'
 import { displayName, findNode } from '../lib/tree'
 import { PdfViewer } from '../pdf/PdfViewer'
@@ -99,6 +100,7 @@ export function Workspace(): React.JSX.Element {
       <main className={className('empty')} {...dropProps}>
         <img className="empty-logo" src={logo} alt="" width={40} height={40} />
         <p className="muted">Select a page in the sidebar, or drop a PDF here to import it.</p>
+        <SidebarButton />
       </main>
     )
   }

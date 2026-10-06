@@ -114,6 +114,22 @@ test('feedback from the sidebar is saved with what was open', async () => {
   )
 })
 
+test('the sidebar can be hidden and brought back', async () => {
+  const sidebar = page.locator('.sidebar')
+  await row('Machine Learning').click()
+  await row('B2 Decision trees').click()
+  await row('Summary').click()
+  await page.keyboard.press('Control+Backslash')
+  await expect(sidebar).toHaveCount(0)
+  await page.getByRole('button', { name: 'Show the sidebar' }).click()
+  await expect(sidebar).toBeVisible()
+
+  await page.getByRole('button', { name: 'Hide the sidebar' }).click()
+  await expect(sidebar).toHaveCount(0)
+  await page.keyboard.press('Control+Backslash')
+  await expect(sidebar).toBeVisible()
+})
+
 test('a notebook created in the app appears on disk', async () => {
   await page.getByRole('button', { name: 'New notebook' }).first().click()
   const input = page.locator('.rename-input')

@@ -34,6 +34,7 @@ import {
 } from './layout'
 import { loadPdf, pageSizes } from './pdfjs'
 import { PdfPage } from './PdfPage'
+import { SidebarButton } from '../components/SidebarButton'
 import { RecordButton } from '../transcribe/RecordButton'
 import { SnapshotLayer } from './SnapshotLayer'
 
@@ -485,6 +486,7 @@ function Document({
   return (
     <div className="pdf-viewer" ref={viewerRef}>
       <div className="pdf-toolbar">
+        <SidebarButton />
         <AnnotationToolbar doc={activeDoc} pageWidth={(n) => sizes[slideOf(n) - 1].width} />
         <span className="pdf-title" title={title}>
           {title}

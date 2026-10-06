@@ -166,6 +166,7 @@ export interface MarginaliaApi {
     /** The window is about to close; save everything, then call readyToClose(). */
     onBeforeClose(listener: () => void): () => void
     readyToClose(): void
+    toggleFullScreen(): Promise<void>
     /** Adds an entry to feedback.md in the app's data folder. */
     saveFeedback(entry: FeedbackEntry): Promise<void>
     /** Opens feedback.md in the default editor. */

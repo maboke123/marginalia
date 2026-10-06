@@ -137,6 +137,7 @@ const api: MarginaliaApi = {
       return () => ipcRenderer.removeListener('app:before-close', handler)
     },
     readyToClose: () => ipcRenderer.send('app:ready-to-close'),
+    toggleFullScreen: () => invoke('app:toggleFullScreen'),
     saveFeedback: (entry) => invoke('app:feedback', entry),
     openFeedback: () => invoke('app:openFeedback'),
     version: ipcRenderer.sendSync('app:version') as string

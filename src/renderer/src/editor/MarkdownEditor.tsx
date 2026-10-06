@@ -3,6 +3,7 @@ import { Annotation, Compartment, EditorState, type Extension } from '@codemirro
 import { EditorView } from '@codemirror/view'
 import { Icon } from '../components/Icon'
 import { NoteSwitcher } from '../components/NoteSwitcher'
+import { SidebarButton } from '../components/SidebarButton'
 import { registerFlush } from '../lib/flush'
 import { findNode } from '../lib/tree'
 import { registerNote } from '../lib/open'
@@ -178,6 +179,7 @@ export function MarkdownEditor({
   return (
     <div className="md-pane">
       <div className="pane-toolbar">
+        <SidebarButton />
         {lectureMode && slidesFile ? (
           <NoteSwitcher path={path} title={title} />
         ) : (

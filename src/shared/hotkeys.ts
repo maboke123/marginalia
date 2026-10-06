@@ -8,6 +8,8 @@ export const HOTKEY_ACTIONS = [
   { id: 'switcher', label: 'Quick switcher', key: 'Ctrl+P', scope: 'global' },
   { id: 'search', label: 'Search everything', key: 'Ctrl+Shift+F', scope: 'global' },
   { id: 'settings', label: 'Settings', key: 'Ctrl+,', scope: 'global' },
+  { id: 'sidebar', label: 'Show or hide the sidebar', key: 'Ctrl+\\', scope: 'global' },
+  { id: 'fullScreen', label: 'Full screen', key: 'F11', scope: 'global' },
   {
     id: 'record',
     label: 'Record the lecture (start or stop)',

@@ -281,6 +281,14 @@ export function Sidebar(): React.JSX.Element {
         >
           <Icon name="plus" />
         </button>
+        <button
+          className="icon-button"
+          title={`Hide the sidebar (${app.settings.hotkeys.sidebar})`}
+          aria-label="Hide the sidebar"
+          onClick={() => app.toggleSidebar()}
+        >
+          <Icon name="sidebar" />
+        </button>
       </header>
 
       <div

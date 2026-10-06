@@ -89,6 +89,8 @@ interface AppState {
   slidesFile: string | null
   summaryFile: string | null
   lectureMode: boolean
+  /** The sidebar closed on purpose (lecture mode hides it anyway). */
+  sidebarHidden: boolean
   pdfGoto: PdfGoto | null
   noteGoto: NoteGoto | null
   /** Most recently opened files first, for the quick switcher. */
@@ -122,6 +124,7 @@ interface AppState {
   goTo(path: string, page?: number, line?: number): Promise<void>
   setOverlay(overlay: Overlay): void
   toggleLecture(): Promise<void>
+  toggleSidebar(): void
   /** Lecture mode: shows this note next to the slides and remembers it as their note. */
   showNote(note: string): Promise<void>
   /** Lecture mode: a new note in the slides' folder, linked to them and shown. */
@@ -316,6 +319,7 @@ export const useApp = create<AppState>((set, get) => {
     slidesFile: null,
     summaryFile: null,
     lectureMode: false,
+    sidebarHidden: false,
     pdfGoto: null,
     noteGoto: null,
     recentFiles: [],
@@ -420,6 +424,9 @@ export const useApp = create<AppState>((set, get) => {
     },
 
     setOverlay: (overlay) => set({ overlay }),
+
+    // Not kept across restarts: with nothing open yet, the sidebar is how to open something.
+    toggleSidebar: () => set({ sidebarHidden: !get().sidebarHidden }),
 
     async showNote(note) {
       const { slidesFile } = get()

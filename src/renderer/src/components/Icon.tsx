@@ -10,6 +10,7 @@ const PATHS = {
   minus: 'M3 8h10',
   import: 'M8 2.5v7.5M5 7l3 3 3-3M3 11v2.5h10V11',
   vault: 'M2.5 3h11v10h-11zM2.5 6h11',
+  sidebar: 'M2.5 3h11v10h-11zM6.5 3v10',
   cursor: 'M4 2.5l8 5.5-3.5.75L10.5 13l-1.5.75-2-4.25L4 12z',
   pen: 'M10.5 2.5l3 3-7.5 7.5-3.75.75.75-3.75zM9 4l3 3',
   highlighter: 'M9.5 2.5l4 4-5 5-4-4zM4.5 7.5l-2 4 2 2 4-2M2.5 13.5h4',
