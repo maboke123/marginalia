@@ -1,8 +1,8 @@
 import { constants as fsConstants, promises as fs } from 'fs'
 import path from 'path'
 import type { AnnotationFile, LoadedAnnotations } from '../../shared/annotations'
-import { pairNotes } from '../../shared/pairing'
-import type { NotebookColor, Position, VaultNode, VaultTree } from '../../shared/types'
+import { noteLinks, pairNotes, withLink, withoutLink, type NoteLinks } from '../../shared/pairing'
+import type { LinkHow, NotebookColor, Position, VaultNode, VaultTree } from '../../shared/types'
 import { formatAnnotations, isAnnotationFile, sha256File } from './annotations'
 import { renameWithRetry, tempPathFor, writeFileAtomic } from './atomic'
 import {
@@ -36,31 +36,24 @@ interface VaultState {
   lastPage?: Record<string, number>
   /** Section path -> Claude session id, so each lesson keeps its own conversation. */
   chats?: Record<string, string>
-  /** PDF path -> the note that goes with it in lecture mode. */
-  notes?: Record<string, string>
+  /** PDF path -> its notes (`NoteLinks`); older files have one string per PDF. */
+  notes?: Record<string, string | string[]>
   [key: string]: unknown
 }
 
 const within = (p: string, base: string): boolean => p === base || p.startsWith(base + '/')
 
-/**
- * Points values at a path that moved (also anything below a moved folder). Entries whose
- * value was trashed are dropped.
- */
-function remapValues(
-  map: Record<string, string> | undefined,
-  from: string,
-  to: string | null
-): Record<string, string> | null {
-  if (!map) return null
-  let changed = false
-  const out: Record<string, string> = {}
-  for (const [key, value] of Object.entries(map)) {
-    if (!within(value, from)) out[key] = value
-    else {
-      changed = true
-      if (to !== null) out[key] = to + value.slice(from.length)
-    }
+/** Note links after a PDF or note moved (or was trashed, with `to` null). */
+function remapLinks(links: NoteLinks, from: string, to: string | null): NoteLinks | null {
+  const byPdf = remapKeys(links, from, to) ?? links
+  let changed = byPdf !== links
+  const out: NoteLinks = {}
+  for (const [pdf, notes] of Object.entries(byPdf)) {
+    const next = notes.flatMap((n) =>
+      within(n, from) ? (to === null ? [] : [to + n.slice(from.length)]) : [n]
+    )
+    if (next.some((n, i) => n !== notes[i]) || next.length !== notes.length) changed = true
+    if (next.length) out[pdf] = next
   }
   return changed ? out : null
 }
@@ -163,7 +156,7 @@ export class Vault {
       this.readData<VaultSettings>(SETTINGS_FILE).catch((): VaultSettings => ({})),
       this.readState().catch((): VaultState => ({}))
     ])
-    return { nodes, colors: settings.notebookColors ?? {}, notes: state.notes ?? {} }
+    return { nodes, colors: settings.notebookColors ?? {}, notes: noteLinks(state.notes) }
   }
 
   private async readDir(dir: string, depth: number): Promise<VaultNode[]> {
@@ -374,29 +367,34 @@ export class Vault {
     })
   }
 
-  /** The note linked to a PDF for lecture mode, if it still exists. */
+  /** The note lecture mode opens for a PDF: the first linked one that still exists. */
   async linkedNote(pdf: string): Promise<string | null> {
     const state = await this.readState()
-    const note = state.notes?.[pdf]
-    return note && (await exists(this.resolve(note))) ? note : null
+    for (const note of noteLinks(state.notes)[pdf] ?? []) {
+      if (await exists(this.resolve(note))) return note
+    }
+    return null
   }
 
   /** The PDF a note is linked to, if any. */
   async linkedPdf(note: string): Promise<string | null> {
     const state = await this.readState()
-    for (const [pdf, linked] of Object.entries(state.notes ?? {})) {
-      if (linked === note && (await exists(this.resolve(pdf)))) return pdf
+    for (const [pdf, linked] of Object.entries(noteLinks(state.notes))) {
+      if (linked.includes(note) && (await exists(this.resolve(pdf)))) return pdf
     }
     return null
   }
 
-  setLinkedNote(pdf: string, note: string | null): Promise<void> {
+  linkNote(pdf: string, note: string, how: LinkHow): Promise<void> {
     return this.updateData<VaultState>(STATE_FILE, (state) => {
-      if ((state.notes?.[pdf] ?? null) === note) return null
-      const notes = { ...state.notes }
-      if (note) notes[pdf] = note
-      else delete notes[pdf]
-      return { ...state, notes }
+      const links = noteLinks(state.notes)
+      const next =
+        how === 'remove'
+          ? withoutLink(links, pdf, note)
+          : withLink(links, pdf, note, how === 'current')
+      // Unchanged links still rewrite once when the file has the old one-string form.
+      if (next === links && JSON.stringify(links) === JSON.stringify(state.notes ?? {})) return null
+      return { ...state, notes: next }
     })
   }
 
@@ -414,11 +412,10 @@ export class Vault {
     // A note paired with the PDF by its name keeps that name; a note linked under another
     // name keeps its own (the link follows the rename).
     const stem = (n: string): string => n.replace(/\.(md|pdf)$/i, '')
-    const paired = !isDir && isPdf(abs) ? await this.pairedNote(abs) : null
+    const paired = !isDir && isPdf(abs) ? await this.pairedNotes(abs) : []
     const note =
-      paired && stem(path.basename(paired)).toLowerCase() === stem(oldName).toLowerCase()
-        ? paired
-        : null
+      paired.find((n) => stem(path.basename(n)).toLowerCase() === stem(oldName).toLowerCase()) ??
+      null
     const noteTarget = note && path.join(dir, `${stem(name)}.md`)
     const caseOnly = (a: string, b: string): boolean => a.toLowerCase() === b.toLowerCase()
     if (note && noteTarget && !caseOnly(note, noteTarget) && (await exists(noteTarget))) {
@@ -458,27 +455,34 @@ export class Vault {
     const name = path.basename(abs)
     const oldParent = path.dirname(abs)
     const target = path.join(parent, name)
-    // A PDF's note goes with it to another folder, so the pair the sidebar shows stays together.
-    const note = !isDir && isPdf(abs) && oldParent !== parent ? await this.pairedNote(abs) : null
-    const noteName = note && path.basename(note)
-    const noteTarget = noteName && path.join(parent, noteName)
-    if (noteTarget && (await exists(noteTarget))) {
-      throw new VaultError(`"${noteName}" already exists there`)
+    // A PDF's notes go with it to another folder, so what the sidebar shows stays together.
+    const notes = !isDir && isPdf(abs) && oldParent !== parent ? await this.pairedNotes(abs) : []
+    const noteMoves = notes.map((note) => [note, path.join(parent, path.basename(note))])
+    for (const [, noteTarget] of noteMoves) {
+      if (await exists(noteTarget)) {
+        throw new VaultError(`"${path.basename(noteTarget)}" already exists there`)
+      }
     }
     if (target !== abs) {
       await this.moveEntry(abs, target, isDir)
-      if (note && noteTarget) {
-        try {
+      const moved: string[][] = []
+      try {
+        for (const [note, noteTarget] of noteMoves) {
           await this.moveEntry(note, noteTarget, false)
-        } catch (err) {
-          await this.moveEntry(target, abs, false)
-          throw err
+          moved.push([note, noteTarget])
         }
+      } catch (err) {
+        for (const [note, noteTarget] of moved.reverse()) {
+          await this.moveEntry(noteTarget, note, false)
+        }
+        await this.moveEntry(target, abs, false)
+        throw err
       }
-      await updateOrder(oldParent, (names) => names.filter((n) => n !== name && n !== noteName))
+      const gone = new Set([name, ...notes.map((n) => path.basename(n))])
+      await updateOrder(oldParent, (names) => names.filter((n) => !gone.has(n)))
       if (isDir && oldParent === this.root) await this.renameColor(name, null)
       await this.remapState(toRel(this.root, abs), toRel(this.root, target))
-      if (note && noteTarget) {
+      for (const [note, noteTarget] of noteMoves) {
         await this.remapState(toRel(this.root, note), toRel(this.root, noteTarget))
       }
     }
@@ -551,8 +555,8 @@ export class Vault {
     }
   }
 
-  /** The note the sidebar shows under this PDF (`pairNotes`), if it has one. */
-  private async pairedNote(pdf: string): Promise<string | null> {
+  /** The notes the sidebar shows under this PDF (`pairNotes`). */
+  private async pairedNotes(pdf: string): Promise<string[]> {
     const dir = path.dirname(pdf)
     const files = (await visibleEntries(dir))
       .filter((e) => !e.isDir)
@@ -562,8 +566,8 @@ export class Vault {
         kind: isPdf(e.name) ? ('pdf' as const) : ('markdown' as const)
       }))
     const state = await this.readState()
-    const note = pairNotes(files, state.notes ?? {}).get(toRel(this.root, pdf))
-    return note ? this.resolve(note.path) : null
+    const notes = pairNotes(files, noteLinks(state.notes)).get(toRel(this.root, pdf)) ?? []
+    return notes.map((n) => this.resolve(n.path))
   }
 
   /**
@@ -684,8 +688,7 @@ export class Vault {
       const lastPage = remapKeys(state.lastPage, from, to)
       const chats = remapKeys(state.chats, from, to)
       // Links between PDFs and notes follow whichever side moved.
-      const byPdf = remapKeys(state.notes, from, to)
-      const notes = remapValues(byPdf ?? state.notes, from, to) ?? byPdf
+      const notes = remapLinks(noteLinks(state.notes), from, to)
       if (!lastPage && !chats && !notes) return null
       return {
         ...state,

@@ -272,6 +272,54 @@ test('tasks tick, selected text takes a colour, and the menu has deeper headings
   await expect.poll(readSummary).toMatch(/\n\n##### Details$/)
 })
 
+test('slides can have several notes and remember which one I picked', async () => {
+  const dir = path.join(env.vault, section)
+  await fs.writeFile(path.join(dir, 'slides.md'), 'My summary')
+  await fs.writeFile(path.join(dir, 'Derivations.md'), 'Proof of the bound')
+  await openSection()
+  await row('slides.pdf').click()
+  await page.keyboard.press('Control+Shift+M')
+  const title = page.locator('.md-pane .pane-title')
+  await expect(title).toHaveText('slides')
+
+  // A note from the folder gets linked and shown.
+  await title.click()
+  await page.getByRole('menuitem', { name: 'Derivations' }).click()
+  await expect(title).toHaveText('Derivations')
+  await expect(editor()).toContainText('Proof of the bound')
+
+  // Lecture mode opens it again next time.
+  await page.keyboard.press('Control+Shift+M')
+  await row('slides.pdf').click()
+  await page.keyboard.press('Control+Shift+M')
+  await expect(title).toHaveText('Derivations')
+
+  // Both show under the PDF in the sidebar.
+  await page.keyboard.press('Control+Shift+M')
+  const names = await page.locator('.tree-row').allTextContents()
+  const at = names.findIndex((n) => n.includes('slides.pdf'))
+  expect(names.slice(at + 1, at + 3).map((n) => n.trim())).toEqual(['Derivations', 'slides'])
+  await page.keyboard.press('Control+Shift+M')
+
+  // A new note, then unlinking it goes back to the next linked note.
+  await title.click()
+  await page.getByRole('textbox', { name: 'New note' }).fill('Exam questions')
+  await page.getByRole('textbox', { name: 'New note' }).press('Enter')
+  await expect(title).toHaveText('Exam questions')
+  await expect.poll(() => fs.readFile(path.join(dir, 'Exam questions.md'), 'utf8')).toBe('')
+  await title.click()
+  await page.getByRole('menuitem', { name: 'Unlink Exam questions' }).click()
+  await expect(title).toHaveText('Derivations')
+
+  const state = JSON.parse(
+    await fs.readFile(path.join(env.vault, '.marginalia/state.json'), 'utf8')
+  )
+  expect(state.notes[`${section}/slides.pdf`]).toEqual([
+    `${section}/Derivations.md`,
+    `${section}/slides.md`
+  ])
+})
+
 test('picks up changes made outside the app', async () => {
   await fs.writeFile(summaryFile(), '# Before\n')
   await openSection()

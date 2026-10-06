@@ -28,12 +28,14 @@ export interface VaultInfo {
   name: string
 }
 
+export type LinkHow = 'current' | 'add' | 'remove'
+
 export interface VaultTree {
   nodes: VaultNode[]
   /** Notebook name -> colour name. */
   colors: Record<string, NotebookColor>
-  /** PDF path -> the note linked to it in lecture mode. */
-  notes: Record<string, string>
+  /** PDF path -> the notes linked to it; the first is the one lecture mode opens. */
+  notes: Record<string, string[]>
 }
 
 export const NOTEBOOK_COLORS = [
@@ -87,7 +89,8 @@ export interface MarginaliaApi {
     /** The note that goes with a PDF in lecture mode, if one was linked and still exists. */
     linkedNote(pdf: string): Promise<string | null>
     linkedPdf(note: string): Promise<string | null>
-    setLinkedNote(pdf: string, note: string | null): Promise<void>
+    /** 'current' links the note as the one lecture mode opens, 'add' as one more. */
+    linkNote(pdf: string, note: string, how: LinkHow): Promise<void>
     readAnnotations(pdf: string): Promise<LoadedAnnotations>
     writeAnnotations(pdf: string, file: AnnotationFile): Promise<void>
     /** Asks where to save, then writes a copy with the annotations drawn in. Null when cancelled. */

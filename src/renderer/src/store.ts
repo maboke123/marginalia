@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { DEFAULT_SETTINGS, type AppSettings } from '../../shared/settings'
-import type { NotebookColor, Position, VaultInfo, VaultNode } from '../../shared/types'
+import type { LinkHow, NotebookColor, Position, VaultInfo, VaultNode } from '../../shared/types'
+import { withLink, withoutLink, type NoteLinks } from '../../shared/pairing'
 import { ERASER_SIZES, PEN_WIDTHS, DEFAULT_TEXT_SIZE } from '../../shared/palette'
 import { flushAll } from './lib/flush'
 import { childrenOf, findNode, isFolder, pairNotes, parentOf, remap } from './lib/tree'
@@ -78,8 +79,8 @@ interface AppState {
   ready: boolean
   nodes: VaultNode[]
   colors: Record<string, NotebookColor>
-  /** PDF path -> its linked note, so the sidebar can show the note under its PDF. */
-  links: Record<string, string>
+  /** PDF path -> its linked notes (the first opens in lecture mode); the sidebar shows them under it. */
+  links: NoteLinks
   expanded: Record<string, boolean>
   selected: string | null
   /** The file shown when not in lecture mode. */
@@ -121,6 +122,11 @@ interface AppState {
   goTo(path: string, page?: number, line?: number): Promise<void>
   setOverlay(overlay: Overlay): void
   toggleLecture(): Promise<void>
+  /** Lecture mode: shows this note next to the slides and remembers it as their note. */
+  showNote(note: string): Promise<void>
+  /** Lecture mode: a new note in the slides' folder, linked to them and shown. */
+  newNote(name: string): Promise<void>
+  unlinkNote(note: string): Promise<void>
   setEditor(editor: EditorHandle | null): void
   /** Ctrl+Shift+S: drag a rectangle on the slides to put that part into the summary. */
   startSnapshot(): void
@@ -260,9 +266,14 @@ export const useApp = create<AppState>((set, get) => {
    * there; else a new "<pdf name>.md". The choice is remembered (in .marginalia/state.json).
    */
   /** Links a note to a PDF; the sidebar then shows it under that PDF. */
-  async function link(pdf: string, note: string): Promise<void> {
-    await attempt(() => api.setLinkedNote(pdf, note))
-    if (get().links[pdf] !== note) set({ links: { ...get().links, [pdf]: note } })
+  async function link(pdf: string, note: string, how: LinkHow = 'current'): Promise<void> {
+    await attempt(() => api.linkNote(pdf, note, how))
+    const links = get().links
+    const next =
+      how === 'remove'
+        ? withoutLink(links, pdf, note)
+        : withLink(links, pdf, note, how === 'current')
+    if (next !== links) set({ links: next })
   }
 
   async function noteFor(pdf: string): Promise<string | null> {
@@ -410,6 +421,30 @@ export const useApp = create<AppState>((set, get) => {
 
     setOverlay: (overlay) => set({ overlay }),
 
+    async showNote(note) {
+      const { slidesFile } = get()
+      set({ summaryFile: note, selected: note })
+      if (slidesFile) await link(slidesFile, note)
+    },
+
+    async newNote(name) {
+      const { slidesFile } = get()
+      const folder = slidesFile && parentOf(slidesFile)
+      if (!folder || !name.trim()) return
+      const note = await attempt(() => api.createNote(folder, name.trim()))
+      if (!note) return
+      await get().refresh()
+      await get().showNote(note)
+    },
+
+    async unlinkNote(note) {
+      const { slidesFile, summaryFile } = get()
+      if (!slidesFile) return
+      await link(slidesFile, note, 'remove')
+      const next = get().links[slidesFile]?.find((n) => findNode(get().nodes, n))
+      if (summaryFile === note && next) set({ summaryFile: next })
+    },
+
     async toggleLecture() {
       if (get().lectureMode) {
         set({ lectureMode: false })
@@ -523,7 +558,7 @@ export const useApp = create<AppState>((set, get) => {
       // Main renames a note paired by name along with its PDF; open panes follow both.
       const stem = (n: string): string => n.replace(/\.(md|pdf)$/i, '').toLowerCase()
       const paired = pairNotes(childrenOf(get().nodes, parentOf(path)), get().links).get(path)
-      const note = paired && stem(paired.name) === stem(node.name) ? paired : undefined
+      const note = paired?.find((n) => stem(n.name) === stem(node.name))
       const to = await attempt(() => api.rename(path, name))
       if (!to) return
       followMove(path, to)
@@ -541,15 +576,15 @@ export const useApp = create<AppState>((set, get) => {
       if (parentOf(path) === parent && before === undefined) return
       // Main takes a PDF's note along to another folder; open panes and selection follow it.
       const from = parentOf(path)
-      const note =
+      const notes =
         from !== parent
-          ? pairNotes(childrenOf(get().nodes, from), get().links).get(path)
-          : undefined
+          ? (pairNotes(childrenOf(get().nodes, from), get().links).get(path) ?? [])
+          : []
       const to = await attempt(() => api.move(path, parent, before))
       if (!to) return
       if (parent) get().setExpanded(parent, true)
       followMove(path, to)
-      if (note) followMove(note.path, `${parent}/${note.name}`)
+      for (const note of notes) followMove(note.path, `${parent}/${note.name}`)
       await get().refresh()
     },
 

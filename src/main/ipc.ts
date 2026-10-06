@@ -4,7 +4,14 @@ import { promises as fs } from 'fs'
 import path from 'path'
 import type { AnnotationFile } from '../shared/annotations'
 import { settingsFrom, type AppSettings } from '../shared/settings'
-import type { FeedbackEntry, IpcResult, NotebookColor, Position, VaultInfo } from '../shared/types'
+import type {
+  FeedbackEntry,
+  IpcResult,
+  LinkHow,
+  NotebookColor,
+  Position,
+  VaultInfo
+} from '../shared/types'
 import { ConfigStore } from './config'
 import { exportAnnotated } from './export/exportPdf'
 import { appendFeedback, ensureFeedbackFile } from './feedback'
@@ -155,8 +162,8 @@ export function registerIpc(
   })
   handle('vault:linkedNote', (p: string) => current().linkedNote(p))
   handle('vault:linkedPdf', (p: string) => current().linkedPdf(p))
-  handle('vault:setLinkedNote', (p: string, note: string | null) =>
-    current().setLinkedNote(p, note)
+  handle('vault:linkNote', (p: string, note: string, how: LinkHow) =>
+    current().linkNote(p, note, how)
   )
   handle('vault:readAnnotations', (p: string) => current().readAnnotations(p))
   handle('vault:writeAnnotations', (p: string, file: AnnotationFile) =>

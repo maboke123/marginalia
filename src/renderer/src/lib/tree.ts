@@ -1,4 +1,4 @@
-import { pairNotes } from '../../../shared/pairing'
+import { pairNotes, type NoteLinks } from '../../../shared/pairing'
 import type { VaultNode } from '../../../shared/types'
 
 export interface Row {
@@ -33,31 +33,30 @@ export function remap(path: string, from: string, to: string): string {
 
 export { pairNotes }
 
-/** Children in the order the sidebar shows them: each PDF directly followed by its note. */
-export function displayOrder(children: VaultNode[], links: Record<string, string>): VaultNode[] {
+/** Children in the order the sidebar shows them: each PDF directly followed by its notes. */
+export function displayOrder(children: VaultNode[], links: NoteLinks): VaultNode[] {
   const pairs = pairNotes(children, links)
-  const paired = new Set([...pairs.values()].map((n) => n.path))
-  return children.flatMap((node) => {
-    if (paired.has(node.path)) return []
-    const note = pairs.get(node.path)
-    return note ? [node, note] : [node]
-  })
+  const paired = new Set([...pairs.values()].flat().map((n) => n.path))
+  return children.flatMap((node) =>
+    paired.has(node.path) ? [] : [node, ...(pairs.get(node.path) ?? [])]
+  )
 }
 
 export function visibleRows(
   nodes: VaultNode[],
   expanded: Record<string, boolean>,
-  links: Record<string, string> = {}
+  links: NoteLinks = {}
 ): Row[] {
   const rows: Row[] = []
   const walk = (list: VaultNode[], depth: number, parent: string): void => {
     const pairs = pairNotes(list, links)
-    const paired = new Set([...pairs.values()].map((n) => n.path))
+    const paired = new Set([...pairs.values()].flat().map((n) => n.path))
     for (const node of list) {
       if (paired.has(node.path)) continue
       rows.push({ node, depth, parent })
-      const note = pairs.get(node.path)
-      if (note) rows.push({ node: note, depth: depth + 1, parent, pairedWith: node.path })
+      for (const note of pairs.get(node.path) ?? []) {
+        rows.push({ node: note, depth: depth + 1, parent, pairedWith: node.path })
+      }
       if (node.children && expanded[node.path]) walk(node.children, depth + 1, node.path)
     }
   }

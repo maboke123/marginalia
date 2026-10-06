@@ -36,31 +36,43 @@ describe('notes under their PDF', () => {
     ])
   })
 
-  it('prefers the note linked in lecture mode over a same-named one', () => {
+  it('shows the linked notes and the same-named one under the PDF', () => {
     const order = displayOrder(les3.children!, {
-      'ML/les_3/B2 Decision trees.pdf': 'ML/les_3/Summary.md'
+      'ML/les_3/B2 Decision trees.pdf': ['ML/les_3/Summary.md']
     })
     expect(names(order)).toEqual([
-      'B2 Decision trees.md',
       'B2 Decision trees.pdf',
+      'B2 Decision trees.md',
       'Summary.md',
       'Exercises.pdf'
     ])
   })
 
-  it('gives a note to one PDF only and ignores links to other folders', () => {
+  it('lets a linked note win over a same-named PDF', () => {
     const order = displayOrder(les3.children!, {
-      'ML/les_3/B2 Decision trees.pdf': 'ML/les_3/Summary.md',
-      'ML/les_3/Exercises.pdf': 'ML/les_3/Summary.md'
+      'ML/les_3/Exercises.pdf': ['ML/les_3/B2 Decision trees.md']
     })
     expect(names(order)).toEqual([
-      'B2 Decision trees.md',
       'B2 Decision trees.pdf',
+      'Exercises.pdf',
+      'B2 Decision trees.md',
+      'Summary.md'
+    ])
+  })
+
+  it('gives a note to one PDF only and ignores links to other folders', () => {
+    const order = displayOrder(les3.children!, {
+      'ML/les_3/B2 Decision trees.pdf': ['ML/les_3/Summary.md'],
+      'ML/les_3/Exercises.pdf': ['ML/les_3/Summary.md']
+    })
+    expect(names(order)).toEqual([
+      'B2 Decision trees.pdf',
+      'B2 Decision trees.md',
       'Summary.md',
       'Exercises.pdf'
     ])
     const elsewhere = displayOrder(les3.children!, {
-      'ML/les_3/Exercises.pdf': 'ML/les_4/Exercises.md'
+      'ML/les_3/Exercises.pdf': ['ML/les_4/Exercises.md']
     })
     expect(names(elsewhere)).toEqual(names(displayOrder(les3.children!, {})))
   })

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Annotation, Compartment, EditorState, type Extension } from '@codemirror/state'
 import { EditorView } from '@codemirror/view'
 import { Icon } from '../components/Icon'
+import { NoteSwitcher } from '../components/NoteSwitcher'
 import { registerFlush } from '../lib/flush'
 import { findNode } from '../lib/tree'
 import { registerNote } from '../lib/open'
@@ -26,6 +27,7 @@ export function MarkdownEditor({
   const hostRef = useRef<HTMLDivElement>(null)
   const [error, setError] = useState<string | null>(null)
   const lectureMode = useApp((s) => s.lectureMode)
+  const slidesFile = useApp((s) => s.slidesFile)
   const toggleLecture = useApp((s) => s.toggleLecture)
   const beingWritten = useRecording((s) => s.active?.transcript === path)
 
@@ -176,7 +178,11 @@ export function MarkdownEditor({
   return (
     <div className="md-pane">
       <div className="pane-toolbar">
-        <span className="pane-title">{title}</span>
+        {lectureMode && slidesFile ? (
+          <NoteSwitcher path={path} title={title} />
+        ) : (
+          <span className="pane-title">{title}</span>
+        )}
         {beingWritten && <span className="muted pane-note">Being written while you record</span>}
         <RecordButton />
         <button

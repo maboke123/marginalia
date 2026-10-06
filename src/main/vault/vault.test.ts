@@ -235,7 +235,7 @@ describe('move', () => {
     await write('ML/B2/decision trees.md', 'same name')
     await write('ML/B2/lecture.pdf', 'pdf')
     await write('ML/B2/Summary.md', 'linked')
-    await vault.setLinkedNote('ML/B2/lecture.pdf', 'ML/B2/Summary.md')
+    await vault.linkNote('ML/B2/lecture.pdf', 'ML/B2/Summary.md', 'current')
 
     expect(await vault.rename('ML/B2/Decision trees.pdf', 'B2 Decision trees')).toBe(
       'ML/B2/B2 Decision trees.pdf'
@@ -267,7 +267,7 @@ describe('move', () => {
     await write('ML/B2/Summary.md', 'linked')
     await write('ML/B2/Other.md', 'stays')
     await fs.mkdir(path.join(root, 'ML/B3'))
-    await vault.setLinkedNote('ML/B2/lecture.pdf', 'ML/B2/Summary.md')
+    await vault.linkNote('ML/B2/lecture.pdf', 'ML/B2/Summary.md', 'current')
 
     await vault.move('ML/B2/slides.pdf', 'ML/B3')
     await vault.move('ML/B2/lecture.pdf', 'ML/B3')
@@ -275,7 +275,7 @@ describe('move', () => {
     expect(await list('ML/B2')).toEqual(['Other.md'])
     expect(await list('ML/B3')).toEqual(['Summary.md', 'lecture.pdf', 'slides.md', 'slides.pdf'])
     expect(await vault.linkedNote('ML/B3/lecture.pdf')).toBe('ML/B3/Summary.md')
-    expect((await vault.tree()).notes).toEqual({ 'ML/B3/lecture.pdf': 'ML/B3/Summary.md' })
+    expect((await vault.tree()).notes).toEqual({ 'ML/B3/lecture.pdf': ['ML/B3/Summary.md'] })
   })
 
   it('moves neither when the note would overwrite one there', async () => {
@@ -468,8 +468,8 @@ describe('notes linked to PDFs', () => {
     await write('ML/Summary.md', '')
     await fs.mkdir(path.join(root, 'Stats'))
 
-    await vault.setLinkedNote('ML/les_1.pdf', 'ML/les_1.md')
-    await vault.setLinkedNote('ML/les_2.pdf', 'ML/Summary.md')
+    await vault.linkNote('ML/les_1.pdf', 'ML/les_1.md', 'current')
+    await vault.linkNote('ML/les_2.pdf', 'ML/Summary.md', 'current')
     expect(await vault.linkedNote('ML/les_1.pdf')).toBe('ML/les_1.md')
     expect(await vault.linkedPdf('ML/Summary.md')).toBe('ML/les_2.pdf')
 
@@ -486,8 +486,55 @@ describe('notes linked to PDFs', () => {
     expect(await vault.linkedNote('Machine Learning/les_2.pdf')).toBeNull()
     const state = JSON.parse(await fs.readFile(path.join(root, '.marginalia/state.json'), 'utf8'))
     expect(state.notes).toEqual({
-      'Machine Learning/Lesson 1.pdf': 'Machine Learning/Lesson 1 notes.md'
+      'Machine Learning/Lesson 1.pdf': ['Machine Learning/Lesson 1 notes.md']
     })
+  })
+
+  it('keeps several notes per PDF, the last picked first', async () => {
+    await write('ML/B2/slides.pdf')
+    await write('ML/B2/slides.md', '')
+    await write('ML/B2/Transcript.md', '')
+    await write('ML/B2/Derivations.md', '')
+    await write('ML/B2/Other.md', '')
+    await fs.mkdir(path.join(root, 'ML/B3'))
+    await vault.linkNote('ML/B2/slides.pdf', 'ML/B2/slides.md', 'current')
+    await vault.linkNote('ML/B2/slides.pdf', 'ML/B2/Transcript.md', 'add')
+    await vault.linkNote('ML/B2/slides.pdf', 'ML/B2/Derivations.md', 'current')
+    expect((await vault.tree()).notes['ML/B2/slides.pdf']).toEqual([
+      'ML/B2/Derivations.md',
+      'ML/B2/slides.md',
+      'ML/B2/Transcript.md'
+    ])
+    expect(await vault.linkedNote('ML/B2/slides.pdf')).toBe('ML/B2/Derivations.md')
+    expect(await vault.linkedPdf('ML/B2/Transcript.md')).toBe('ML/B2/slides.pdf')
+
+    // The PDF takes all of them along; a note that is not linked stays.
+    await vault.move('ML/B2/slides.pdf', 'ML/B3')
+    expect(await list('ML/B2')).toEqual(['Other.md'])
+    expect((await vault.tree()).notes['ML/B3/slides.pdf']).toEqual([
+      'ML/B3/Derivations.md',
+      'ML/B3/slides.md',
+      'ML/B3/Transcript.md'
+    ])
+
+    await vault.trash('ML/B3/Derivations.md')
+    expect(await vault.linkedNote('ML/B3/slides.pdf')).toBe('ML/B3/slides.md')
+    await vault.linkNote('ML/B3/slides.pdf', 'ML/B3/slides.md', 'remove')
+    expect((await vault.tree()).notes).toEqual({ 'ML/B3/slides.pdf': ['ML/B3/Transcript.md'] })
+  })
+
+  it('reads links saved as one note per PDF', async () => {
+    await write('ML/les_1.pdf')
+    await write('ML/Summary.md', '')
+    await write(
+      '.marginalia/state.json',
+      JSON.stringify({ notes: { 'ML/les_1.pdf': 'ML/Summary.md' } })
+    )
+    expect(await vault.linkedNote('ML/les_1.pdf')).toBe('ML/Summary.md')
+    expect((await vault.tree()).notes).toEqual({ 'ML/les_1.pdf': ['ML/Summary.md'] })
+    await vault.linkNote('ML/les_1.pdf', 'ML/Summary.md', 'current')
+    const state = JSON.parse(await fs.readFile(path.join(root, '.marginalia/state.json'), 'utf8'))
+    expect(state.notes).toEqual({ 'ML/les_1.pdf': ['ML/Summary.md'] })
   })
 })
 

@@ -172,6 +172,12 @@ export const useRecording = create<RecordingState>((set, get) => {
         const startedAt = Date.now()
         set({ active: { transcript, startedAt }, status: null })
         stopFollowing = followSlides(startedAt)
+        // The transcript becomes one more note of the slides on screen.
+        const { lectureMode, slidesFile, activeFile } = useApp.getState()
+        const pdf = lectureMode ? slidesFile : activeFile
+        if (pdf?.toLowerCase().endsWith('.pdf') && parentOf(pdf) === folder) {
+          await window.api.vault.linkNote(pdf, transcript, 'add').catch(() => undefined)
+        }
         await refresh()
       } catch (err) {
         await microphone.stop().catch(() => undefined)
