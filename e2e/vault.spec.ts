@@ -130,6 +130,31 @@ test('the sidebar can be hidden and brought back', async () => {
   await expect(sidebar).toBeVisible()
 })
 
+test('a folder can be hidden and shown again from Settings', async () => {
+  await fs.mkdir(path.join(vault, 'Machine Learning', 'B3 Ensembles', 'assignment-repo'))
+  await row('Machine Learning').click()
+  await row('B3 Ensembles').click()
+  await row('assignment-repo').click({ button: 'right' })
+  await page.getByRole('menuitem', { name: 'Hide folder' }).click()
+  await expect(row('assignment-repo')).toHaveCount(0)
+
+  // Still hidden after a restart.
+  await app.close()
+  ;({ app, page } = await launch(env))
+  await expect(row('B3 Ensembles')).toBeVisible()
+  await expect(row('assignment-repo')).toHaveCount(0)
+
+  await page.keyboard.press('Control+Comma')
+  const dialog = page.getByRole('dialog', { name: 'Settings' })
+  await expect(dialog).toContainText('Machine Learning/B3 Ensembles/assignment-repo')
+  await dialog
+    .getByRole('button', { name: 'Show Machine Learning/B3 Ensembles/assignment-repo' })
+    .click()
+  await expect(dialog).toContainText('None.')
+  await page.keyboard.press('Escape')
+  await expect(row('assignment-repo')).toBeVisible()
+})
+
 test('a notebook created in the app appears on disk', async () => {
   await page.getByRole('button', { name: 'New notebook' }).first().click()
   const input = page.locator('.rename-input')

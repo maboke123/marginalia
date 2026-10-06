@@ -538,6 +538,26 @@ describe('notes linked to PDFs', () => {
   })
 })
 
+describe('hidden folders', () => {
+  it('leaves hidden folders out of the tree and follows renames of a parent', async () => {
+    await write('OvA/les_3/Inhoud.md', '')
+    await write('OvA/les_3/assignment-repo/README.md', '')
+    await vault.setFolderHidden('OvA/les_3/assignment-repo', true)
+    const names = async (): Promise<string[]> =>
+      flatten((await vault.tree()).nodes).map((n) => n.path)
+    expect(await names()).toEqual(['OvA', 'OvA/les_3', 'OvA/les_3/Inhoud.md'])
+    expect((await vault.tree()).hidden).toEqual(['OvA/les_3/assignment-repo'])
+
+    await vault.rename('OvA', 'Ontwerp van Algoritmen')
+    expect((await vault.tree()).hidden).toEqual(['Ontwerp van Algoritmen/les_3/assignment-repo'])
+    expect(await names()).not.toContain('Ontwerp van Algoritmen/les_3/assignment-repo')
+
+    await vault.setFolderHidden('Ontwerp van Algoritmen/les_3/assignment-repo', false)
+    expect(await names()).toContain('Ontwerp van Algoritmen/les_3/assignment-repo/README.md')
+    await expect(vault.setFolderHidden('Nope', true)).rejects.toThrow('does not exist')
+  })
+})
+
 describe('chat sessions', () => {
   it('keeps one conversation per section that follows renames, moves and trash', async () => {
     await fs.mkdir(path.join(root, 'ML/B2/Entropy'), { recursive: true })
@@ -750,3 +770,7 @@ describe('watchVault', () => {
     expect(calls).toBe(0)
   })
 })
+
+function flatten(nodes: VaultNode[]): VaultNode[] {
+  return nodes.flatMap((n) => [n, ...flatten(n.children ?? [])])
+}

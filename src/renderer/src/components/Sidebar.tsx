@@ -149,6 +149,9 @@ export function Sidebar(): React.JSX.Element {
     if (node.kind === 'notebook') {
       items.push({ custom: <ColorPicker notebook={node.name} close={closeMenu} /> })
     }
+    if (isFolder(node)) {
+      items.push({ label: 'Hide folder', onSelect: () => app.setFolderHidden(node.path, true) })
+    }
     items.push(
       { label: 'Show in Explorer', onSelect: () => window.api.vault.reveal(node.path) },
       { separator: true },

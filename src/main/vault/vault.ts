@@ -36,12 +36,22 @@ interface VaultState {
   lastPage?: Record<string, number>
   /** Section path -> Claude session id, so each lesson keeps its own conversation. */
   chats?: Record<string, string>
+  /** Folders left out of the sidebar, search and quick switcher (coding projects and such). */
+  hiddenFolders?: string[]
   /** PDF path -> its notes (`NoteLinks`); older files have one string per PDF. */
   notes?: Record<string, string | string[]>
   [key: string]: unknown
 }
 
 const within = (p: string, base: string): boolean => p === base || p.startsWith(base + '/')
+
+/** Paths in a list after one moved; trashed ones (`to` null) are dropped. */
+function remapList(list: string[] | undefined, from: string, to: string | null): string[] | null {
+  if (!list?.some((p) => within(p, from))) return null
+  return list.flatMap((p) =>
+    within(p, from) ? (to === null ? [] : [to + p.slice(from.length)]) : [p]
+  )
+}
 
 /** Note links after a PDF or note moved (or was trashed, with `to` null). */
 function remapLinks(links: NoteLinks, from: string, to: string | null): NoteLinks | null {
@@ -151,15 +161,34 @@ export class Vault {
   }
 
   async tree(): Promise<VaultTree> {
-    const [nodes, settings, state] = await Promise.all([
-      this.readDir(this.root, 0),
+    const [settings, state] = await Promise.all([
       this.readData<VaultSettings>(SETTINGS_FILE).catch((): VaultSettings => ({})),
       this.readState().catch((): VaultState => ({}))
     ])
-    return { nodes, colors: settings.notebookColors ?? {}, notes: noteLinks(state.notes) }
+    const nodes = await this.readDir(this.root, 0, new Set(state.hiddenFolders))
+    return {
+      nodes,
+      colors: settings.notebookColors ?? {},
+      notes: noteLinks(state.notes),
+      hidden: state.hiddenFolders ?? []
+    }
   }
 
-  private async readDir(dir: string, depth: number): Promise<VaultNode[]> {
+  async setFolderHidden(rel: string, hidden: boolean): Promise<void> {
+    if (hidden) await this.existingDir(rel)
+    return this.updateData<VaultState>(STATE_FILE, (state) => {
+      const current = state.hiddenFolders ?? []
+      if (current.includes(rel) === hidden) return null
+      const hiddenFolders = hidden ? [...current, rel].sort() : current.filter((f) => f !== rel)
+      return { ...state, hiddenFolders }
+    })
+  }
+
+  private async readDir(
+    dir: string,
+    depth: number,
+    hidden = new Set<string>()
+  ): Promise<VaultNode[]> {
     let entries: Entry[]
     try {
       entries = await visibleEntries(dir)
@@ -168,8 +197,11 @@ export class Vault {
       if (depth > 0 && (err as NodeJS.ErrnoException).code === 'ENOENT') return []
       throw err
     }
+    const shown = entries.filter(
+      ({ name, isDir }) => !isDir || !hidden.has(toRel(this.root, path.join(dir, name)))
+    )
     return Promise.all(
-      entries.map(async ({ name, isDir }): Promise<VaultNode> => {
+      shown.map(async ({ name, isDir }): Promise<VaultNode> => {
         const abs = path.join(dir, name)
         const rel = toRel(this.root, abs)
         if (!isDir) return { name, path: rel, kind: isPdf(name) ? 'pdf' : 'markdown' }
@@ -177,7 +209,7 @@ export class Vault {
           name,
           path: rel,
           kind: depth === 0 ? 'notebook' : 'section',
-          children: await this.readDir(abs, depth + 1)
+          children: await this.readDir(abs, depth + 1, hidden)
         }
       })
     )
@@ -689,12 +721,14 @@ export class Vault {
       const chats = remapKeys(state.chats, from, to)
       // Links between PDFs and notes follow whichever side moved.
       const notes = remapLinks(noteLinks(state.notes), from, to)
-      if (!lastPage && !chats && !notes) return null
+      const hiddenFolders = remapList(state.hiddenFolders, from, to)
+      if (!lastPage && !chats && !notes && !hiddenFolders) return null
       return {
         ...state,
         ...(lastPage && { lastPage }),
         ...(chats && { chats }),
-        ...(notes && { notes })
+        ...(notes && { notes }),
+        ...(hiddenFolders && { hiddenFolders })
       }
     })
   }

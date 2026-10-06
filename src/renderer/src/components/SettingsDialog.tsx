@@ -215,6 +215,11 @@ export function SettingsDialog(): React.JSX.Element {
           </section>
 
           <section>
+            <h3>Hidden folders</h3>
+            <HiddenFolders />
+          </section>
+
+          <section>
             <h3>Hotkeys</h3>
             <p className="muted settings-help">Click a hotkey, then press the new keys.</p>
             <Hotkeys hotkeys={settings.hotkeys} onChange={(hotkeys) => void save({ hotkeys })} />
@@ -232,5 +237,34 @@ export function SettingsDialog(): React.JSX.Element {
         </div>
       </div>
     </div>
+  )
+}
+
+/** Folders hidden with "Hide folder" in the sidebar, for this vault, each with a way back. */
+function HiddenFolders(): React.JSX.Element {
+  const hidden = useApp((s) => s.hiddenFolders)
+  if (!hidden.length) {
+    return (
+      <p className="muted settings-help">
+        None. Right-click a folder in the sidebar and choose Hide folder to keep it out of the
+        sidebar, search and quick switcher.
+      </p>
+    )
+  }
+  return (
+    <ul className="hidden-folders">
+      {hidden.map((folder) => (
+        <li key={folder}>
+          <span title={folder}>{folder}</span>
+          <button
+            className="button"
+            aria-label={`Show ${folder}`}
+            onClick={() => void useApp.getState().setFolderHidden(folder, false)}
+          >
+            Show
+          </button>
+        </li>
+      ))}
+    </ul>
   )
 }

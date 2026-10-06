@@ -2241,6 +2241,27 @@ h2 {
   margin-bottom: 12px;
 }
 
+.hidden-folders {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.hidden-folders li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.hidden-folders span {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
 .settings-label {
   padding-top: 4px;
   color: var(--text-muted);

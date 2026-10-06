@@ -40,6 +40,7 @@ const api: MarginaliaApi = {
     linkedNote: (pdf) => invoke('vault:linkedNote', pdf),
     linkedPdf: (note) => invoke('vault:linkedPdf', note),
     linkNote: (pdf, note, how) => invoke('vault:linkNote', pdf, note, how),
+    setFolderHidden: (folder, hidden) => invoke('vault:setFolderHidden', folder, hidden),
     readAnnotations: (pdf) => invoke('vault:readAnnotations', pdf),
     writeAnnotations: (pdf, file) => invoke('vault:writeAnnotations', pdf, file),
     exportPdf: (pdf) => invoke('vault:exportPdf', pdf),
