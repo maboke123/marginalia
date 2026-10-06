@@ -3,11 +3,12 @@ import { promises as fs } from 'fs'
 import os from 'os'
 import path from 'path'
 import { THUMB_HEIGHT, THUMB_WIDTH, type SlideThumb } from '../../shared/slideMatch'
-import type { TranscribeJobPhase } from '../../shared/types'
+import type { TranscribeJob, TranscribeJobPhase } from '../../shared/types'
 import { VaultError } from '../vault/names'
 import { timestamp, type Vault } from '../vault/vault'
 import type { Model, Transcriber } from './engine'
 import createMatchWorker from './matchWorker?nodeWorker'
+import { checkpointFile, pcmOfWav, pieceBounds, readCheckpoint, writeCheckpoint } from './pieces'
 import {
   headerOf,
   paragraphs,
@@ -16,8 +17,10 @@ import {
   transcriptHeader,
   transcriptName,
   transcriptParagraph,
+  type Segment,
   type SlideMoment
 } from './transcript'
+import { SAMPLE_RATE, wavFromPcm } from './wav'
 
 export interface FileJob {
   folder: string
@@ -31,10 +34,13 @@ export interface FileJob {
   timeline?: SlideMoment[]
   /** Small renders of the slides the video may show, to find out which one it shows when. */
   slides?: SlideThumb[]
+  /** Folder for checkpoints, so a stopped job picks up where it was. */
+  checkpoints?: string
   signal: AbortSignal
-  /** `read`: seconds of sound read so far, for a recording that does not say how long it is. */
-  onProgress(phase: TranscribeJobPhase, percent: number, read?: number): void
+  onProgress(phase: TranscribeJobPhase, percent: number, info?: ProgressInfo): void
 }
+
+export type ProgressInfo = Partial<Pick<TranscribeJob, 'read' | 'done' | 'total' | 'resumed'>>
 
 /** "01:23:45.67" -> seconds */
 const seconds = (hms: string): number =>
@@ -157,6 +163,60 @@ function matchInWorker(frames: Uint8Array[], slides: SlideThumb[]): Promise<Slid
 }
 
 /**
+ * Runs whisper over a few minutes at a time and saves what it has after each piece, so a job
+ * that was cancelled, crashed or interrupted by sleep goes on from the last piece.
+ */
+async function transcribeInPieces(
+  engine: Transcriber,
+  job: FileJob,
+  wav: string,
+  temp: string,
+  checkpoint: string | false | undefined
+): Promise<Segment[]> {
+  const samples = pcmOfWav(await fs.readFile(wav))
+  const total = samples.length / SAMPLE_RATE
+  const saved = checkpoint ? await readCheckpoint(checkpoint) : null
+  const start = saved && saved.done <= samples.length ? saved.done : 0
+  let segments = start ? saved!.segments : []
+  const resumed = start > 0
+  const report = (at: number): void =>
+    job.onProgress('transcribing', (at / samples.length) * 100, {
+      done: at / SAMPLE_RATE,
+      total,
+      resumed
+    })
+  const bounds = pieceBounds(samples, SAMPLE_RATE, start)
+  report(start)
+  for (let i = 0; i + 1 < bounds.length; i++) {
+    const [from, to] = [bounds[i], bounds[i + 1]]
+    const piece = path.join(temp, 'piece.wav')
+    await fs.writeFile(piece, wavFromPcm(samples.subarray(from, to)))
+    const offset = (from / SAMPLE_RATE) * 1000
+    // The end of what came before, so the next piece goes on in the same words and spelling.
+    const before = segments
+      .map((s) => s.text)
+      .join('')
+      .slice(-200)
+      .trim()
+    const found = await engine.transcribe(piece, {
+      model: job.model,
+      language: job.language,
+      file: true,
+      signal: job.signal,
+      ...(before && { prompt: before }),
+      onProgress: (p) => report(from + ((to - from) * p) / 100)
+    })
+    segments = [
+      ...segments,
+      ...found.map((s) => ({ ...s, from: s.from + offset, to: s.to + offset }))
+    ]
+    if (checkpoint) await writeCheckpoint(checkpoint, { done: to, segments })
+    report(to)
+  }
+  return segments
+}
+
+/**
  * A video or audio recording of a lecture to a transcript note in `folder`, with the sound
  * kept as a small opus file next to it. Returns the note's vault path.
  */
@@ -171,7 +231,7 @@ export async function transcribeFile(
   const opus = path.join(temp, 'audio.webm')
   try {
     await extractAudio(job.source, wav, opus, job.signal, (p, read) =>
-      p === null ? job.onProgress('reading', 0, read) : job.onProgress('reading', p)
+      p === null ? job.onProgress('reading', 0, { read }) : job.onProgress('reading', p)
     )
     // Which slide the video shows when, for the slide links (only for a video).
     let timeline = job.timeline
@@ -181,13 +241,10 @@ export async function transcribeFile(
       )
       if (frames.length) timeline = await matchInWorker(frames, job.slides)
     }
-    job.onProgress('transcribing', 0)
-    const segments = await engine.transcribe(wav, {
-      model: job.model,
-      language: job.language,
-      signal: job.signal,
-      onProgress: (p) => job.onProgress('transcribing', p)
-    })
+    const checkpoint =
+      job.checkpoints &&
+      (await checkpointFile(job.checkpoints, job.source, job.model, job.language))
+    const segments = await transcribeInPieces(engine, job, wav, path.dirname(wav), checkpoint)
     job.onProgress('writing', 100)
     let transcript: string
     let header: string
@@ -212,6 +269,7 @@ export async function transcribeFile(
       })
       .join('')
     await vault.writeText(transcript, header + body)
+    if (checkpoint) await fs.rm(checkpoint, { force: true })
     return transcript
   } finally {
     await fs.rm(temp, { recursive: true, force: true }).catch(() => undefined)

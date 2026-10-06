@@ -244,6 +244,11 @@ export interface TranscribeJob {
   percent: number
   /** Seconds of sound read so far, while reading a recording whose length is unknown. */
   read?: number
+  /** While transcribing: seconds of the recording done, of `total`. */
+  done?: number
+  total?: number
+  /** Went on from where an earlier, stopped run of the same recording got to. */
+  resumed?: boolean
   /** Set when done. */
   transcript?: string
   error?: string

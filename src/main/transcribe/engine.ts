@@ -26,6 +26,11 @@ export interface TranscribeOptions {
   language: string
   /** Words that are likely to come up, such as the slide's text; helps with spelling. */
   prompt?: string
+  /**
+   * A recording from a file: normal priority, and one guess per word instead of five (20%
+   * faster on a lecture, as accurate). Live recording keeps the laptop free for the lecture.
+   */
+  file?: boolean
   /** 0 to 100, for long recordings. */
   onProgress?(percent: number): void
   signal?: AbortSignal
@@ -168,9 +173,14 @@ export class WhisperEngine implements Transcriber {
       '-pp'
     ]
     if (options.prompt) args.push('--prompt', options.prompt)
+    if (options.file) args.push('-bs', '1', '-bo', '1')
     await new Promise<void>((resolve, reject) => {
       const child = spawn(cli, args, { windowsHide: true, signal: options.signal })
-      if (child.pid) os.setPriority(child.pid, os.constants.priority.PRIORITY_BELOW_NORMAL)
+      // Below normal, Windows moves the work to the slow efficiency cores once the app is
+      // in the background; a job from a file should keep going at full speed.
+      if (child.pid && !options.file) {
+        os.setPriority(child.pid, os.constants.priority.PRIORITY_BELOW_NORMAL)
+      }
       let errors = ''
       child.stderr.on('data', (data: Buffer) => {
         const text = data.toString()

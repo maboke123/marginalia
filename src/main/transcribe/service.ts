@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, powerMonitor } from 'electron'
+import { app, BrowserWindow, dialog, powerMonitor, powerSaveBlocker } from 'electron'
 import { randomUUID } from 'crypto'
 import { promises as fs } from 'fs'
 import path from 'path'
@@ -15,6 +15,7 @@ import { VaultError } from '../vault/names'
 import type { Vault } from '../vault/vault'
 import { PARTS, WhisperEngine, type Transcriber } from './engine'
 import { transcribeFile, type FileJob } from './fileJob'
+import { pruneCheckpoints } from './pieces'
 import { LiveSession, timelineName } from './live'
 import { audioOf, type SlideMoment } from './transcript'
 import type { Segment } from './transcript'
@@ -118,6 +119,7 @@ export function registerTranscription(
         path.join(dataDir, 'whisper')
       )
   let live: LiveSession | null = null
+  void pruneCheckpoints(path.join(dataDir, 'transcribe'))
   const send = (channel: string, value: unknown): void =>
     getWindow()?.webContents.send(channel, value)
 
@@ -243,6 +245,8 @@ export function registerTranscription(
     renumber()
     const { vault, request, abort } = jobs.get(id)!
     update(id, { phase: 'reading', percent: 0, place: undefined })
+    // A laptop on battery sleeps after a few idle minutes, which stopped long jobs halfway.
+    const awake = powerSaveBlocker.start('prevent-app-suspension')
     try {
       // The accurate model does not ship with the app; it comes the first time it is used.
       const { installed, sizes } = await engine.status()
@@ -261,13 +265,22 @@ export function registerTranscription(
       const transcript = await transcribeFile(vault, engine, {
         ...request,
         signal: abort.signal,
-        onProgress: (phase, percent, read) =>
-          update(id, { phase, percent: Math.round(percent), read })
+        checkpoints: path.join(dataDir, 'transcribe'),
+        onProgress: (phase, percent, info = {}) =>
+          update(id, {
+            phase,
+            percent: Math.round(percent),
+            read: info.read,
+            done: info.done,
+            total: info.total,
+            resumed: info.resumed
+          })
       })
       update(id, { transcript, phase: 'writing', percent: 100 })
     } catch (err) {
       update(id, { error: (err as Error).message })
     } finally {
+      powerSaveBlocker.stop(awake)
       jobs.delete(id)
       running = null
       void runNext()

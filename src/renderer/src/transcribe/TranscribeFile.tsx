@@ -123,6 +123,10 @@ const PHASES: Record<TranscribeJob['phase'], string> = {
 function progressText(job: TranscribeJob): string {
   const phase = PHASES[job.phase]
   if (job.read !== undefined) return `${phase}, ${clock(job.read)} so far`
+  if (job.phase === 'transcribing' && job.total) {
+    const at = `${clock(job.done ?? 0)} of ${clock(job.total)}`
+    return job.resumed ? `${phase}, ${at} (went on where it stopped)` : `${phase}, ${at}`
+  }
   if (job.phase === 'waiting' || job.phase === 'writing') return phase
   return `${phase} ${job.percent}%`
 }
