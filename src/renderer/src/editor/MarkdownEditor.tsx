@@ -3,6 +3,7 @@ import { Annotation, Compartment, EditorState, type Extension } from '@codemirro
 import { EditorView } from '@codemirror/view'
 import { Icon } from '../components/Icon'
 import { registerFlush } from '../lib/flush'
+import { findNode } from '../lib/tree'
 import { registerNote } from '../lib/open'
 import { useApp } from '../store'
 import { RecordButton } from '../transcribe/RecordButton'
@@ -81,7 +82,10 @@ export function MarkdownEditor({
         return
       }
       const target = resolveLink(path, href)
-      if (target) openFile(target.path, target.page ?? undefined)
+      if (!target) return
+      if (findNode(useApp.getState().nodes, target.path))
+        openFile(target.path, target.page ?? undefined)
+      else showError(`Link target not found: ${target.path}`)
     }
 
     api

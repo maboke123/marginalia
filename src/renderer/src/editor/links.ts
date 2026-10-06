@@ -27,8 +27,10 @@ export interface LinkTarget {
  * Returns null for web links and links outside the vault.
  */
 export function resolveLink(notePath: string, href: string): LinkTarget | null {
-  if (/^[a-z][a-z0-9+.-]*:/i.test(href)) return null
-  const [rawPath, hash = ''] = href.split('#')
+  // `[slide 3](<(les2) slides.pdf#page=3>)`: the angle form allows spaces and parentheses
+  const bare = /^<(.*)>$/.exec(href.trim())?.[1] ?? href.trim()
+  if (/^[a-z][a-z0-9+.-]*:/i.test(bare)) return null
+  const [rawPath, hash = ''] = bare.split('#')
   let decoded: string
   try {
     decoded = decodeURIComponent(rawPath)

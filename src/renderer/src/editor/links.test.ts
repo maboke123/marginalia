@@ -15,6 +15,13 @@ describe('links', () => {
     })
   })
 
+  it('resolves links in angle brackets', () => {
+    expect(resolveLink(note, '<(les2) slides.pdf#page=43>')).toEqual({
+      path: 'Machine Learning/B2 Decision trees/(les2) slides.pdf',
+      page: 43
+    })
+  })
+
   it('ignores web links and paths outside the vault', () => {
     expect(resolveLink(note, 'https://example.org/a.pdf')).toBeNull()
     expect(resolveLink(note, '../../../outside.pdf')).toBeNull()
