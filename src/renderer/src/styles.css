@@ -677,6 +677,10 @@ h2 {
   position: absolute;
 }
 
+.pdf-page.lifted {
+  z-index: 1;
+}
+
 .pdf-sheet,
 .pdf-margin {
   position: absolute;

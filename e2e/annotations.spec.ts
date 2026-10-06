@@ -383,6 +383,44 @@ test('a text box keeps its text when I scroll away while typing', async () => {
   ;({ app, page } = await launch(env))
 })
 
+test('a text box dragged onto the next slide moves there', async () => {
+  await openSlides()
+  await page.keyboard.press('t')
+  await drawOnPage([0.3, 0.8], [0.3, 0.8])
+  await page.keyboard.type('Expected comparisons')
+  await page.keyboard.press('Escape')
+  await page.keyboard.press('v')
+  const box = firstPage().locator('.text-box')
+  await expect(box).toHaveText('Expected comparisons')
+
+  const start = (await box.boundingBox())!
+  await page.mouse.move(start.x + 10, start.y + 5)
+  await page.mouse.down()
+  // Near the bottom of the view the slides scroll along.
+  const view = (await page.locator('.pdf-scroll').boundingBox())!
+  await page.mouse.move(start.x + 10, view.y + view.height - 10, { steps: 8 })
+  await expect
+    .poll(() => page.locator('.pdf-scroll').evaluate((el) => el.scrollTop))
+    .toBeGreaterThan(100)
+  const second = (await page.locator('.pdf-page[data-page="2"]').boundingBox())!
+  await page.mouse.move(start.x + 10, Math.max(second.y, view.y) + 40, { steps: 8 })
+  await page.mouse.up()
+
+  await expect(page.locator('.pdf-page[data-page="2"] .text-box')).toHaveText(
+    'Expected comparisons'
+  )
+  await expect(box).toHaveCount(0)
+  await expect
+    .poll(async () => (await readSidecar().catch(() => null))?.pages['2']?.textBoxes?.length)
+    .toBe(1)
+  expect((await readSidecar()).pages['1']).toBeUndefined()
+
+  // One undo step puts it back.
+  await page.keyboard.press('Control+z')
+  await expect(box).toHaveText('Expected comparisons')
+  await expect(page.locator('.pdf-page[data-page="2"] .text-box')).toHaveCount(0)
+})
+
 test('text boxes take a colour from the toolbar', async () => {
   await openSlides()
   await page.keyboard.press('t')

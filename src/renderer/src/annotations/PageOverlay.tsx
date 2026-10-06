@@ -9,6 +9,7 @@ import { AnnotationContext } from './context'
 import {
   addItem,
   findItem,
+  moveToPage,
   newId,
   pageOf,
   removeItems,
@@ -103,6 +104,27 @@ function finishTyping(): void {
 const DRAG_THRESHOLD_PX = 3
 // How close, in screen pixels, something has to come to snap.
 const SNAP_PX = 6
+// How close to the top or bottom of the view, in screen pixels, a drag starts scrolling.
+const SCROLL_EDGE_PX = 40
+
+/** The page under the mouse, with where it is on screen. */
+function pageAt(
+  scroller: HTMLElement,
+  ev: { clientX: number; clientY: number }
+): { page: number; rect: DOMRect } | null {
+  for (const el of scroller.querySelectorAll<HTMLElement>('.pdf-page[data-page]')) {
+    const rect = el.getBoundingClientRect()
+    if (
+      ev.clientX >= rect.left &&
+      ev.clientX <= rect.right &&
+      ev.clientY >= rect.top &&
+      ev.clientY <= rect.bottom
+    ) {
+      return { page: Number(el.dataset.page), rect }
+    }
+  }
+  return null
+}
 
 interface Guides {
   x: number | null
@@ -151,12 +173,13 @@ function AnnotatedOverlay({
 
   /**
    * Moves something with the mouse as one undo step. `apply` gets the distance from the
-   * starting point; a click without movement counts as no change.
+   * starting point; a click without movement counts as no change. Near the top or bottom of
+   * the view it scrolls along, and with `moveTo` an item let go over another page goes there.
    */
   function drag(
     e: React.PointerEvent,
     apply: (dx: number, dy: number, ev: PointerEvent) => void,
-    onClick?: () => void
+    moveTo?: (page: number, dx: number, dy: number) => void
   ): void {
     if (e.button !== 0) return
     e.stopPropagation()
@@ -165,34 +188,82 @@ function AnnotatedOverlay({
     focusViewer()
     const target = e.currentTarget as HTMLElement
     target.setPointerCapture(e.pointerId)
+    const scroller = rootRef.current!.closest<HTMLElement>('.pdf-scroll')!
+    // The page element stays when its overlay is unmounted after scrolling far away.
+    const ownPage = rootRef.current!.closest<HTMLElement>('.pdf-page')!
     // Measured on screen, not on the page: selecting can change the toolbar's height and move
     // the page under the mouse, and the item should still follow the mouse.
-    const start = [e.clientX, e.clientY]
+    const start = [e.clientX + scroller.scrollLeft, e.clientY + scroller.scrollTop]
     let moved = false
+    let last: PointerEvent | null = null
+    let frame = 0
     doc.getState().begin()
+    // Otherwise the next page is drawn over an item dragged onto it.
+    ownPage.classList.add('lifted')
 
-    const onMove = (ev: PointerEvent): void => {
-      const dx = (ev.clientX - start[0]) / scale
-      const dy = (ev.clientY - start[1]) / scale
+    const follow = (ev: PointerEvent): void => {
+      const dx = (ev.clientX + scroller.scrollLeft - start[0]) / scale
+      const dy = (ev.clientY + scroller.scrollTop - start[1]) / scale
       if (!moved && Math.hypot(dx, dy) * scale < DRAG_THRESHOLD_PX) return
       moved = true
       apply(round(dx), round(dy), ev)
     }
-    const onUp = (): void => {
-      setGuides(NO_GUIDES)
-      target.removeEventListener('pointermove', onMove)
-      target.removeEventListener('pointerup', onUp)
-      target.removeEventListener('pointercancel', onUp)
-      if (moved) {
-        doc.getState().end()
-      } else {
-        doc.getState().cancel()
-        onClick?.()
-      }
+    const autoscroll = (): void => {
+      frame = 0
+      if (!last || !moved) return
+      const view = scroller.getBoundingClientRect()
+      const below = last.clientY - (view.bottom - SCROLL_EDGE_PX)
+      const above = view.top + SCROLL_EDGE_PX - last.clientY
+      const speed = below > 0 ? below : above > 0 ? -above : 0
+      if (!speed) return
+      const clamped = Math.max(-SCROLL_EDGE_PX, Math.min(SCROLL_EDGE_PX, speed)) / 2
+      scroller.scrollTop += clamped
+      follow(last)
+      frame = requestAnimationFrame(autoscroll)
     }
-    target.addEventListener('pointermove', onMove)
-    target.addEventListener('pointerup', onUp)
-    target.addEventListener('pointercancel', onUp)
+    const onMove = (ev: PointerEvent): void => {
+      last = ev
+      follow(ev)
+      if (!frame) frame = requestAnimationFrame(autoscroll)
+    }
+    // On the window, so the drag still ends when the page scrolled out of view meanwhile.
+    const onUp = (ev: PointerEvent): void => {
+      cancelAnimationFrame(frame)
+      ownPage.classList.remove('lifted')
+      setGuides(NO_GUIDES)
+      window.removeEventListener('pointermove', onMove)
+      window.removeEventListener('pointerup', onUp)
+      window.removeEventListener('pointercancel', onUp)
+      if (!moved) {
+        doc.getState().cancel()
+        return
+      }
+      const to = moveTo && pageAt(scroller, ev)
+      if (to && to.page !== number) {
+        const from = ownPage.getBoundingClientRect()
+        moveTo(to.page, (from.left - to.rect.left) / scale, (from.top - to.rect.top) / scale)
+      }
+      doc.getState().end()
+    }
+    window.addEventListener('pointermove', onMove)
+    window.addEventListener('pointerup', onUp)
+    window.addEventListener('pointercancel', onUp)
+  }
+
+  /** Puts a dragged item on another page, at the same spot on screen. */
+  function moveItem(kind: 'strokes' | 'textBoxes' | 'images', id: string) {
+    return (to: number, dx: number, dy: number): void => {
+      doc
+        .getState()
+        .update((p) =>
+          moveToPage(p, { page: number, kind, id }, to, (item) =>
+            'points' in item
+              ? translateStroke(item, dx, dy)
+              : { ...item, x: round(item.x + dx), y: round(item.y + dy) }
+          )
+        )
+      doc.getState().select({ page: to, kind, id })
+    }
   }
 
   /**
@@ -227,12 +298,12 @@ function AnnotatedOverlay({
 
   /** Snaps a position unless snapping is off or Alt is held; shows what it snapped to. */
   function snapTo(
-    ev: { altKey: boolean },
+    ev: { altKey: boolean; clientX: number; clientY: number },
     x: number,
     y: number,
     anchors: { x: Anchor[]; y: Anchor[] }
   ): [number, number] {
-    if (!snapping || ev.altKey) {
+    if (!snapping || ev.altKey || !overThisPage(ev)) {
       setGuides(NO_GUIDES)
       return [x, y]
     }
@@ -243,16 +314,28 @@ function AnnotatedOverlay({
     return [round(sx.pos), round(sy.pos)]
   }
 
+  function overThisPage(ev: { clientX: number; clientY: number }): boolean {
+    const page = rootRef.current?.closest('.pdf-page')
+    if (!page) return false
+    const r = page.getBoundingClientRect()
+    return (
+      ev.clientX >= r.left && ev.clientX <= r.right && ev.clientY >= r.top && ev.clientY <= r.bottom
+    )
+  }
+
   function select(kind: Kind, id: string): void {
     doc.getState().select({ page: number, kind, id })
   }
 
   function moveStroke(e: React.PointerEvent, stroke: Stroke): void {
     select('strokes', stroke.id)
-    drag(e, (dx, dy) =>
-      doc
-        .getState()
-        .update((p) => replaceItem(p, number, 'strokes', translateStroke(stroke, dx, dy)))
+    drag(
+      e,
+      (dx, dy) =>
+        doc
+          .getState()
+          .update((p) => replaceItem(p, number, 'strokes', translateStroke(stroke, dx, dy))),
+      moveItem('strokes', stroke.id)
     )
   }
 
@@ -272,10 +355,14 @@ function AnnotatedOverlay({
       height: (e.currentTarget as HTMLElement).offsetHeight,
       fontSize: box.fontSize ?? DEFAULT_TEXT_SIZE * unit
     })
-    drag(e, (dx, dy, ev) => {
-      const [x, y] = snapTo(ev, box.x + dx, box.y + dy, anchors)
-      doc.getState().update((p) => replaceItem(p, number, 'textBoxes', { ...box, x, y }))
-    })
+    drag(
+      e,
+      (dx, dy, ev) => {
+        const [x, y] = snapTo(ev, box.x + dx, box.y + dy, anchors)
+        doc.getState().update((p) => replaceItem(p, number, 'textBoxes', { ...box, x, y }))
+      },
+      moveItem('textBoxes', box.id)
+    )
   }
 
   function resizeBox(e: React.PointerEvent, box: TextBox): void {
@@ -297,10 +384,14 @@ function AnnotatedOverlay({
   function moveImage(e: React.PointerEvent, image: PageImage): void {
     select('images', image.id)
     const anchors = imageAnchors(snapTargets(image.id), image)
-    drag(e, (dx, dy, ev) => {
-      const [x, y] = snapTo(ev, image.x + dx, image.y + dy, anchors)
-      doc.getState().update((p) => replaceItem(p, number, 'images', { ...image, x, y }))
-    })
+    drag(
+      e,
+      (dx, dy, ev) => {
+        const [x, y] = snapTo(ev, image.x + dx, image.y + dy, anchors)
+        doc.getState().update((p) => replaceItem(p, number, 'images', { ...image, x, y }))
+      },
+      moveItem('images', image.id)
+    )
   }
 
   function resizeImageBy(e: React.PointerEvent, image: PageImage): void {

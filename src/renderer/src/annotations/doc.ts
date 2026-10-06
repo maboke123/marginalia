@@ -205,3 +205,15 @@ export function itemsOf<K extends Kind>(page: PageAnnotations, kind: K): ItemOfK
 export function newId(prefix: 's' | 'h' | 't' | 'i'): string {
   return `${prefix}_${crypto.randomUUID().slice(0, 8)}`
 }
+
+/** Takes an item off its page and puts it on another; `place` gives its position there. */
+export function moveToPage<K extends Kind>(
+  pages: AnnotationPages,
+  ref: { page: number; kind: K; id: string },
+  to: number,
+  place: (item: ItemOfKind[K]) => ItemOfKind[K]
+): AnnotationPages {
+  const item = findItem(pages, ref)
+  if (!item || to === ref.page) return pages
+  return addItem(removeItems(pages, ref.page, ref.kind, [ref.id]), to, ref.kind, place(item))
+}
