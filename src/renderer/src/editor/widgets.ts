@@ -1,6 +1,36 @@
-import { WidgetType } from '@codemirror/view'
+import { WidgetType, type EditorView } from '@codemirror/view'
 import katex from 'katex'
+import { diagramPlaceholder, hydrateDiagrams } from '../lib/diagrams'
 import { renderMarkdown } from '../lib/markdown'
+
+/** A ```mermaid or ```vega-lite block, drawn; its height changes once the drawing is in. */
+export class DiagramWidget extends WidgetType {
+  constructor(
+    readonly lang: string,
+    readonly source: string,
+    readonly preview = false
+  ) {
+    super()
+  }
+
+  eq(other: DiagramWidget): boolean {
+    return (
+      other.lang === this.lang && other.source === this.source && other.preview === this.preview
+    )
+  }
+
+  toDOM(view: EditorView): HTMLElement {
+    const el = document.createElement('div')
+    el.className = `cm-diagram${this.preview ? ' cm-math-preview' : ''}`
+    el.innerHTML = diagramPlaceholder(this.lang, this.source)
+    hydrateDiagrams(el, 'app', () => view.requestMeasure())
+    return el
+  }
+
+  ignoreEvent(): boolean {
+    return false
+  }
+}
 
 export class MathWidget extends WidgetType {
   constructor(

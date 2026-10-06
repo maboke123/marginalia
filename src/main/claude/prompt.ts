@@ -17,6 +17,10 @@ How this app works:
   write files directly: change summaries only with insert_into_summary or replace_in_summary,
   and slides only with add_text_annotation or add_highlight. I may reject an edit; then do not
   try it again unless I ask.
-- To point at a slide in an answer, link it as [slide 12](<vault path of the pdf>#page=12).
+- To point at a slide in an answer, link it by its vault path in angle brackets (paths
+  can have spaces), like [slide 12](<Machine Learning/B2/slides.pdf#page=12>).
 - In my summaries, link slides relative to the summary, like [slide 12](slides.pdf#page=12).
+- Charts and diagrams are drawn from a \`\`\`vega-lite block (a Vega-Lite JSON spec; use it for
+  plots, including scatter plots and curves computed with sequence and calculate) or a
+  \`\`\`mermaid block (flowcharts, UML and other diagrams), in answers, summaries and text boxes.
 - Keep answers short unless I ask for detail.`

@@ -3,6 +3,7 @@ import { EFFORTS, MODELS, type EffortChoice, type ModelChoice } from '../../../s
 import type { VaultNode } from '../../../shared/types'
 import { Icon } from '../components/Icon'
 import { resolveLink } from '../editor/links'
+import { RenderedHtml } from '../components/RenderedHtml'
 import { renderChatMarkdown } from '../lib/markdown'
 import { findNode } from '../lib/tree'
 import { useApp } from '../store'
@@ -264,7 +265,7 @@ const MessageView = memo(function MessageView({
 function PartView({ part }: { part: Part }): React.JSX.Element {
   const html = useMemo(() => (part.kind === 'text' ? renderChatMarkdown(part.text) : ''), [part])
   if (part.kind === 'text') {
-    return <div className="claude-answer" dangerouslySetInnerHTML={{ __html: html }} />
+    return <RenderedHtml className="claude-answer" html={html} surface="app" delay={400} />
   }
   if (part.kind === 'tool') return <div className="claude-tool muted">{part.label}</div>
   return (

@@ -14,4 +14,13 @@ describe('renderMarkdown', () => {
     expect(html).toContain('&lt;script&gt;')
     expect(html).not.toContain('<script>')
   })
+
+  it('turns mermaid and vega-lite blocks into diagram placeholders', () => {
+    const source = '```mermaid\ngraph TD\n  A --> B["<b>"]\n```\n\n```js\nx\n```'
+    const html = renderMarkdown(source)
+    expect(html).toContain('<div class="diagram" data-lang="mermaid"')
+    expect(html).toContain('data-source="graph TD\n  A --&gt; B[&quot;&lt;b&gt;&quot;]\n"')
+    expect(html).toContain('<code class="language-js">')
+    expect(renderMarkdown('```vega-lite\n{}\n```')).toContain('data-lang="vega-lite"')
+  })
 })

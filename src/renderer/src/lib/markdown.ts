@@ -2,6 +2,7 @@ import 'katex/dist/katex.min.css'
 import MarkdownIt from 'markdown-it'
 import katex from '@vscode/markdown-it-katex'
 import { CLOSE_TAG, OPEN_TAG } from '../../../shared/textColor'
+import { DIAGRAM_LANGS, diagramPlaceholder } from './diagrams'
 
 /**
  * Markdown has no underline, so Obsidian users write <u>text</u>. Raw HTML stays off for
@@ -42,11 +43,23 @@ function textColor(md: InstanceType<typeof MarkdownIt>): void {
   })
 }
 
+/** ```mermaid and ```vega-lite blocks become placeholders that `hydrateDiagrams` draws. */
+function diagrams(md: InstanceType<typeof MarkdownIt>): void {
+  const fence = md.renderer.rules.fence!
+  md.renderer.rules.fence = (tokens, idx, options, env, self) => {
+    const token = tokens[idx]
+    const lang = token.info.trim().split(/s+/)[0].toLowerCase()
+    if (DIAGRAM_LANGS.has(lang)) return diagramPlaceholder(lang, token.content)
+    return fence(tokens, idx, options, env, self)
+  }
+}
+
 // html: false escapes any other HTML in the source, so rendering with innerHTML is safe.
 const md = new MarkdownIt({ html: false, linkify: true, breaks: true })
   .use(katex, { throwOnError: false })
   .use(underline)
   .use(textColor)
+  .use(diagrams)
 
 /** Markdown with $inline$ and $$display$$ math, the same syntax Obsidian uses. */
 export function renderMarkdown(source: string): string {
@@ -63,6 +76,7 @@ chatMd.renderer.rules.fence = (tokens, idx, options, env, self) =>
   '<div class="code-block"><button type="button" class="copy-code">Copy</button>' +
   fence(tokens, idx, options, env, self) +
   '</div>'
+chatMd.use(diagrams)
 
 export function renderChatMarkdown(source: string): string {
   return chatMd.render(source)

@@ -20,6 +20,12 @@ describe('latexToText', () => {
 })
 
 describe('markdownToText', () => {
+  it('replaces charts with a placeholder', () => {
+    expect(markdownToText('Cost:\n```vega-lite\n{"mark": "point"}\n```\nend')).toBe(
+      'Cost:\n[diagram]\nend'
+    )
+  })
+
   it('removes formatting and renders math', () => {
     expect(
       markdownToText('## **Weighted** average! $\\frac{a}{b}$\n- see [slide 3](s.pdf#page=3)')

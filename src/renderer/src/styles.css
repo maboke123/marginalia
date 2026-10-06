@@ -1476,8 +1476,44 @@ h2 {
 
 /* Block widgets sit outside .cm-line, so they need its 6px left padding themselves. */
 .cm-table-preview,
-.cm-math-block {
+.cm-math-block,
+.cm-diagram {
   padding-left: 6px;
+}
+
+.cm-diagram {
+  padding-top: 0.3em;
+  padding-bottom: 0.3em;
+  cursor: text;
+}
+
+/* Mermaid and Vega-Lite drawings, in notes, text boxes and chat. */
+.diagram {
+  overflow-x: auto;
+}
+
+.diagram svg {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+.diagram-source {
+  margin: 0;
+  padding: 6px 8px;
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  white-space: pre;
+}
+
+.diagram-error {
+  margin-bottom: 4px;
+  color: var(--danger);
+  font-size: 0.85em;
+  white-space: pre-wrap;
 }
 
 .cm-table-preview {

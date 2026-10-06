@@ -168,6 +168,8 @@ export function latexToText(src: string): string {
 /** A text box's Markdown as plain lines: formatting marks removed, math as Unicode. */
 export function markdownToText(md: string): string {
   const withMath = md
+    // A chart's source means nothing as text.
+    .replace(/^```(?:mermaid|vega-lite)[^\n]*\n[\s\S]*?^```[^\n]*$/gm, '[diagram]')
     .replace(/\$\$([\s\S]+?)\$\$/g, (_, tex) => latexToText(tex))
     .replace(/\$([^$\n]+?)\$/g, (_, tex) => latexToText(tex))
   return withMath

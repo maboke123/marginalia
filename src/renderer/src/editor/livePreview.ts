@@ -9,11 +9,13 @@ import {
 } from '@codemirror/view'
 import type { SyntaxNodeRef } from '@lezer/common'
 import { colorSpans } from '../../../shared/textColor'
+import { DIAGRAM_LANGS } from '../lib/diagrams'
 import { colorBar } from './colorBar'
 import { resolveLink, vaultUrl } from './links'
 import {
   BulletWidget,
   CheckboxWidget,
+  DiagramWidget,
   ImageWidget,
   MathWidget,
   RuleWidget,
@@ -299,10 +301,24 @@ function blockDecorations(state: EditorState): DecorationSet {
   const decos: Range<Decoration>[] = []
   syntaxTree(state).iterate({
     enter: (node) => {
-      if (node.name !== 'Table' && node.name !== 'BlockMath') return
+      if (node.name !== 'Table' && node.name !== 'BlockMath' && node.name !== 'FencedCode') return
       const from = state.doc.lineAt(node.from).from
       const to = state.doc.lineAt(node.to).to
       const editing = selectionTouches(state, from, to)
+
+      if (node.name === 'FencedCode') {
+        const info = node.node.getChild('CodeInfo')
+        const lang = info ? state.sliceDoc(info.from, info.to).trim().toLowerCase() : ''
+        const text = node.node.getChild('CodeText')
+        if (!DIAGRAM_LANGS.has(lang) || !text) return false
+        const widget = new DiagramWidget(lang, state.sliceDoc(text.from, text.to), editing)
+        decos.push(
+          editing
+            ? Decoration.widget({ widget, block: true, side: 1 }).range(to)
+            : Decoration.replace({ widget, block: true }).range(from, to)
+        )
+        return false
+      }
 
       if (node.name === 'Table') {
         if (!editing) {

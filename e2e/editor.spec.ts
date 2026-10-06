@@ -156,6 +156,36 @@ test('a wide formula scrolls inside a narrow note pane', async () => {
   expect(await math.evaluate((el) => el.scrollWidth > el.clientWidth)).toBe(true)
 })
 
+test('mermaid and vega-lite blocks draw as charts', async () => {
+  const chart = {
+    data: { sequence: { start: 2, stop: 100, step: 7, as: 'n' } },
+    transform: [{ calculate: '1.39 * datum.n * log(datum.n) / log(2)', as: 'C' }],
+    mark: 'point',
+    encoding: {
+      x: { field: 'n', type: 'quantitative' },
+      y: { field: 'C', type: 'quantitative' }
+    }
+  }
+  await fs.writeFile(
+    summaryFile(),
+    '# Quicksort\n\n```mermaid\ngraph TD\n  A[Pivot] --> B[Left]\n  A --> C[Right]\n```\n\n' +
+      '```vega-lite\n' +
+      JSON.stringify(chart, null, 2) +
+      '\n```\n\nEnd\n'
+  )
+  await openSection()
+  await row('Summary').click()
+  await expect(page.locator('.cm-diagram .diagram svg')).toHaveCount(2)
+  await expect(page.locator('.diagram.failed')).toHaveCount(0)
+  // One point per n from 2 to 100 in steps of 7, computed by the chart itself.
+  await expect(page.locator('[data-lang="vega-lite"] .mark-symbol path')).toHaveCount(14)
+
+  // A broken chart says why and keeps its source in view.
+  await fs.writeFile(summaryFile(), '```vega-lite\n{ not json\n```\n\nEnd\n')
+  await expect(page.locator('.diagram.failed .diagram-error')).toBeVisible()
+  await expect(page.locator('.diagram.failed .diagram-source')).toContainText('{ not json')
+})
+
 test('each PDF keeps its own note in lecture mode', async () => {
   for (const name of ['les_1.pdf', 'les_2.pdf']) {
     await fs.copyFile(slides, path.join(env.vault, section, name))

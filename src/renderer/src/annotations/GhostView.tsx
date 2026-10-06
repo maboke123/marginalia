@@ -1,4 +1,5 @@
 import { useMemo } from 'react'
+import { RenderedHtml } from '../components/RenderedHtml'
 import { renderMarkdown } from '../lib/markdown'
 import type { Ghost } from './doc'
 
@@ -33,7 +34,7 @@ export function GhostView({ ghost, scale }: { ghost: Ghost; scale: number }): Re
             color: box.color
           }}
         >
-          <div className="text-box-content" dangerouslySetInnerHTML={{ __html: html }} />
+          <RenderedHtml className="text-box-content" html={html} surface="paper" />
         </div>
       )}
       {at && (

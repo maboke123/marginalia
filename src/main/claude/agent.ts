@@ -128,6 +128,9 @@ the new text (nothing here removes it)
 - Everything outside those blocks is new text that goes at ⟦here⟧. Write nothing else when I
   only ask to change or remove something. Never put ⟦here⟧ in a block.
 - No introduction, no explanation, no code fence around the text.
+- For a chart, write a \`\`\`vega-lite block with a Vega-Lite JSON spec (points for scatter
+  plots, a sequence with calculate for curves like n*log2(n)). For a flowchart or other
+  diagram, write a \`\`\`mermaid block. Both are drawn in notes and text boxes.
 - Fit new text into the sentence or paragraph around the spot, in the language and style of my notes.
 - Keep it as short as the request allows.`
 

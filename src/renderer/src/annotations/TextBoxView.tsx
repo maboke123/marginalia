@@ -2,6 +2,7 @@ import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'rea
 import type { TextBox } from '../../../shared/annotations'
 import { Cancelled, cancelWrite, findRequest, newRequestId, writeWithClaude } from '../claude/write'
 import { mapPosition, planWrite, type WriteAnswer } from '../claude/writePlan'
+import { RenderedHtml } from '../components/RenderedHtml'
 import { renderMarkdown } from '../lib/markdown'
 import { useApp } from '../store'
 
@@ -54,7 +55,7 @@ export const TextBoxView = memo(function TextBoxView(props: Props): React.JSX.El
           onLateAnswer={props.onLateAnswer}
         />
       ) : (
-        <div className="text-box-content" dangerouslySetInnerHTML={{ __html: html }} />
+        <RenderedHtml className="text-box-content" html={html} surface="paper" />
       )}
       {resizable && !editing && (
         <div
