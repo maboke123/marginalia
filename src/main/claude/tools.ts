@@ -16,6 +16,13 @@ const file = z.string().describe('Vault path with forward slashes, as in the con
 const pdf = file.describe('Vault path of a .pdf file')
 const note = file.describe('Vault path of a .md file')
 const page = z.number().int().min(1).describe('1-based page number')
+const annotationPage = z
+  .number()
+  .min(1)
+  .describe(
+    '1-based slide number, or a blank page I added, like 3.1 for the first one after slide 3'
+  )
+const color = z.string().describe('Hex colour like #cf222e')
 
 const READ_ONLY = { readOnlyHint: true }
 
@@ -82,16 +89,83 @@ export function appToolServer(sdk: Sdk, call: CallTool): McpSdkServerConfigWithI
     ),
     sdk.tool(
       'add_text_annotation',
-      'Puts a Markdown text box on a slide. Without x and y it goes in the margin to the right ' +
-        'of the page, under any boxes already there. x and y are PDF points from the top-left.',
-      { file: pdf, page, markdown: z.string(), x: z.number().optional(), y: z.number().optional() },
+      'Puts a Markdown text box on a slide or blank page. Without x and y it goes in the margin ' +
+        'to the right of the page, under any boxes already there. x and y are PDF points from ' +
+        'the top-left.',
+      {
+        file: pdf,
+        page: annotationPage,
+        markdown: z.string(),
+        x: z.number().optional(),
+        y: z.number().optional()
+      },
       run('add_text_annotation')
     ),
     sdk.tool(
       'add_highlight',
-      'Finds text on a slide and highlights it.',
-      { file: pdf, page, text: z.string().describe('Text exactly as it appears on the page') },
+      'Finds text on a slide and highlights, underlines or strikes it through.',
+      {
+        file: pdf,
+        page,
+        text: z.string().describe('Text exactly as it appears on the page'),
+        style: z.enum(['highlight', 'underline', 'strikethrough']).optional(),
+        color: color.optional()
+      },
       run('add_highlight')
+    ),
+    sdk.tool(
+      'list_annotations',
+      'Everything on a PDF that I or you added, with ids and positions: text boxes (with their ' +
+        'Markdown), highlights, pen strokes, images and blank pages. Without page: all pages.',
+      { file: pdf, page: annotationPage.optional() },
+      run('list_annotations'),
+      { annotations: READ_ONLY }
+    ),
+    sdk.tool(
+      'edit_annotation',
+      'Changes one annotation by id (from list_annotations): a text box its Markdown, x, y, ' +
+        'width, font_size or color; a highlight its color or style; a stroke or image its x and ' +
+        'y (top-left), and width for an image. to_page moves it to another page or blank page.',
+      {
+        file: pdf,
+        page: annotationPage,
+        id: z.string(),
+        markdown: z.string().optional(),
+        x: z.number().optional(),
+        y: z.number().optional(),
+        width: z.number().optional(),
+        font_size: z.number().optional(),
+        color: color.optional(),
+        style: z.enum(['highlight', 'underline', 'strikethrough']).optional(),
+        to_page: annotationPage.optional()
+      },
+      run('edit_annotation')
+    ),
+    sdk.tool(
+      'delete_annotations',
+      'Removes annotations from one page by id (from list_annotations).',
+      { file: pdf, page: annotationPage, ids: z.array(z.string()).min(1) },
+      run('delete_annotations')
+    ),
+    sdk.tool(
+      'add_blank_page',
+      'Adds a blank page right after a slide (or after a blank page), for notes that do not ' +
+        'fit. Returns its page key, like 3.1, to write on with the other tools.',
+      { file: pdf, after_page: annotationPage },
+      run('add_blank_page')
+    ),
+    sdk.tool(
+      'add_drawing',
+      'Draws pen lines on a page, for arrows, circles around something or underlines. Each ' +
+        'line is a list of [x, y] points in PDF points; a circle needs enough points to look round.',
+      {
+        file: pdf,
+        page: annotationPage,
+        lines: z.array(z.array(z.tuple([z.number(), z.number()])).min(2)).min(1),
+        color: color.optional(),
+        width: z.number().optional().describe('Pen width, 1 to 8; default is my pen width')
+      },
+      run('add_drawing')
     ),
     sdk.tool(
       'goto',
@@ -112,5 +186,10 @@ export const APP_TOOLS = [
   'replace_in_summary',
   'add_text_annotation',
   'add_highlight',
+  'list_annotations',
+  'edit_annotation',
+  'delete_annotations',
+  'add_blank_page',
+  'add_drawing',
   'goto'
 ].map((name) => `mcp__${SERVER_NAME}__${name}`)

@@ -176,6 +176,42 @@ test('puts a note in the margin of the slide; Reject leaves nothing', async () =
   await expect(note).toHaveCount(0)
 })
 
+test('draws on the slide after I accept', async () => {
+  await openSlides()
+  await ask('Circle the title')
+  await expect(page.locator('svg.ink.ghost path')).toHaveCount(1)
+  await page.locator('.ghost-actions').getByRole('button', { name: 'Accept' }).click()
+  await expect(answers().last()).toHaveText('Circled it.')
+  await expect(page.locator('.pdf-page[data-page="1"] svg.ink:not(.ghost) > path')).toHaveCount(1)
+})
+
+test('adds a blank page and changes, moves and removes annotations', async () => {
+  await app.close()
+  const config = path.join(env.userData, 'config.json')
+  const current = JSON.parse(await fs.readFile(config, 'utf8'))
+  await fs.writeFile(config, JSON.stringify({ ...current, claude: { askBeforeEditing: false } }))
+  ;({ app, page } = await launch(env))
+  await openSlides()
+
+  await ask('Rework the notes on this slide')
+  await expect(answers().last()).toContainText('delete_annotations: No annotation "t_nope"')
+  const text = await answers().last().innerText()
+  expect(text.split('\n').filter((l) => l.endsWith(': ok'))).toHaveLength(7)
+
+  // The box went to the blank page, was changed, then moved back onto slide 1's margin.
+  const sidecar = path.join(env.vault, `${pdfRel}.annotations.json`)
+  await expect
+    .poll(async () => JSON.parse(await fs.readFile(sidecar, 'utf8').catch(() => '{}')).pages)
+    .toMatchObject({
+      '1': { textBoxes: [{ markdown: 'Worked example, step 2', x: 980, y: 300 }], highlights: [] },
+      '1.1': { blank: true, textBoxes: [] }
+    })
+  await expect(page.locator('.pdf-page[data-page="1.1"]')).toBeAttached()
+  await expect(page.locator('.pdf-page[data-page="1"] .text-box')).toHaveText(
+    'Worked example, step 2'
+  )
+})
+
 test('keeps one conversation per lesson across restarts', async () => {
   await openSlides()
   await ask('What is entropy?')

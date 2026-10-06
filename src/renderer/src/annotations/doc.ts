@@ -29,6 +29,7 @@ export interface Ghost {
   page: number
   textBox?: TextBox
   highlight?: Highlight
+  strokes?: Stroke[]
   decide(accept: boolean): void
 }
 

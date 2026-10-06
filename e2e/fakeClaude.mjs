@@ -55,6 +55,41 @@ export async function* agent(input) {
       markdown: 'Gain = drop in entropy, $\\Delta H$'
     })
     yield { type: 'text', text: reply.ok ? 'Put a note in the margin.' : reply.text }
+  } else if (/circle/i.test(question)) {
+    const reply = await input.callTool('add_drawing', {
+      file: slides,
+      page,
+      lines: [
+        [
+          [50, 40],
+          [300, 40],
+          [300, 110],
+          [50, 110],
+          [50, 40]
+        ]
+      ]
+    })
+    yield { type: 'text', text: reply.ok ? 'Circled it.' : reply.text }
+  } else if (/rework/i.test(question)) {
+    // Every step through the tools, as the real agent would: page, box, list, edit, remove.
+    const steps = []
+    const call = async (name, args) => {
+      const reply = await input.callTool(name, { file: slides, ...args })
+      steps.push(`${name}: ${reply.ok ? 'ok' : reply.text}`)
+      return reply.text
+    }
+    const added = await call('add_blank_page', { after_page: page })
+    const blank = Number(match(added, /blank page ([\d.]+)/))
+    await call('add_text_annotation', { page: blank, markdown: 'Worked example', x: 40, y: 40 })
+    await call('add_highlight', { page, text: 'Information gain', style: 'underline' })
+    const listing = await call('list_annotations', {})
+    const box = match(listing, /text box (t_\w+)/)
+    const line = match(listing, /underline (h_\w+)/)
+    await call('edit_annotation', { page: blank, id: box, markdown: 'Worked example, step 2' })
+    await call('edit_annotation', { page: blank, id: box, to_page: page, x: 980, y: 300 })
+    await call('delete_annotations', { page, ids: [line] })
+    await call('delete_annotations', { page, ids: ['t_nope'] })
+    yield { type: 'text', text: steps.join('\n\n') }
   } else if (/highlight/i.test(question)) {
     const reply = await input.callTool('add_highlight', {
       file: slides,

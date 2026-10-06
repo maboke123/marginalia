@@ -2,17 +2,21 @@ import { useMemo } from 'react'
 import { RenderedHtml } from '../components/RenderedHtml'
 import { renderMarkdown } from '../lib/markdown'
 import type { Ghost } from './doc'
+import { strokePath } from './ink'
 
 /** An annotation Claude proposes, drawn faintly with Accept and Reject next to it. */
 export function GhostView({ ghost, scale }: { ghost: Ghost; scale: number }): React.JSX.Element {
   const html = useMemo(() => renderMarkdown(ghost.textBox?.markdown ?? ''), [ghost.textBox])
   const box = ghost.textBox
   const first = ghost.highlight?.rects[0]
+  const start = ghost.strokes?.[0]?.points[0]
   const at = box
     ? { x: box.x, y: box.y }
     : first
       ? { x: first[0], y: first[1] + first[3] + 2 }
-      : null
+      : start
+        ? { x: start[0], y: start[1] + 4 }
+        : null
 
   return (
     <>
@@ -23,6 +27,13 @@ export function GhostView({ ghost, scale }: { ghost: Ghost; scale: number }): Re
           style={{ left: x, top: y, width: w, height: h, color: ghost.highlight!.color }}
         />
       ))}
+      {ghost.strokes && (
+        <svg className="ink ghost" width={1} height={1}>
+          {ghost.strokes.map((s) => (
+            <path key={s.id} d={strokePath(s)} fill={s.color} />
+          ))}
+        </svg>
+      )}
       {box && (
         <div
           className="text-box by-claude ghost passive"

@@ -1674,6 +1674,10 @@ h2 {
   outline: 1px dashed var(--claude-ink);
 }
 
+.ink.ghost {
+  opacity: 0.55;
+}
+
 .ghost-actions {
   position: absolute;
   z-index: 3;

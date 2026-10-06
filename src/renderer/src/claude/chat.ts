@@ -88,6 +88,16 @@ function describeTool(name: string, input: Record<string, unknown>): string {
       return `Adding a note to ${file}${page}`
     case 'add_highlight':
       return `Highlighting on ${file}${page}`
+    case 'list_annotations':
+      return `Looked at the annotations on ${file}${page}`
+    case 'edit_annotation':
+      return `Changing an annotation on ${file}${page}`
+    case 'delete_annotations':
+      return `Removing annotations from ${file}${page}`
+    case 'add_blank_page':
+      return `Adding a blank page to ${file} after p.${input.after_page}`
+    case 'add_drawing':
+      return `Drawing on ${file}${page}`
     case 'goto':
       return `Opened ${file}${page}`
     case 'Read':
