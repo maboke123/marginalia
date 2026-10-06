@@ -5,6 +5,7 @@ import {
   findSection,
   headingPath,
   headings,
+  nextHeadingLevel,
   textAround
 } from './sections'
 
@@ -101,5 +102,50 @@ describe('textAround', () => {
     expect(textAround(NOTE, 10)).toBe(NOTE)
     const big = '# A\n\n' + 'x'.repeat(300) + '\n\n# B\n\nshort\n'
     expect(textAround(big, big.indexOf('short'), 100)).toBe('# B\n\nshort\n')
+  })
+})
+
+describe('nextHeadingLevel', () => {
+  const at = (text: string): number => nextHeadingLevel(text, text.length)
+
+  it('starts at the top level of the note, or 1', () => {
+    expect(at('')).toBe(1)
+    expect(nextHeadingLevel('Intro text\n\n## Later', 0)).toBe(2)
+  })
+
+  it('goes one deeper right under a heading', () => {
+    expect(at('# Lecture 1\n\n')).toBe(2)
+    expect(at('###### Deepest\n')).toBe(6)
+  })
+
+  it('stays at the same level after text when the note has no habit yet', () => {
+    expect(at('# Lecture\n\n## Intro\n\nSome text\n\n')).toBe(2)
+  })
+
+  it('follows what the note did after sections of this level', () => {
+    const note = [
+      '## Sorting',
+      'text',
+      '### Quicksort',
+      'text',
+      '## Searching',
+      'text',
+      '### Binary search',
+      'text',
+      '## Hashing',
+      'text',
+      ''
+    ].join('\n')
+    expect(at(note)).toBe(3)
+  })
+
+  it('ignores the heading on the cursor line and skips code blocks', () => {
+    const note = '# A\n\ntext\n\n```\n# not a heading\n```\n\n## B'
+    // Counting the fenced line would make it a tie between 1 and 2.
+    expect(nextHeadingLevel(note, note.length)).toBe(2)
+  })
+
+  it('never jumps more than one level deeper', () => {
+    expect(at('# A\ntext\n### Deep\ntext\n# B\ntext\n')).toBe(1)
   })
 })

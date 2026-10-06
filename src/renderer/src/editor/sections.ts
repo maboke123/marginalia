@@ -42,6 +42,37 @@ export function headingPath(text: string, pos: number): string[] {
   return stack.map((h) => h.title)
 }
 
+/**
+ * The heading level most likely wanted on the line at `pos`. Right under a heading with
+ * nothing written yet, one level deeper. After some text, what this note usually does after a
+ * section of that level (another of the same, one deeper, back up), ties going to the level
+ * closest to it. Before any heading, the note's top level.
+ */
+export function nextHeadingLevel(text: string, pos: number): number {
+  const all = headings(text)
+  const lineStart = text.lastIndexOf('\n', pos - 1) + 1
+  const above = all.filter((h) => h.from < lineStart)
+  const last = above[above.length - 1]
+  if (!last) return all.length ? Math.min(...all.map((h) => h.level)) : 1
+  if (text.slice(last.to, lineStart).trim() === '') return Math.min(last.level + 1, 6)
+
+  const counts = new Map<number, number>()
+  for (let i = 1; i < all.length; i++) {
+    const [before, after] = [all[i - 1], all[i]]
+    // Only sections with text in them; an empty one says nothing about what follows text.
+    if (before.level !== last.level || text.slice(before.to, after.from).trim() === '') continue
+    if (after.level > last.level + 1) continue
+    counts.set(after.level, (counts.get(after.level) ?? 0) + 1)
+  }
+  let best = last.level
+  const distance = (level: number): number => Math.abs(level - last.level)
+  for (const [level, count] of counts) {
+    const bestCount = counts.get(best) ?? 0
+    if (count > bestCount || (count === bestCount && distance(level) < distance(best))) best = level
+  }
+  return best
+}
+
 /** End of a heading's section: before the next heading of the same or a higher level. */
 function sectionEnd(text: string, all: Heading[], heading: Heading): number {
   const next = all.find((h) => h.from > heading.from && h.level <= heading.level)

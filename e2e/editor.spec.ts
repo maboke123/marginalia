@@ -69,7 +69,7 @@ test('math and tables render while typing, and the file stays plain Markdown', a
   await page.keyboard.press('Enter')
   await page.keyboard.type('Outlook splits best.')
 
-  await expect(page.locator('.cm-h1')).toHaveText('Information gain')
+  await expect(page.locator('.cm-content .cm-h1')).toHaveText('Information gain')
   await expect(page.locator('.cm-math-inline .katex')).toBeVisible()
   await expect(page.locator('.cm-math-block:not(.cm-math-preview) .katex-display')).toBeVisible()
   await expect(page.locator('.cm-table-preview td').first()).toHaveText('Outlook')
@@ -244,6 +244,77 @@ test('a heading from the slash menu leaves the cursor after the hashes', async (
   await expect.poll(readSummary).toBe('## Pruning')
 })
 
+test('the slash menu offers the heading level that comes next first', async () => {
+  await fs.writeFile(summaryFile(), '# Decision trees\n\n')
+  await openSection()
+  await row('Summary').click()
+  await expect(editor()).toBeFocused()
+
+  await page.keyboard.type('/')
+  const first = page.locator('.cm-tooltip-autocomplete li').first()
+  await expect(first).toContainText('Heading 2')
+  await page.waitForTimeout(150)
+  await page.keyboard.press('Enter')
+  await page.keyboard.type('Entropy\n\nMeasures impurity.\n\n/')
+  // After a section with text, the same level again.
+  await expect(first).toContainText('Heading 2')
+  await page.waitForTimeout(150)
+  await page.keyboard.press('Enter')
+  await page.keyboard.type('Pruning')
+  await expect
+    .poll(readSummary)
+    .toBe('# Decision trees\n\n## Entropy\n\nMeasures impurity.\n\n## Pruning')
+})
+
+test('a heading folds its section, and the fold is kept when the note opens again', async () => {
+  await fs.writeFile(
+    summaryFile(),
+    [
+      '# Entropy',
+      '',
+      'Impurity of a set.',
+      '',
+      '## Formula',
+      '',
+      '$$',
+      'H(S) = -\\sum_i p_i \\log_2 p_i',
+      '$$',
+      '',
+      '| Split | Gain |',
+      '| --- | --- |',
+      '| Outlook | 0.246 |',
+      '',
+      '# Pruning',
+      '',
+      'Cut back the tree.'
+    ].join('\n')
+  )
+  await fs.writeFile(path.join(env.vault, section, 'Other.md'), 'Other note')
+  await openSection()
+  await row('Summary').click()
+  await expect(editor()).toContainText('Outlook')
+
+  const markers = page.locator('.cm-foldGutter .cm-fold-marker:visible')
+  await expect(markers).toHaveCount(3)
+  await markers.first().click()
+  await expect(editor()).not.toContainText('Impurity')
+  await expect(editor()).not.toContainText('Outlook')
+  await expect(editor()).toContainText('Cut back the tree.')
+  await expect(page.locator('.cm-foldPlaceholder')).toHaveCount(1)
+  // Folding only hides; the file is unchanged.
+  await expect.poll(readSummary).toContain('Impurity of a set.')
+
+  await row('Other').click()
+  await expect(editor()).toContainText('Other note')
+  await row('Summary').click()
+  await expect(editor()).toContainText('Cut back the tree.')
+  await expect(editor()).not.toContainText('Impurity')
+
+  await page.locator('.cm-foldPlaceholder').click()
+  await expect(editor()).toContainText('Impurity of a set.')
+  await expect(editor()).toContainText('Outlook')
+})
+
 test('tasks tick, selected text takes a colour, and the menu has deeper headings', async () => {
   await fs.writeFile(summaryFile(), '- [ ] Revise entropy\n\nGain is high')
   await openSection()
@@ -324,8 +395,8 @@ test('picks up changes made outside the app', async () => {
   await fs.writeFile(summaryFile(), '# Before\n')
   await openSection()
   await row('Summary').click()
-  await expect(page.locator('.cm-h1')).toHaveText('Before')
+  await expect(page.locator('.cm-content .cm-h1')).toHaveText('Before')
 
   await fs.writeFile(summaryFile(), '# Edited in Obsidian\n')
-  await expect(page.locator('.cm-h1')).toHaveText('Edited in Obsidian')
+  await expect(page.locator('.cm-content .cm-h1')).toHaveText('Edited in Obsidian')
 })

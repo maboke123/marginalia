@@ -7,6 +7,7 @@ import { setTextColor } from './colorBar'
 import { claudeEnter } from './inlineClaude'
 import { slideLink } from './links'
 import { notePath } from './livePreview'
+import { nextHeadingLevel } from './sections'
 import {
   NEW_TABLE,
   cellAt,
@@ -359,15 +360,17 @@ export function slashCommands(context: CompletionContext): CompletionResult | nu
   const slash = match.from + match.text.indexOf('/')
   // "/claude what to write" is a request (Enter sends it), not a menu search.
   if (/^\/claude\s/i.test(context.state.sliceDoc(slash, context.pos))) return null
-  let order = 0
+  // The heading level I probably want comes first, so "/" and Enter gives it.
+  const next = `Heading ${nextHeadingLevel(context.state.doc.toString(), slash)}`
+  let order = 1
   const options: Completion[] = SLASH_SECTIONS.flatMap(([name, commands], rank) =>
     commands.map((command) => ({
       label: command.label,
       // Hotkey hints follow the settings.
-      detail: hotkeyHint(command.detail),
+      detail: command.label === next ? `${command.detail}  next` : hotkeyHint(command.detail),
       section: { name, rank },
       // Without a query the list is sorted by this; keep the order above.
-      sortText: String(order++).padStart(3, '0'),
+      sortText: command.label === next ? '000' : String(order++).padStart(3, '0'),
       apply: (view: EditorView, _completion: Completion, _from: number, to: number) => {
         view.dispatch({ changes: { from: slash, to, insert: '' } })
         command.run(view)

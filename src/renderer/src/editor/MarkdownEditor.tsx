@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { foldedRanges } from '@codemirror/language'
 import { Annotation, Compartment, EditorState, type Extension } from '@codemirror/state'
 import { EditorView } from '@codemirror/view'
 import { Icon } from '../components/Icon'
@@ -11,6 +12,7 @@ import { useApp } from '../store'
 import { RecordButton } from '../transcribe/RecordButton'
 import { useRecording } from '../transcribe/recording'
 import { insertText } from './commands'
+import { foldedHeadings, loadFolds, refold, saveFolds } from './folding'
 import { resolveLink } from './links'
 import { headingPath } from './sections'
 import { editorExtensions } from './setup'
@@ -64,6 +66,16 @@ export function MarkdownEditor({
       }
     }
 
+    const foldsKey = `folds:${useApp.getState().vault?.root}:${path}`
+    let lastFolds = ''
+    const rememberFolds = (state: EditorState): void => {
+      const titles = foldedHeadings(state)
+      const key = JSON.stringify(titles)
+      if (key === lastFolds) return
+      lastFolds = key
+      saveFolds(foldsKey, titles)
+    }
+
     let lastCursor = ''
     const publishCursor = (state: EditorState): void => {
       const { from, to, head } = state.selection.main
@@ -107,6 +119,9 @@ export function MarkdownEditor({
               lock.of(lockedBy(locked())),
               EditorView.updateListener.of((update) => {
                 if (update.docChanged || update.selectionSet) publishCursor(update.state)
+                if (foldedRanges(update.state) !== foldedRanges(update.startState)) {
+                  rememberFolds(update.state)
+                }
                 if (!update.docChanged) return
                 if (update.transactions.every((tr) => tr.annotation(fromDisk))) return
                 dirty = true
@@ -120,6 +135,7 @@ export function MarkdownEditor({
         const goto = useApp.getState().noteGoto
         if (goto?.path === path) goToLine(goto.line)
         unregisterNote = registerNote({ path, view })
+        refold(view, loadFolds(foldsKey))
         publishCursor(view.state)
         view.focus()
         view.dispatch({ effects: EditorView.scrollIntoView(text.length, { y: 'center' }) })
@@ -134,11 +150,14 @@ export function MarkdownEditor({
       saved = text
       const { head: oldHead } = view.state.selection.main
       const head = oldHead === view.state.doc.length ? text.length : Math.min(oldHead, text.length)
+      // Replacing the whole text drops the folds; fold the same headings again.
+      const folds = foldedHeadings(view.state)
       view.dispatch({
         changes: { from: 0, to: view.state.doc.length, insert: text },
         selection: { anchor: head },
         annotations: fromDisk.of(true)
       })
+      refold(view, folds)
     })
     const unregister = registerFlush(save)
     const stopLock = useRecording.subscribe((state, previous) => {

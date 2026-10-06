@@ -6,6 +6,7 @@ import { Prec, type Extension } from '@codemirror/state'
 import { drawSelection, dropCursor, EditorView, keymap, placeholder } from '@codemirror/view'
 import { tags } from '@lezer/highlight'
 import { editorKeymap, insertImageFiles, slashCommands } from './commands'
+import { headingFolding } from './folding'
 import { livePreview, notePath } from './livePreview'
 import { mathSyntax } from './mathSyntax'
 import { claudeChanges, claudeEscape, inlineRequests } from './inlineClaude'
@@ -41,6 +42,7 @@ export function editorExtensions({ path, onOpenLink }: EditorOptions): Extension
     markdown({ base: markdownLanguage, extensions: [mathSyntax] }),
     syntaxHighlighting(highlight),
     livePreview,
+    headingFolding,
     pendingEdit,
     inlineRequests,
     claudeChanges,

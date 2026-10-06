@@ -1292,10 +1292,11 @@ h2 {
   user-select: text;
 }
 
+/* The fold gutter (14px + 22px) takes the place of most of the left padding. */
 .md-editor .cm-content {
   min-width: 0;
-  max-width: 760px;
-  padding: 28px 40px 40vh;
+  max-width: 724px;
+  padding: 28px 40px 40vh 4px;
   caret-color: var(--text);
 }
 
@@ -1310,6 +1311,65 @@ h2 {
 
 .md-editor .cm-placeholder {
   color: var(--text-muted);
+}
+
+.md-editor .cm-gutters {
+  border: none;
+  background: var(--bg);
+}
+
+.md-editor .cm-foldGutter {
+  padding-left: 14px;
+}
+
+/* The heading's classes give the marker its line's font size. Their padding does not reach
+   .cm-line (CodeMirror's own padding wins there), so it must not move the marker either. */
+.md-editor .cm-foldGutter .cm-gutterElement {
+  padding: 0;
+}
+
+.cm-fold-marker {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 1.3em;
+  border-radius: var(--radius);
+  color: var(--text-muted);
+  cursor: pointer;
+  opacity: 0;
+}
+
+.cm-fold-marker svg {
+  transform: rotate(90deg);
+}
+
+.md-editor .cm-editor:hover .cm-fold-marker,
+.cm-folded .cm-fold-marker {
+  opacity: 1;
+}
+
+.cm-folded .cm-fold-marker svg {
+  transform: none;
+}
+
+.cm-fold-marker:hover {
+  background: var(--bg-hover);
+}
+
+.md-editor .cm-foldPlaceholder {
+  margin-left: 6px;
+  padding: 0 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: none;
+  color: var(--text-muted);
+  font-size: 14px;
+  font-weight: 400;
+}
+
+.md-editor .cm-foldPlaceholder:hover {
+  background: var(--bg-hover);
 }
 
 .cm-h {
