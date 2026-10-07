@@ -78,6 +78,10 @@ function describeTool(name: string, input: Record<string, unknown>): string {
       return 'Looked at what is on screen'
     case 'read_pdf_page':
       return `Read ${file}${page}`
+    case 'read_pdf_text':
+      return `Read the text of ${file}`
+    case 'create_note':
+      return `Making the note ${input.name}.md`
     case 'read_summary':
       return input.heading ? `Read ${file} › ${input.heading}` : `Read ${file}`
     case 'insert_into_summary':

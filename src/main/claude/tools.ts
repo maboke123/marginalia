@@ -62,6 +62,27 @@ export function appToolServer(sdk: Sdk, call: CallTool): McpSdkServerConfigWithI
       { annotations: READ_ONLY }
     ),
     sdk.tool(
+      'read_pdf_text',
+      'The text of every page of a slide PDF (or of pages from_page to to_page), with page ' +
+        'numbers, plus the notes linked to it. Cheaper than read_pdf_page for a whole lecture.',
+      { file: pdf, from_page: page.optional(), to_page: page.optional() },
+      run('read_pdf_text'),
+      { annotations: READ_ONLY }
+    ),
+    sdk.tool(
+      'create_note',
+      'Makes a new Markdown note with this content and opens it. With link_to_pdf it is linked ' +
+        'to those slides (shown under the PDF, and one of the notes lecture mode can open). ' +
+        'A name that is taken gets a number. Returns the vault path of the note.',
+      {
+        folder: z.string().describe('Vault path of the folder, like Machine Learning/B2'),
+        name: z.string().describe('File name without .md'),
+        markdown: z.string(),
+        link_to_pdf: pdf.optional()
+      },
+      run('create_note')
+    ),
+    sdk.tool(
       'read_summary',
       'Markdown of a summary, or of one section of it when a heading is given. Includes edits ' +
         'that are not saved yet.',
@@ -90,14 +111,16 @@ export function appToolServer(sdk: Sdk, call: CallTool): McpSdkServerConfigWithI
     sdk.tool(
       'add_text_annotation',
       'Puts a Markdown text box on a slide or blank page. Without x and y it goes in the margin ' +
-        'to the right of the page, under any boxes already there. x and y are PDF points from ' +
-        'the top-left.',
+        'to the right of the page, under any boxes already there. x, y and width are PDF points ' +
+        'from the top-left. The box gets wider by itself when its text would run past the ' +
+        'bottom of the page; when it cannot fit at all you get an error with the room there is.',
       {
         file: pdf,
         page: annotationPage,
         markdown: z.string(),
         x: z.number().optional(),
-        y: z.number().optional()
+        y: z.number().optional(),
+        width: z.number().optional()
       },
       run('add_text_annotation')
     ),
@@ -181,6 +204,8 @@ export function appToolServer(sdk: Sdk, call: CallTool): McpSdkServerConfigWithI
 export const APP_TOOLS = [
   'get_current_view',
   'read_pdf_page',
+  'read_pdf_text',
+  'create_note',
   'read_summary',
   'insert_into_summary',
   'replace_in_summary',

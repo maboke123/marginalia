@@ -17,7 +17,7 @@ import {
   slideOf
 } from '../../../shared/blankPages'
 import type { ToolCall, ToolReply } from '../../../shared/claude'
-import { pageUnit } from '../../../shared/palette'
+import { DEFAULT_TEXT_SIZE, pageUnit } from '../../../shared/palette'
 import {
   addItem,
   findItem,
@@ -31,11 +31,12 @@ import {
 } from '../annotations/doc'
 import { round, strokeBounds, translateStroke } from '../annotations/geometry'
 import { findTextRects } from '../annotations/findText'
+import { fitWidth, measurer, widestAt } from '../annotations/fit'
 import { marginSlot } from '../annotations/margin'
 import { pendingEdit, setPendingEdit } from '../editor/proposal'
 import { blockInsert, endOfContent, findSection, headings } from '../editor/sections'
 import { openNote, openPdf, whenOpen, type OpenNote, type OpenPdf } from '../lib/open'
-import { findNode } from '../lib/tree'
+import { findNode, isFolder } from '../lib/tree'
 import { loadPdf } from '../pdf/pdfjs'
 import { renderPage } from '../pdf/snapshot'
 import { pageRuns, pageText } from '../pdf/text'
@@ -206,6 +207,31 @@ async function showPdf(path: string, page: number): Promise<OpenPdf & { doc: Ann
 
 const REJECTED = 'I rejected this change; nothing was changed. Do not try again unless I ask.'
 
+/**
+ * Makes a text box as wide as it needs to be for its text to end above the bottom of the page,
+ * or explains how much room there is, so Claude can shorten it or use a blank page.
+ */
+function fitOnPage(open: OpenPdf, page: number, box: TextBox): TextBox {
+  const size = open.sizes[slideOf(page) - 1]
+  const unit = pageUnit(size.width)
+  const fitPage = { width: size.width * (1 + open.margin), height: size.height, gap: 8 * unit }
+  const measure = measurer(box.markdown, box.fontSize ?? DEFAULT_TEXT_SIZE * unit)
+  const width = fitWidth(box, fitPage, measure)
+  if (width !== null) return { ...box, width }
+  const n = Math.round
+  const { gap } = fitPage
+  const widest = widestAt(box, fitPage)
+  const full = fitPage.width - 2 * gap
+  throw new ToolError(
+    `This text does not fit on page ${page}: even ${n(widest)} points wide (to the page edge) ` +
+      `it is ${n(measure(widest))} points tall, and ${n(fitPage.height - box.y - gap)} fit ` +
+      `below y=${n(box.y)}. The page with its margin is ${n(fitPage.width)}x${n(size.height)} ` +
+      'points. Shorten it, start it higher, or put it on a blank page (add_blank_page) at ' +
+      `x=${n(gap)}, y=${n(gap)}, width=${n(full)}, where it is ${n(measure(full))} points tall; ` +
+      `split it over more blank pages if that is more than ${n(size.height - 2 * gap)}.`
+  )
+}
+
 /** Applies a change to an open note as one undo step, after I accept it if I want to be asked. */
 async function editNote(
   view: EditorView,
@@ -297,6 +323,53 @@ const TOOLS: Record<string, (args: Args) => Promise<Result>> = {
     })
   },
 
+  async read_pdf_text(args) {
+    const path = fileArg(args, 'pdf')
+    return withPdf(path, async (pdf) => {
+      const from = args.from_page === undefined ? 1 : pageArg({ page: args.from_page }, pdf)
+      const to = args.to_page === undefined ? pdf.numPages : pageArg({ page: args.to_page }, pdf)
+      const pages: string[] = []
+      for (let page = from; page <= to; page++) {
+        const text = await pageText(pdf, page)
+        pages.push(`--- Page ${page} ---\n${text || '(no text layer; read_pdf_page shows it)'}`)
+      }
+      const notes = useApp.getState().links[path] ?? []
+      const head =
+        `${path}, pages ${from} to ${to} of ${pdf.numPages}. ` +
+        `Notes linked to it: ${notes.length ? notes.join(', ') : 'none'}.`
+      return { text: [head, ...pages].join('\n\n') }
+    })
+  },
+
+  async create_note(args) {
+    const folder = String(args.folder ?? '')
+      .replace(/\\/g, '/')
+      .replace(/^\.?\/|\/$/g, '')
+    const node = findNode(useApp.getState().nodes, folder)
+    if (!node || !isFolder(node)) {
+      throw new ToolError(
+        `No folder "${folder}" in the vault; notes go in a course or lesson folder`
+      )
+    }
+    const name = String(args.name ?? '')
+      .trim()
+      .replace(/\.md$/i, '')
+    if (!name) throw new ToolError('The note needs a name')
+    const pdf = args.link_to_pdf === undefined ? null : fileArg({ file: args.link_to_pdf }, 'pdf')
+    const accepted = await useChat
+      .getState()
+      .confirm(`New note ${name}.md in ${fileName(folder)}`, () => () => {})
+    if (!accepted) throw new ToolError(REJECTED)
+    const path = await window.api.vault.createNote(folder, name)
+    await window.api.vault.writeText(path, String(args.markdown ?? '').trimEnd() + '\n')
+    if (pdf) await window.api.vault.linkNote(pdf, path, 'add')
+    await useApp.getState().refresh()
+    const app = useApp.getState()
+    if (pdf && app.lectureMode && app.slidesFile === pdf) await app.showNote(path)
+    else show(path)
+    return { text: `Made ${path}${pdf ? `, linked to ${pdf}` : ''}.` }
+  },
+
   async read_summary(args) {
     const path = fileArg(args, 'markdown')
     const text = await noteText(path)
@@ -364,16 +437,18 @@ const TOOLS: Record<string, (args: Args) => Promise<Result>> = {
       size.height,
       open.margin
     )
-    const box: TextBox = {
+    const box = fitOnPage(open, page, {
       id: newId('t'),
       ...slot,
-      ...(typeof args.x === 'number' ? { x: args.x } : {}),
-      ...(typeof args.y === 'number' ? { y: args.y } : {}),
+      ...(typeof args.x === 'number' ? { x: round(args.x) } : {}),
+      ...(typeof args.y === 'number' ? { y: round(args.y) } : {}),
+      ...(typeof args.width === 'number' ? { width: Math.max(20, round(args.width)) } : {}),
       markdown,
       author: 'claude'
-    }
+    })
     await annotate(open, page, { textBox: box }, `Note on ${fileName(path)} p.${page}`)
-    return { text: `Added a text box on page ${page} of ${path}.` }
+    const at = `x=${Math.round(box.x)} y=${Math.round(box.y)} width=${Math.round(box.width)}`
+    return { text: `Added a text box on page ${page} of ${path} at ${at}.` }
   },
 
   async add_highlight(args) {
@@ -429,7 +504,7 @@ const TOOLS: Record<string, (args: Args) => Promise<Result>> = {
     let preview = pointAt(open.doc, page, kind, id)
     if (kind === 'textBoxes') {
       const box = findItem(pages, { page, kind, id })!
-      const next: TextBox = {
+      let next: TextBox = {
         ...box,
         ...(typeof args.markdown === 'string' && { markdown: args.markdown.trim() }),
         x: n('x') ?? box.x,
@@ -441,6 +516,10 @@ const TOOLS: Record<string, (args: Args) => Promise<Result>> = {
       if (!next.markdown) {
         throw new ToolError('A text box needs text; delete_annotations removes it')
       }
+      const resized = ['markdown', 'x', 'y', 'width', 'font_size', 'to_page'].some(
+        (key) => args[key] !== undefined
+      )
+      if (resized) next = fitOnPage(open, to, next)
       changed = (p) => replaceItem(p, page, 'textBoxes', next)
       preview = (decide) => {
         open.doc.getState().setGhost({ page: to, textBox: next, decide })

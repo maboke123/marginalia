@@ -1,7 +1,7 @@
-import { memo, useCallback, useContext, useRef, useState } from 'react'
+import { memo, useCallback, useContext, useMemo, useRef, useState } from 'react'
 import { useStore } from 'zustand'
 import type { PDFDocumentProxy } from 'pdfjs-dist'
-import type { PageImage, Stroke, TextBox } from '../../../shared/annotations'
+import type { AnnotationPages, PageImage, Stroke, TextBox } from '../../../shared/annotations'
 import { vaultUrl } from '../editor/links'
 import { useApp } from '../store'
 import { addImageFiles, rememberClick } from './addImages'
@@ -29,6 +29,8 @@ import {
   type Point
 } from './geometry'
 import { applyChanges, planWrite, type WriteAnswer } from '../claude/writePlan'
+import { openPdf } from '../lib/open'
+import { measurer, placeFitted, planFit, type FitPage } from './fit'
 import { GhostView } from './GhostView'
 import { ImageView } from './ImageView'
 import { imagePath, resizeImage } from './images'
@@ -420,13 +422,31 @@ function AnnotatedOverlay({
     doc.getState().edit({ page: number, kind: 'textBoxes', id: box.id })
   }
 
-  function commitBox(box: TextBox, markdown: string): void {
+  const fitPage = useMemo<FitPage>(
+    () => ({ width: totalWidth, height, gap: 8 * unit }),
+    [totalWidth, height, unit]
+  )
+
+  /**
+   * After Claude wrote in a box: as wide as it needs to end above the page bottom, or on a new
+   * blank page below at full width when it is too long for that.
+   */
+  function fitted(pages: AnnotationPages, box: TextBox): AnnotationPages {
+    const measure = measurer(box.markdown, box.fontSize ?? DEFAULT_TEXT_SIZE * unit)
+    return placeFitted(pages, number, box, planFit(box, fitPage, measure), fitPage)
+  }
+
+  function commitBox(box: TextBox, markdown: string, claudeWrote: boolean): void {
     const state = doc.getState()
     state.edit(null)
     if (markdown === box.markdown && box.markdown !== '') {
       state.cancel()
     } else if (markdown) {
-      state.update((p) => replaceItem(p, number, 'textBoxes', { ...box, markdown }))
+      const next = { ...box, markdown }
+      state.update((p) => {
+        const replaced = replaceItem(p, number, 'textBoxes', next)
+        return claudeWrote ? fitted(replaced, next) : replaced
+      })
       state.end()
     } else if (box.markdown === '') {
       // A new box that stayed empty: as if it was never made.
@@ -438,18 +458,39 @@ function AnnotatedOverlay({
     focusViewer()
   }
 
-  /** A /claude answer for a box I already closed: put it in as its own undo step. */
+  /**
+   * A /claude answer for a box I already closed: put it in as its own undo step. When the
+   * slides were closed in the meantime it goes straight into the annotation file.
+   */
   function lateAnswer(id: string, original: string, answer: WriteAnswer): void {
-    const current = findItem(doc.getState().pages, { page: number, kind: 'textBoxes', id })
-    const at = current?.markdown.indexOf(original) ?? -1
-    if (!current || at === -1) {
+    const apply = (pages: AnnotationPages): AnnotationPages | null => {
+      const current = findItem(pages, { page: number, kind: 'textBoxes', id })
+      const at = current?.markdown.indexOf(original) ?? -1
+      if (!current || at === -1) return null
+      const request = { from: at, to: at + original.length }
+      const { changes } = planWrite(current.markdown, request, answer)
+      const next = { ...current, markdown: applyChanges(current.markdown, changes).trim() }
+      return fitted(replaceItem(pages, number, 'textBoxes', next), next)
+    }
+    const changed = (): void =>
       useApp.getState().showError('The /claude request was changed; nothing was inserted')
+
+    if (openPdf(path)?.doc === doc) {
+      const next = apply(doc.getState().pages)
+      if (next) doc.getState().change((p) => apply(p) ?? p)
+      else changed()
       return
     }
-    const request = { from: at, to: at + original.length }
-    const { changes } = planWrite(current.markdown, request, answer)
-    const markdown = applyChanges(current.markdown, changes).trim()
-    doc.getState().change((p) => replaceItem(p, number, 'textBoxes', { ...current, markdown }))
+    window.api.vault
+      .readAnnotations(path)
+      .then(async ({ file }) => {
+        const next = file && apply(file.pages)
+        if (!file || !next) return changed()
+        await window.api.vault.writeAnnotations(path, { ...file, pages: next })
+      })
+      .catch((err: Error) =>
+        useApp.getState().showError(`Claude's answer was not saved: ${err.message}`)
+      )
   }
 
   function onCapturePointerDown(e: React.PointerEvent): void {
@@ -672,8 +713,9 @@ function AnnotatedOverlay({
           onPointerDown={(e) => onBoxPointerDown(e, box)}
           onDoubleClick={() => startEditing(box)}
           onResizeStart={(e) => resizeBox(e, box)}
-          onCommit={(markdown) => commitBox(box, markdown)}
+          onCommit={(markdown, claudeWrote) => commitBox(box, markdown, claudeWrote)}
           page={number}
+          fitPage={fitPage}
           onLateAnswer={(original, answer) => lateAnswer(box.id, original, answer)}
         />
       ))}

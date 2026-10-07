@@ -9,6 +9,7 @@ import { renderPage } from '../pdf/snapshot'
 import { pageText } from '../pdf/text'
 import { childrenOf } from '../lib/tree'
 import { useApp } from '../store'
+import { skillOf } from './skills'
 
 /** One removable piece of the context packet, shown above the chat input. */
 export interface Chip {
@@ -196,6 +197,9 @@ export async function buildPacket(
 
   const files = chips.filter((c) => c.id.startsWith('file:')).map((c) => c.title)
   if (files.length) lines.push(`I attached these files; read them as needed: ${files.join(', ')}`)
+
+  const skill = skillOf(question)
+  if (skill) lines.push(`Skill /${skill.name}: follow these steps for my message.`, skill.steps)
 
   lines.push(CONTEXT_END, '', question)
   return { text: lines.join('\n'), images, imageKey }

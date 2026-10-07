@@ -90,6 +90,18 @@ export async function* agent(input) {
     await call('delete_annotations', { page, ids: [line] })
     await call('delete_annotations', { page, ids: ['t_nope'] })
     yield { type: 'text', text: steps.join('\n\n') }
+  } else if (question.startsWith('/summary')) {
+    // A skill: its steps come in the context, the chat shows only the command.
+    const text = await input.callTool('read_pdf_text', { file: slides })
+    const steps = /^Skill \/summary: /m.test(input.text) ? 'got the steps' : 'no steps'
+    const reply = await input.callTool('create_note', {
+      folder: slides.split('/').slice(0, -1).join('/'),
+      name: 'slides summary',
+      markdown: '# Decision trees\n\nSplit on the attribute with the most information gain.',
+      link_to_pdf: slides
+    })
+    const pages = (text.text.match(/^--- Page \d+ ---$/gm) ?? []).length
+    yield { type: 'text', text: `${steps}, read ${pages} pages. ${reply.text}` }
   } else if (/highlight/i.test(question)) {
     const reply = await input.callTool('add_highlight', {
       file: slides,
@@ -131,6 +143,9 @@ export async function complete(input) {
       reject(new Error('aborted'))
     })
   })
+  if (ask.startsWith('long')) {
+    return Array.from({ length: 30 }, (_, i) => `Point ${i + 1} of a long answer.`).join('\n\n')
+  }
   // Real answers sometimes put display math in the middle of a line.
   if (ask.startsWith('display')) return '$$x_{k+1} = x_k - \\alpha \\nabla f(x_k)$$'
   // Changing and removing text that is already there, the way the real prompt asks for it.

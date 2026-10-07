@@ -317,6 +317,81 @@ test('/claude in a text box on a slide, also after the box is closed', async () 
   await expect.poll(boxes).toContain('Later: /claude later please')
 })
 
+test('/claude in a text box keeps its answer when I click away to start another box', async () => {
+  await openSlides()
+  const sidecar = path.join(env.vault, `${pdfRel}.annotations.json`)
+  const boxes = async (): Promise<string[]> => {
+    const file = JSON.parse(await fs.readFile(sidecar, 'utf8').catch(() => '{}'))
+    return (file.pages?.['1']?.textBoxes ?? []).map((b: { markdown: string }) => b.markdown)
+  }
+  const page1 = (await page.locator('.pdf-page[data-page="1"]').boundingBox())!
+
+  await page.keyboard.press('KeyT')
+  await page.mouse.click(page1.x + 60, page1.y + 60)
+  await page.keyboard.type('Later: /claude later please')
+  await page.keyboard.press('Enter')
+  // A click elsewhere closes the box and starts a new one; Claude is still at work in the first.
+  await page.mouse.click(page1.x + 60, page1.y + 250)
+  await expect(page.locator('.text-box:not(.editing) .text-box-claude')).toBeVisible()
+  await expect(page.locator('.text-box .katex')).toBeVisible({ timeout: 10_000 })
+  // The new box stays empty, so it is dropped; the answer must stay.
+  await page.keyboard.press('Escape')
+  await expect(page.locator('.text-box-editor')).toHaveCount(0)
+  await expect(page.locator('.text-box .katex')).toBeVisible()
+  await expect.poll(boxes).toEqual(['Later: $\\alpha^* = \\arg\\min_\\alpha L(\\alpha)$'])
+})
+
+test('a /claude answer too long for the slide moves to a new blank page', async () => {
+  await openSlides()
+  const sidecar = path.join(env.vault, `${pdfRel}.annotations.json`)
+  const page1 = (await page.locator('.pdf-page[data-page="1"]').boundingBox())!
+
+  await page.keyboard.press('KeyT')
+  await page.mouse.click(page1.x + 60, page1.y + page1.height * 0.7)
+  await page.keyboard.type('/claude long list')
+  await page.keyboard.press('Enter')
+  await expect(page.locator('.text-box-editor')).toHaveValue(/Point 30/)
+  // While I type, the box scrolls instead of running off the page.
+  const editor = page.locator('.text-box-editor')
+  expect(await editor.evaluate((el) => el.scrollHeight > el.clientHeight)).toBe(true)
+  await page.keyboard.press('Control+Enter')
+
+  await expect(page.locator('.pdf-page[data-page="1.1"] .text-box')).toContainText('Point 30')
+  await expect
+    .poll(async () => JSON.parse(await fs.readFile(sidecar, 'utf8').catch(() => '{}')).pages)
+    .toMatchObject({ '1.1': { blank: true } })
+  const file = JSON.parse(await fs.readFile(sidecar, 'utf8'))
+  expect(file.pages['1']).toBeUndefined()
+  expect(file.pages['1.1'].textBoxes[0].x).toBeLessThan(20)
+  // The whole width of the page with its margin, not a narrow column.
+  expect(file.pages['1.1'].textBoxes[0].width).toBeGreaterThan(900)
+})
+
+test('/summary runs a skill that writes a new note linked to the slides', async () => {
+  await openSlides()
+  const input = page.getByRole('textbox', { name: 'Message to Claude' })
+  await page.keyboard.press('Control+L')
+  await input.fill('/')
+  await expect(page.locator('.claude-picker li')).toHaveCount(3)
+  await input.press('Enter')
+  await expect(input).toHaveValue('/summary ')
+  await input.press('Enter')
+
+  await expect(page.locator('.claude-question').last()).toHaveText('/summary')
+  await page.locator('.claude-proposal').getByRole('button', { name: 'Accept' }).click()
+  await expect(answers().last()).toContainText('got the steps, read 8 pages.')
+  await expect(answers().last()).toContainText(`Made ${section}/slides summary.md`)
+
+  const note = path.join(env.vault, section, 'slides summary.md')
+  expect(await fs.readFile(note, 'utf8')).toContain('most information gain')
+  // Opened next to the slides, and linked to them.
+  await expect(page.locator('.cm-content')).toContainText('most information gain')
+  const state = JSON.parse(
+    await fs.readFile(path.join(env.vault, '.marginalia/state.json'), 'utf8')
+  )
+  expect(state.notes[pdfRel]).toContain(`${section}/slides summary.md`)
+})
+
 test('/claude changes text that is already there, as one undo step', async () => {
   await row('Machine Learning').click()
   await row('B2 Decision trees').first().click()

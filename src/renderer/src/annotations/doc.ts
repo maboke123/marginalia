@@ -86,7 +86,18 @@ export function createAnnotationDoc(pages: AnnotationPages): AnnotationDoc {
       editing: null,
       ghost: null,
 
-      change: (fn) => push(get().pages, fn(get().pages)),
+      change(fn) {
+        if (!snapshot) return push(get().pages, fn(get().pages))
+        // A drag or typing is going on (a /claude answer can arrive then): the change also goes
+        // into the state that `cancel` returns to, and gets its own undo step before that one.
+        const before = snapshot
+        snapshot = fn(snapshot)
+        const pages = fn(get().pages)
+        if (before !== snapshot) {
+          set({ past: [...get().past, before].slice(-HISTORY_LIMIT), future: [] })
+        }
+        set({ pages })
+      },
 
       begin() {
         snapshot = get().pages

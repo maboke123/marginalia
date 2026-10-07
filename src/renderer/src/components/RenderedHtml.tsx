@@ -9,12 +9,14 @@ export function RenderedHtml({
   html,
   className,
   surface,
-  delay = 0
+  delay = 0,
+  style
 }: {
   html: string
   className: string
   surface: Surface
   delay?: number
+  style?: React.CSSProperties
 }): React.JSX.Element {
   const ref = useRef<HTMLDivElement>(null)
   useLayoutEffect(() => {
@@ -27,5 +29,7 @@ export function RenderedHtml({
     const timer = setTimeout(() => hydrateDiagrams(el, surface), delay)
     return () => clearTimeout(timer)
   }, [html, surface, delay])
-  return <div ref={ref} className={className} dangerouslySetInnerHTML={{ __html: html }} />
+  return (
+    <div ref={ref} className={className} style={style} dangerouslySetInnerHTML={{ __html: html }} />
+  )
 }

@@ -1,7 +1,7 @@
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { EFFORTS, MODELS, type EffortChoice, type ModelChoice } from '../../../shared/claude'
 import type { VaultNode } from '../../../shared/types'
-import { Icon } from '../components/Icon'
+import { Icon, type IconName } from '../components/Icon'
 import { resolveLink } from '../editor/links'
 import { RenderedHtml } from '../components/RenderedHtml'
 import { renderChatMarkdown } from '../lib/markdown'
@@ -9,6 +9,7 @@ import { findNode } from '../lib/tree'
 import { useApp } from '../store'
 import { chatOf, useChat, type Message, type Part } from './chat'
 import { currentChips } from './context'
+import { SKILLS } from './skills'
 import { TerminalView } from './TerminalView'
 
 const HEIGHT_KEY = 'claude-height'
@@ -298,9 +299,20 @@ function flatten(nodes: VaultNode[], out: VaultNode[] = []): VaultNode[] {
   return out
 }
 
+interface Option {
+  key: string
+  icon: IconName
+  text: string
+  detail?: string
+  pick(): void
+}
+
 function ChatInput({ chat, busy }: { chat: string; busy: boolean }): React.JSX.Element {
   const [text, setText] = useState('')
-  const [picker, setPicker] = useState<{ query: string; index: number } | null>(null)
+  // @ picks a file to send along, / at the start a skill.
+  const [picker, setPicker] = useState<{ kind: '@' | '/'; query: string; index: number } | null>(
+    null
+  )
   const ref = useRef<HTMLTextAreaElement>(null)
   const nodes = useApp((s) => s.nodes)
   // Chips follow what is on screen.
@@ -311,12 +323,31 @@ function ChatInput({ chat, busy }: { chat: string; busy: boolean }): React.JSX.E
   const removed = useChat((s) => s.removedChips)
   const chips = currentChips(attached).filter((c) => !removed.includes(c.id))
 
-  const matches = useMemo(() => {
+  const matches = useMemo((): Option[] => {
     if (!picker) return []
     const q = picker.query.toLowerCase()
+    if (picker.kind === '/') {
+      return SKILLS.filter((skill) => skill.name.startsWith(q)).map((skill) => ({
+        key: skill.name,
+        icon: 'chat',
+        text: `/${skill.name}`,
+        detail: skill.label,
+        pick: () => {
+          setText(`/${skill.name} `)
+          setPicker(null)
+        }
+      }))
+    }
     return flatten(nodes)
       .filter((n) => n.path.toLowerCase().includes(q))
       .slice(0, 8)
+      .map((node) => ({
+        key: node.path,
+        icon: node.kind === 'pdf' ? 'pdf' : 'page',
+        text: node.path,
+        pick: () => pick(node)
+      }))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [picker, nodes])
 
   const grow = (): void => {
@@ -338,7 +369,10 @@ function ChatInput({ chat, busy }: { chat: string; busy: boolean }): React.JSX.E
     grow()
     const before = e.target.value.slice(0, e.target.selectionStart)
     const at = /(?:^|\s)@([^\s@]*)$/.exec(before)
-    setPicker(at ? { query: at[1], index: 0 } : null)
+    const slash = /^\/([a-z-]*)$/i.exec(before)
+    if (at) setPicker({ kind: '@', query: at[1], index: 0 })
+    else if (slash) setPicker({ kind: '/', query: slash[1], index: 0 })
+    else setPicker(null)
   }
 
   const pick = (node: VaultNode): void => {
@@ -360,7 +394,7 @@ function ChatInput({ chat, busy }: { chat: string; busy: boolean }): React.JSX.E
       }
       if (e.key === 'Enter' || e.key === 'Tab') {
         e.preventDefault()
-        pick(matches[picker.index])
+        matches[picker.index].pick()
         return
       }
     }
@@ -408,19 +442,20 @@ function ChatInput({ chat, busy }: { chat: string; busy: boolean }): React.JSX.E
       <div className="claude-input">
         {picker && matches.length > 0 && (
           <ul className="claude-picker menu" role="listbox">
-            {matches.map((node, i) => (
+            {matches.map((option, i) => (
               <li
-                key={node.path}
+                key={option.key}
                 role="option"
                 aria-selected={i === picker.index}
                 className={i === picker.index ? 'active' : ''}
                 onMouseDown={(e) => {
                   e.preventDefault()
-                  pick(node)
+                  option.pick()
                 }}
               >
-                <Icon name={node.kind === 'pdf' ? 'pdf' : 'page'} />
-                <span>{node.path}</span>
+                <Icon name={option.icon} />
+                <span>{option.text}</span>
+                {option.detail && <span className="muted">{option.detail}</span>}
               </li>
             ))}
           </ul>
@@ -429,7 +464,7 @@ function ChatInput({ chat, busy }: { chat: string; busy: boolean }): React.JSX.E
           ref={ref}
           rows={1}
           value={text}
-          placeholder="Ask Claude, @ to add a file"
+          placeholder="Ask Claude, @ to add a file, / for skills"
           aria-label="Message to Claude"
           onChange={onChange}
           onKeyDown={onKeyDown}

@@ -939,6 +939,11 @@ h2 {
   border-left: 2px solid var(--claude-ink);
 }
 
+.text-box-content {
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
 .text-box-content > :first-child {
   margin-top: 0;
 }
@@ -972,7 +977,9 @@ h2 {
     Consolas,
     monospace;
   resize: none;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-width: thin;
   user-select: text;
 }
 
@@ -2039,6 +2046,11 @@ h2 {
   overflow: hidden;
   text-overflow: ellipsis;
   cursor: pointer;
+}
+
+.claude-picker li .muted {
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .claude-picker li.active,
