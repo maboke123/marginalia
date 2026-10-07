@@ -72,10 +72,17 @@ Claude is built into the places you already work, and it always knows where you 
 - The answer replaces the request right there, using the slide and the text around it. For example `/claude derive this step` under a formula, or `/claude fix the LaTeX in this paragraph`.
 - You can keep typing while it works, run several at once, and cancel with Esc.
 
+**Skills**
+- Type `/` in the chat for longer jobs on the lecture you have open:
+  - `/summary` writes a summary note from the slides, the transcript, your notes and your annotations, linked to the PDF.
+  - `/cleanup` tidies your annotations (typos, LaTeX, layout) without dropping anything you wrote, and adds a **Check:** line where something looks wrong.
+  - `/exercise` turns an exercise session (the chat, your notes and annotations) into a note with the solutions, key takeaways, exam tips and what to redo.
+- Text after the command is passed on, for example `/summary only the part on pruning`.
+
 **Terminal tab**
 - Runs Claude Code inside your vault folder, for bigger jobs like reorganising a course or writing a summary from several lectures.
 
-Claude can only read files inside your vault, and the chat panel cannot run commands.
+Claude can only read files inside your vault. The chat panel cannot run commands: it changes files only through the app (new notes, edits to notes and annotations), and with "ask before editing" on you approve each change.
 
 ## How your files look on disk
 
@@ -95,9 +102,31 @@ Writes are atomic (temp file, then rename), so a crash or power cut does not lea
 
 ## Install
 
-Download `marginalia-<version>-setup.exe` from the releases page and run it. The installer is not signed, so Windows SmartScreen will warn you: choose "More info" and then "Run anyway".
+Windows 11 only. You build the installer yourself from this repository; one command does it.
 
-Windows 11 only.
+1. Install [Git](https://git-scm.com/download/win) and [Node.js](https://nodejs.org) 22 or later. In PowerShell: `winget install Git.Git OpenJS.NodeJS.LTS`, then open a new terminal.
+2. Clone and install:
+
+   ```sh
+   git clone https://github.com/maboke123/marginalia-poc.git marginalia
+   cd marginalia
+   npm ci
+   npm run deploy
+   ```
+
+`npm run deploy` checks the code, builds the installer, starts the built app once off screen to see that it works, then installs Marginalia for your Windows user (no admin rights needed) and starts it. The first run downloads speech to text (about 200 MB) and takes a few minutes. Afterwards the app is in the Start menu.
+
+To update later, in the same folder:
+
+```sh
+git pull
+npm ci
+npm run deploy
+```
+
+Deploying closes a running Marginalia first (it saves everything) and keeps your settings. Your notes are not touched: they live in the vault folder you pick, not in the app.
+
+Optional: to transcribe video or audio files you drop in, install ffmpeg with `winget install Gyan.FFmpeg`. Recording in the app works without it.
 
 ### Setting up Claude
 
@@ -113,11 +142,10 @@ Everything except Claude works offline.
 Requires Node.js 22 or later and npm.
 
 ```sh
-git clone https://github.com/maboke123/marginalia.git
-cd marginalia
-npm install
+npm ci
 npm run dev          # run with hot reload
-npm run build:win    # build the installer into dist/
+npm run build:win    # only build the installer into dist/
+npm run deploy       # build, check and install it (see Install)
 ```
 
 If Electron starts as plain Node (for example inside the VS Code terminal), unset `ELECTRON_RUN_AS_NODE` first.

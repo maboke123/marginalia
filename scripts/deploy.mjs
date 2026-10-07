@@ -1,4 +1,4 @@
-// Builds the installer from the current commit and installs it over the app on this laptop.
+// Builds the installer from the current commit and installs it over the app on this PC.
 // Usage: npm run deploy [-- --no-start]
 import { execFileSync, execSync, spawn } from 'child_process'
 import { existsSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'fs'
@@ -17,6 +17,19 @@ const start = !process.argv.includes('--no-start')
 // VS Code sets this; it would make Electron start as plain Node.
 const env = { ...process.env }
 delete env.ELECTRON_RUN_AS_NODE
+
+if (process.platform !== 'win32') {
+  console.error('Marginalia only runs on Windows.')
+  process.exit(1)
+}
+if (Number(process.versions.node.split('.')[0]) < 22) {
+  console.error(`Node.js 22 or later is needed; this is ${process.version}.`)
+  process.exit(1)
+}
+if (!existsSync(path.join(root, 'node_modules'))) {
+  console.error('Run npm ci first.')
+  process.exit(1)
+}
 
 const run = (cmd) => execSync(cmd, { cwd: root, stdio: 'inherit', env })
 const out = (cmd) => execSync(cmd, { cwd: root, env }).toString().trim()
