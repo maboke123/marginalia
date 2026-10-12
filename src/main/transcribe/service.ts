@@ -17,6 +17,7 @@ import { PARTS, WhisperEngine, type Transcriber } from './engine'
 import { transcribeFile, type FileJob } from './fileJob'
 import { pruneCheckpoints } from './pieces'
 import { LiveSession, timelineName } from './live'
+import { fixMicrophone, type MicFix } from './mic'
 import { audioOf, type SlideMoment } from './transcript'
 import type { Segment } from './transcript'
 
@@ -126,6 +127,11 @@ export function registerTranscription(
   handle('transcribe:status', () => engine.status())
   handle('transcribe:install', (parts: TranscribePart[]) =>
     engine.install(parts, (part, done) => send('transcribe:install-progress', { part, done }))
+  )
+
+  // Tests must not touch the real microphone settings.
+  handle('record:unmuteMic', (): Promise<MicFix[]> =>
+    process.env['MARGINALIA_FAKE_WHISPER'] ? Promise.resolve(['unmuted']) : fixMicrophone()
   )
 
   handle('record:start', async (folder: string, transcribeLive: boolean) => {

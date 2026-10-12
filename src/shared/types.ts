@@ -128,6 +128,8 @@ export interface MarginaliaApi {
     onStatus(listener: (status: RecordingStatus) => void): () => void
     /** The laptop goes to sleep (or wakes up) during a recording. */
     onSleep(listener: () => void): () => void
+    /** Unmutes the default microphone in Windows and turns it up from zero; returns what changed. */
+    unmuteMic(): Promise<('unmuted' | 'raised')[]>
     /** Asks for a video or audio file; null when cancelled. */
     pickRecording(): Promise<string | null>
     /** Queues a recording file for transcription; returns the job id. Progress via onJob. */

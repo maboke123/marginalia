@@ -83,6 +83,7 @@ const api: MarginaliaApi = {
       ipcRenderer.on('record:sleep', handler)
       return () => ipcRenderer.removeListener('record:sleep', handler)
     },
+    unmuteMic: () => invoke('record:unmuteMic'),
     pickRecording: () => invoke('transcribe:pickRecording'),
     transcribeFile: (request) => invoke('transcribe:file', request),
     transcribeRecorded: (request) => invoke('transcribe:recorded', request),

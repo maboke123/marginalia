@@ -27,7 +27,8 @@ export const fakeLog = (env: TestEnv): string => path.join(env.dir, 'claude-log.
 
 export async function launch(
   env: TestEnv,
-  extra: Record<string, string> = {}
+  extra: Record<string, string> = {},
+  args: string[] = []
 ): Promise<{ app: ElectronApplication; page: Page }> {
   // ELECTRON_RUN_AS_NODE is set when this runs from inside VS Code; it would start Electron as plain Node.
   const vars = Object.fromEntries(
@@ -45,7 +46,7 @@ export async function launch(
   )
   // Chromium's fake microphone (a beeping tone) and no permission prompt.
   const media = ['--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream']
-  const app = await electron.launch({ args: ['.', ...media], env: vars })
+  const app = await electron.launch({ args: ['.', ...media, ...args], env: vars })
   const page = await app.firstWindow()
   return { app, page }
 }

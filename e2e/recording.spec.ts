@@ -14,7 +14,8 @@ const row = (name: string): Locator => page.locator('.tree-row', { hasText: name
 
 async function start(
   extra: Record<string, string> = {},
-  settings: Record<string, unknown> = {}
+  settings: Record<string, unknown> = {},
+  args: (env: TestEnv) => Promise<string[]> = async () => []
 ): Promise<void> {
   env = await createEnv()
   const config = path.join(env.userData, 'config.json')
@@ -22,7 +23,7 @@ async function start(
   await fs.writeFile(config, JSON.stringify({ ...current, settings }))
   await fs.mkdir(path.join(env.vault, section), { recursive: true })
   await makeSlides(path.join(env.vault, section, 'slides.pdf'), 3)
-  ;({ app, page } = await launch(env, extra))
+  ;({ app, page } = await launch(env, extra, await args(env)))
   await row('Machine Learning').click()
   await row('B2 Decision trees').click()
   await row('slides.pdf').click()
@@ -283,6 +284,36 @@ test('the recording bar can be hidden, and stays hidden for the next recording',
   await chip.click()
   await expect(bar).toBeVisible()
   await expect(chip).toBeHidden()
+  await bar.getByRole('button', { name: 'Stop' }).click()
+})
+
+test('a muted microphone shows a warning with Unmute, also with the bar hidden', async () => {
+  // A muted microphone in Windows records only zeros: the fake microphone plays a silent file.
+  const silence = async (e: TestEnv): Promise<string[]> => {
+    const wav = Buffer.alloc(44 + 16_000 * 2 * 5)
+    wav.write('RIFF', 0)
+    wav.writeUInt32LE(wav.length - 8, 4)
+    wav.write('WAVEfmt ', 8)
+    wav.writeUInt32LE(16, 16)
+    wav.writeUInt16LE(1, 20)
+    wav.writeUInt16LE(1, 22)
+    wav.writeUInt32LE(16_000, 24)
+    wav.writeUInt32LE(32_000, 28)
+    wav.writeUInt16LE(2, 32)
+    wav.writeUInt16LE(16, 34)
+    wav.write('data', 36)
+    wav.writeUInt32LE(wav.length - 44, 40)
+    const file = path.join(e.dir, 'silence.wav')
+    await fs.writeFile(file, wav)
+    return [`--use-file-for-fake-audio-capture=${file}`]
+  }
+  await start({}, { recordingBar: false }, silence)
+  const bar = page.getByRole('status', { name: 'Recording', exact: true })
+  await page.keyboard.press('Control+Shift+R')
+  await expect(bar).toContainText('No sound from the microphone', { timeout: 10_000 })
+  await page.screenshot({ path: path.join('test-results', 'recording-muted.png') })
+  await bar.getByRole('button', { name: 'Unmute' }).click()
+  await expect(page.getByText('Microphone turned on in Windows')).toBeVisible()
   await bar.getByRole('button', { name: 'Stop' }).click()
 })
 

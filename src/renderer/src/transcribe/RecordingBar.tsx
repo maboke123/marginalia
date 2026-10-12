@@ -24,6 +24,7 @@ export function RecordingBar(): React.JSX.Element | null {
   const language = useApp((s) => s.settings.transcribeLanguage)
   const live = useApp((s) => s.settings.transcribeLive)
   const shown = useApp((s) => s.settings.recordingBar)
+  const silent = useRecording((s) => s.micSilent)
 
   if (preparing !== null) {
     return (
@@ -32,8 +33,8 @@ export function RecordingBar(): React.JSX.Element | null {
       </div>
     )
   }
-  // A failure still shows, also when the bar is hidden.
-  if (!active || (!shown && !status?.error)) return null
+  // A failure or a silent microphone still shows, also when the bar is hidden.
+  if (!active || (!shown && !status?.error && !silent)) return null
   const pending = status?.pending ?? 0
   const progress = stopping
     ? 'Finishing...'
@@ -52,9 +53,18 @@ export function RecordingBar(): React.JSX.Element | null {
       <span className="recording-level" aria-hidden>
         <span style={{ width: `${Math.round(level * 100)}%` }} />
       </span>
-      <span className={status?.error ? 'recording-progress error' : 'recording-progress'}>
-        {status?.error ? `Transcription failed: ${status.error}` : progress}
-      </span>
+      {silent ? (
+        <span className="recording-progress error">
+          No sound from the microphone. Is it muted?{' '}
+          <button className="text-button" onClick={() => void useRecording.getState().unmute()}>
+            Unmute
+          </button>
+        </span>
+      ) : (
+        <span className={status?.error ? 'recording-progress error' : 'recording-progress'}>
+          {status?.error ? `Transcription failed: ${status.error}` : progress}
+        </span>
+      )}
       <label
         className="recording-live"
         title="Transcribe while recording. Uses more battery and can make the laptop warm."

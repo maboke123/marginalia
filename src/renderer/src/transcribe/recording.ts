@@ -21,6 +21,8 @@ interface RecordingState {
   status: RecordingStatus | null
   /** Microphone loudness, 0 to 1. */
   level: number
+  /** The microphone has given no sound at all for a few seconds: probably muted. */
+  micSilent: boolean
   stopping: boolean
   /** Percent of a download of missing parts before recording starts (only in development). */
   preparing: number | null
@@ -29,6 +31,8 @@ interface RecordingState {
   stop(): Promise<void>
   /** The window is closing: keep the audio, do not wait for the transcript to catch up. */
   abandon(): Promise<void>
+  /** Unmutes the microphone in Windows (and turns it up when it is at zero). */
+  unmute(): Promise<void>
 }
 
 /** The lesson being worked on: the folder of the slides or note on screen. */
@@ -98,6 +102,7 @@ export const useRecording = create<RecordingState>((set, get) => {
     active: null,
     status: null,
     level: 0,
+    micSilent: false,
     stopping: false,
     preparing: null,
 
@@ -158,10 +163,16 @@ export const useRecording = create<RecordingState>((set, get) => {
             await session
             await window.api.transcribe.audio(data)
           },
-          onLevel: (level) => set({ level })
+          onLevel: (level) => set({ level }),
+          onSilent: (micSilent) => set({ micSilent })
         })
       } catch (err) {
-        showError(`Could not use the microphone: ${(err as Error).message}`)
+        const blocked = ['NotAllowedError', 'NotReadableError', 'NotFoundError']
+        showError(
+          blocked.includes((err as Error).name)
+            ? 'No microphone to record with. Check that one is connected and that Windows allows it (Settings > Privacy & security > Microphone)'
+            : `Could not use the microphone: ${(err as Error).message}`
+        )
         return
       }
       try {
@@ -202,13 +213,28 @@ export const useRecording = create<RecordingState>((set, get) => {
       } catch (err) {
         useApp.getState().showError(`Recording did not stop cleanly: ${(err as Error).message}`)
       } finally {
-        set({ active: null, stopping: false, level: 0 })
+        set({ active: null, stopping: false, level: 0, micSilent: false })
       }
     },
 
     async abandon() {
       await microphone?.stop().catch(() => undefined)
       microphone = null
+    },
+
+    async unmute() {
+      const { showNotice, showError } = useApp.getState()
+      try {
+        const fixed = await window.api.transcribe.unmuteMic()
+        if (fixed.length) showNotice('Microphone turned on in Windows')
+        else {
+          showError(
+            'Windows has the microphone on. Check the mute key or switch on the laptop, or Settings > Privacy > Microphone'
+          )
+        }
+      } catch (err) {
+        showError(`Could not turn on the microphone: ${(err as Error).message}`)
+      }
     }
   }
 })

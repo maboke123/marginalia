@@ -1,4 +1,5 @@
 import { Chunker, RATE, type Chunk } from './chunker'
+import { SilenceWatch } from './silence'
 
 export interface Microphone {
   /** Stops recording; resolves once the last audio and the last chunk were handed over. */
@@ -12,6 +13,8 @@ export interface MicrophoneHandlers {
   onAudio(data: Uint8Array): Promise<void>
   /** Loudness from 0 to 1, about ten times a second, for the level meter. */
   onLevel(level: number): void
+  /** The microphone went silent (muted?) or gives sound again. */
+  onSilent(silent: boolean): void
 }
 
 // Speech stays clear at this rate and an hour is about 15 MB.
@@ -42,11 +45,17 @@ export async function startMicrophone(handlers: MicrophoneHandlers): Promise<Mic
   source.connect(capture).connect(mute).connect(context.destination)
 
   const chunker = new Chunker()
+  const watch = new SilenceWatch()
+  const [track] = stream.getAudioTracks()
+  let silent = false
   capture.onaudioprocess = (e) => {
     const block = new Float32Array(e.inputBuffer.getChannelData(0))
     let sum = 0
     for (let i = 0; i < block.length; i++) sum += block[i] * block[i]
-    handlers.onLevel(Math.min(1, Math.sqrt(sum / block.length) * 4))
+    const rms = Math.sqrt(sum / block.length)
+    handlers.onLevel(Math.min(1, rms * 4))
+    const now = watch.push(rms, block.length / RATE) || track.muted
+    if (now !== silent) handlers.onSilent((silent = now))
     for (const chunk of chunker.push(block)) handlers.onChunk(chunk)
   }
 
