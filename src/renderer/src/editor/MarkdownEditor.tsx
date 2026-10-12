@@ -16,6 +16,7 @@ import { foldedHeadings, loadFolds, refold, saveFolds } from './folding'
 import { resolveLink } from './links'
 import { headingPath } from './sections'
 import { editorExtensions } from './setup'
+import { readZoom, saveZoom, zoomByWheel, zoomStep } from './zoom'
 
 /** Marks a change that came from disk, so it is not saved straight back. */
 const fromDisk = Annotation.define<boolean>()
@@ -33,6 +34,32 @@ export function MarkdownEditor({
   const slidesFile = useApp((s) => s.slidesFile)
   const toggleLecture = useApp((s) => s.toggleLecture)
   const beingWritten = useRecording((s) => s.active?.transcript === path)
+  const [zoom, setZoom] = useState(readZoom)
+
+  useEffect(() => saveZoom(zoom), [zoom])
+
+  // Ctrl+wheel is attached by hand: React's wheel listener is passive and cannot stop the
+  // page zoom (same as the PDF viewer).
+  useEffect(() => {
+    const host = hostRef.current
+    if (!host) return
+    const onWheel = (e: WheelEvent): void => {
+      if (!e.ctrlKey || e.deltaY === 0) return
+      e.preventDefault()
+      setZoom((z) => zoomByWheel(z, e.deltaY))
+    }
+    host.addEventListener('wheel', onWheel, { passive: false })
+    return () => host.removeEventListener('wheel', onWheel)
+  }, [])
+
+  const onZoomKey = (e: React.KeyboardEvent): void => {
+    if (!e.ctrlKey) return
+    if (e.key === '+' || e.key === '=') setZoom((z) => zoomStep(z, 1))
+    else if (e.key === '-') setZoom((z) => zoomStep(z, -1))
+    else if (e.key === '0') setZoom(1)
+    else return
+    e.preventDefault()
+  }
 
   useEffect(() => {
     const api = window.api.vault
@@ -219,7 +246,12 @@ export function MarkdownEditor({
       {error ? (
         <p className="pdf-message">Could not open this note: {error}</p>
       ) : (
-        <div className="md-editor" ref={hostRef} />
+        <div
+          className="md-editor"
+          ref={hostRef}
+          style={{ '--note-zoom': zoom } as React.CSSProperties}
+          onKeyDown={onZoomKey}
+        />
       )}
     </div>
   )

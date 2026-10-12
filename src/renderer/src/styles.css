@@ -1294,7 +1294,7 @@ h2 {
 
 .md-editor .cm-scroller {
   font-family: var(--font);
-  font-size: 15px;
+  font-size: calc(15px * var(--note-zoom, 1));
   line-height: 1.65;
   user-select: text;
 }
