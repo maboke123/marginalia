@@ -1,6 +1,7 @@
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { EFFORTS, MODELS, type EffortChoice, type ModelChoice } from '../../../shared/claude'
 import type { VaultNode } from '../../../shared/types'
+import { ContextMenu } from '../components/ContextMenu'
 import { Icon, type IconName } from '../components/Icon'
 import { resolveLink } from '../editor/links'
 import { RenderedHtml } from '../components/RenderedHtml'
@@ -9,6 +10,7 @@ import { findNode } from '../lib/tree'
 import { useApp } from '../store'
 import { chatOf, useChat, type Message, type Part } from './chat'
 import { currentChips } from './context'
+import { selectedText } from './selectedText'
 import { SKILLS } from './skills'
 import { TerminalView } from './TerminalView'
 
@@ -180,6 +182,7 @@ function MessageList({
 }): React.JSX.Element {
   const ref = useRef<HTMLDivElement>(null)
   const pinned = useRef(true)
+  const [menu, setMenu] = useState<{ x: number; y: number; text: string } | null>(null)
 
   // Follow the answer as it streams in, unless I scrolled up to read something.
   useLayoutEffect(() => {
@@ -211,11 +214,44 @@ function MessageList({
     if (target_ && findNode(nodes, target_.path)) openFile(target_.path, target_.page ?? undefined)
   }
 
+  /** Text selected in the messages, or "" when the selection is elsewhere or empty. */
+  const selected = (): string => {
+    const selection = window.getSelection()
+    if (!selection || selection.isCollapsed || !ref.current?.contains(selection.anchorNode)) {
+      return ''
+    }
+    return selectedText(selection.getRangeAt(0))
+  }
+
+  // Selected text goes along with the next question as a chip, since clicking into the input
+  // ends the selection. Ctrl+C or the right-click menu copies it.
+  const onMouseUp = (e: React.MouseEvent): void => {
+    if (e.button !== 0) return
+    useChat.getState().quote(selected() || null)
+  }
+
+  const onCopy = (e: React.ClipboardEvent): void => {
+    const text = selected()
+    if (!text) return
+    e.preventDefault()
+    e.clipboardData.setData('text/plain', text)
+  }
+
+  const onContextMenu = (e: React.MouseEvent): void => {
+    const text = selected()
+    if (!text) return
+    e.preventDefault()
+    setMenu({ x: e.clientX, y: e.clientY, text })
+  }
+
   return (
     <div
       className="claude-messages"
       ref={ref}
       onClick={onClick}
+      onMouseUp={onMouseUp}
+      onContextMenu={onContextMenu}
+      onCopy={onCopy}
       onScroll={(e) => {
         const el = e.currentTarget
         pinned.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40
@@ -230,6 +266,27 @@ function MessageList({
       {messages.map((m, i) => (
         <MessageView key={m.id} message={m} streaming={running && i === messages.length - 1} />
       ))}
+      {menu && (
+        <ContextMenu
+          x={menu.x}
+          y={menu.y}
+          onClose={() => setMenu(null)}
+          items={[
+            {
+              label: 'Copy',
+              hint: 'Ctrl+C',
+              onSelect: () => void navigator.clipboard.writeText(menu.text)
+            },
+            {
+              label: 'Ask about this',
+              onSelect: () => {
+                useChat.getState().quote(menu.text)
+                document.querySelector<HTMLTextAreaElement>('.claude-input textarea')?.focus()
+              }
+            }
+          ]}
+        />
+      )}
     </div>
   )
 }
@@ -320,8 +377,9 @@ function ChatInput({ chat, busy }: { chat: string; busy: boolean }): React.JSX.E
   useApp((s) => s.pdfSelection)
   useApp((s) => s.noteCursor)
   const attached = useChat((s) => s.attached)
+  const quoted = useChat((s) => s.quoted)
   const removed = useChat((s) => s.removedChips)
-  const chips = currentChips(attached).filter((c) => !removed.includes(c.id))
+  const chips = currentChips(attached, quoted).filter((c) => !removed.includes(c.id))
 
   const matches = useMemo((): Option[] => {
     if (!picker) return []

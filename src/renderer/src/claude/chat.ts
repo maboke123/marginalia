@@ -37,6 +37,8 @@ interface ChatState {
   removedChips: string[]
   /** Files added with @ for the next message. */
   attached: string[]
+  /** Text I selected in the chat, sent along with the next message. */
+  quoted: string | null
 
   setOpen(open: boolean): void
   load(chat: string): Promise<void>
@@ -45,6 +47,7 @@ interface ChatState {
   newChat(chat: string): Promise<void>
   removeChip(id: string): void
   attach(path: string): void
+  quote(text: string | null): void
   loadSettings(): Promise<void>
   saveSettings(update: ClaudeSettingsUpdate): Promise<void>
   /**
@@ -192,6 +195,7 @@ export const useChat = create<ChatState>((set, get) => {
     settings: null,
     removedChips: [],
     attached: [],
+    quoted: null,
 
     setOpen(open) {
       set({ open })
@@ -218,8 +222,8 @@ export const useChat = create<ChatState>((set, get) => {
 
     async send(chat, question) {
       if (get().running || !question.trim()) return
-      const { removedChips, attached } = get()
-      const chips = currentChips(attached).filter((c) => !removedChips.includes(c.id))
+      const { removedChips, attached, quoted } = get()
+      const chips = currentChips(attached, quoted).filter((c) => !removedChips.includes(c.id))
       update(chat, (c) => ({
         ...c,
         messages: [
@@ -233,7 +237,7 @@ export const useChat = create<ChatState>((set, get) => {
           { id: id(), role: 'assistant', parts: [] }
         ]
       }))
-      set({ running: chat, removedChips: [], attached: [] })
+      set({ running: chat, removedChips: [], attached: [], quoted: null })
       try {
         const lastImage = get().chats[chat]?.lastImage ?? null
         const packet = await buildPacket(chat, chips, question.trim(), lastImage)
@@ -263,6 +267,13 @@ export const useChat = create<ChatState>((set, get) => {
         attached: attached.includes(path) ? attached : [...attached, path],
         removedChips: removedChips.filter((c) => c !== `file:${path}`)
       })
+    },
+
+    quote(text) {
+      set((s) => ({
+        quoted: text,
+        removedChips: s.removedChips.filter((c) => c !== 'chat-selection')
+      }))
     },
 
     async loadSettings() {

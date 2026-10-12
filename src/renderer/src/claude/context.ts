@@ -23,7 +23,7 @@ const short = (text: string, n = 32): string =>
   text.length > n ? `${text.slice(0, n).trimEnd()}...` : text
 
 /** What would go to Claude with the next message: whatever is visible now, plus @ files. */
-export function currentChips(attached: string[]): Chip[] {
+export function currentChips(attached: string[], quoted: string | null = null): Chip[] {
   const { pdfView, pdfSelection, noteCursor } = useApp.getState()
   const chips: Chip[] = []
   if (pdfView) {
@@ -56,6 +56,10 @@ export function currentChips(attached: string[]): Chip[] {
         title: 'Text selected in the summary'
       })
     }
+  }
+  if (quoted) {
+    // The whole text as the title: buildPacket sends it from there.
+    chips.push({ id: 'chat-selection', label: `“${short(quoted)}”`, title: quoted })
   }
   for (const path of attached) {
     chips.push({ id: `file:${path}`, label: `@${fileName(path)}`, title: path })
@@ -194,6 +198,9 @@ export async function buildPacket(
   if (ids.has('summary-selection') && noteCursor?.selection.trim()) {
     lines.push(`Selected in the summary: "${noteCursor.selection.trim()}"`)
   }
+
+  const quoted = chips.find((c) => c.id === 'chat-selection')
+  if (quoted) lines.push(`Selected in this chat: "${quoted.title}"`)
 
   const files = chips.filter((c) => c.id.startsWith('file:')).map((c) => c.title)
   if (files.length) lines.push(`I attached these files; read them as needed: ${files.join(', ')}`)

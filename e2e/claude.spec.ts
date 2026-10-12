@@ -119,6 +119,42 @@ test('answers about the slide on screen, with that slide sent along', async () =
   await page.screenshot({ path: path.join('test-results', 'claude-panel.png') })
 })
 
+test('text in the chat can be selected, copied and asked about', async () => {
+  await openSlides(3)
+  await ask('Explain this formula')
+  const answer = answers().locator('p').first()
+  await expect(answer).toContainText('information gain')
+
+  // The clipboard is the real one of this laptop: put back what was on it.
+  const saved = await app.evaluate(({ clipboard }) => clipboard.readText())
+  try {
+    // Drag over the whole answer; its formula is copied as LaTeX, not as KaTeX's letters.
+    const box = (await answer.boundingBox())!
+    await page.mouse.move(box.x + 1, box.y + 4)
+    await page.mouse.down()
+    await page.mouse.move(box.x + box.width - 1, box.y + box.height - 4, { steps: 5 })
+    await page.mouse.up()
+    const selected = 'This is the information gain formula: $IG(S,t) = H(S) - \\sum_v'
+    await page.keyboard.press('Control+C')
+    await expect
+      .poll(() => app.evaluate(({ clipboard }) => clipboard.readText()))
+      .toContain(selected)
+
+    await answer.click({ button: 'right', position: { x: 2, y: 4 } })
+    await expect(page.getByRole('menuitem', { name: /Copy/ })).toBeVisible()
+    await page.getByRole('menuitem', { name: 'Ask about this' }).click()
+    await expect(page.getByRole('textbox', { name: 'Message to Claude' })).toBeFocused()
+    await expect(page.locator('.chip', { hasText: '“' })).toHaveCount(1)
+    await ask('Why is that?')
+    await expect(answers()).toHaveCount(2)
+    const [, second] = await readLog()
+    expect(second.text).toContain(`Selected in this chat: "${selected}`)
+    await expect(page.locator('.chip', { hasText: '“' })).toHaveCount(0)
+  } finally {
+    await app.evaluate(({ clipboard }, text) => clipboard.writeText(text), saved)
+  }
+})
+
 test('adds to the summary under a heading after Accept, and one undo removes it', async () => {
   await openSlides()
   await page.keyboard.press('Control+Shift+M')
