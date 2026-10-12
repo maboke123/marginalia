@@ -1,4 +1,4 @@
-import { memo, useCallback, useContext, useMemo, useRef, useState } from 'react'
+import { memo, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { useStore } from 'zustand'
 import type { PDFDocumentProxy } from 'pdfjs-dist'
 import type { AnnotationPages, PageImage, Stroke, TextBox } from '../../../shared/annotations'
@@ -30,7 +30,7 @@ import {
 } from './geometry'
 import { applyChanges, planWrite, type WriteAnswer } from '../claude/writePlan'
 import { openPdf } from '../lib/open'
-import { measurer, placeFitted, planFit, type FitPage } from './fit'
+import { placeFitted, planBox, type FitPage } from './fit'
 import { GhostView } from './GhostView'
 import { ImageView } from './ImageView'
 import { imagePath, resizeImage } from './images'
@@ -428,13 +428,39 @@ function AnnotatedOverlay({
   )
 
   /**
-   * After Claude wrote in a box: as wide as it needs to end above the page bottom, or on a new
-   * blank page below at full width when it is too long for that.
+   * After Claude wrote in a box: as wide as it needs to end above the page bottom, moved up, or
+   * on a new blank page below at full width when it is too long for that.
    */
   function fitted(pages: AnnotationPages, box: TextBox): AnnotationPages {
-    const measure = measurer(box.markdown, box.fontSize ?? DEFAULT_TEXT_SIZE * unit)
-    return placeFitted(pages, number, box, planFit(box, fitPage, measure), fitPage)
+    const plan = planBox(pages, number, box, fitPage, DEFAULT_TEXT_SIZE * unit)
+    // Already on a blank page, where a next one has no more room: at the top, full width.
+    if (plan.kind === 'blank' && blank) {
+      const top = { kind: 'fits' as const, width: plan.width, y: plan.y }
+      return placeFitted(pages, number, { ...box, x: plan.x }, top, fitPage)
+    }
+    return placeFitted(pages, number, box, plan, fitPage)
   }
+
+  // Claude's boxes as read from disk (the terminal can write the annotation file) get the
+  // same fit, once, when the page shows them. Boxes changed since loading are left alone.
+  const checked = useRef(new Set<TextBox>())
+  useEffect(() => {
+    const { loaded, pages } = doc.getState()
+    const fromDisk = new Set(pageOf(loaded, number).textBoxes)
+    for (const box of page.textBoxes) {
+      if (box.author !== 'claude' || !fromDisk.has(box) || checked.current.has(box)) continue
+      checked.current.add(box)
+      const plan = planBox(pages, number, box, fitPage, DEFAULT_TEXT_SIZE * unit)
+      if (plan.kind === 'fits' && plan.width === box.width && plan.y === box.y) continue
+      if (plan.kind === 'blank' && blank) continue
+      doc
+        .getState()
+        .change((p) =>
+          findItem(p, { page: number, kind: 'textBoxes', id: box.id }) === box ? fitted(p, box) : p
+        )
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page.textBoxes, fitPage])
 
   function commitBox(box: TextBox, markdown: string, claudeWrote: boolean): void {
     const state = doc.getState()

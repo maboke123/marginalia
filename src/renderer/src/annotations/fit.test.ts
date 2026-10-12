@@ -26,17 +26,44 @@ describe('fitWidth', () => {
 })
 
 describe('planFit', () => {
-  it('moves text that cannot fit to a blank page, using its whole width', () => {
+  it('moves a box up at the full width before it changes page', () => {
+    // 117 wide at x=500 is 256.4 tall: it ends 8 above the bottom from y=135.59.
     expect(planFit({ x: 500, y: 300, width: 100 }, page, area)).toEqual({
+      kind: 'fits',
+      width: 117,
+      y: 135.59
+    })
+  })
+
+  it('does not move up over a box above it, but goes to a blank page at full width', () => {
+    const above = { x: 500, y: 10, width: 117, height: 200 }
+    expect(planFit({ x: 500, y: 300, width: 100 }, page, area, [above])).toEqual({
       kind: 'blank',
       x: 8,
       y: 8,
       width: 609
     })
+    // A box beside it is no obstacle.
+    const beside = { x: 10, y: 10, width: 200, height: 380 }
+    expect(planFit({ x: 500, y: 300, width: 100 }, page, area, [beside]).kind).toBe('fits')
   })
 
-  it('keeps a box that fits where it is', () => {
-    expect(planFit({ x: 10, y: 10, width: 200 }, page, area)).toEqual({ kind: 'fits', width: 200 })
+  it('moves text too long for the whole page to a blank page', () => {
+    const long: Measure = (width) => 120_000 / width
+    expect(planFit({ x: 500, y: 300, width: 100 }, page, long).kind).toBe('blank')
+  })
+
+  it('keeps a box that fits where it is, but not past the right edge', () => {
+    expect(planFit({ x: 10, y: 10, width: 200 }, page, area)).toEqual({
+      kind: 'fits',
+      width: 200,
+      y: 10
+    })
+    expect(planFit({ x: 400, y: 10, width: 400 }, page, area)).toEqual({
+      kind: 'fits',
+      width: 217,
+      y: 10
+    })
   })
 })
 
@@ -48,15 +75,15 @@ describe('placeFitted', () => {
   }
 
   it('puts the box on a new blank page right below the slide', () => {
-    const plan = planFit(box, page, area)
+    const plan = planFit(box, page, (width) => 120_000 / width)
     const next = placeFitted(pages, 3, box, plan, page)
     expect(next['3']).toBeUndefined()
     expect(next['3.1'].textBoxes).toEqual([{ ...box, x: 8, y: 8, width: 609 }])
     expect(next['3.2'].textBoxes[0].id).toBe('t_2')
   })
 
-  it('widens a box that fits once it is wider', () => {
-    const next = placeFitted(pages, 3, box, { kind: 'fits', width: 117 }, page)
-    expect(next['3'].textBoxes[0].width).toBe(117)
+  it('widens and moves up a box that fits that way', () => {
+    const next = placeFitted(pages, 3, box, { kind: 'fits', width: 117, y: 136 }, page)
+    expect(next['3'].textBoxes[0]).toMatchObject({ width: 117, y: 136 })
   })
 })

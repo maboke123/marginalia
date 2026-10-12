@@ -112,8 +112,10 @@ export function appToolServer(sdk: Sdk, call: CallTool): McpSdkServerConfigWithI
       'add_text_annotation',
       'Puts a Markdown text box on a slide or blank page. Without x and y it goes in the margin ' +
         'to the right of the page, under any boxes already there. x, y and width are PDF points ' +
-        'from the top-left. The box gets wider by itself when its text would run past the ' +
-        'bottom of the page; when it cannot fit at all you get an error with the room there is.',
+        'from the top-left. It is fitted by itself: wider up to the page edge, or moved up, when ' +
+        'its text would run past the bottom of the page; when it cannot fit at all you get an ' +
+        'error with where it goes on a blank page. On a blank page use one box at the full ' +
+        'width, not columns.',
       {
         file: pdf,
         page: annotationPage,
@@ -148,7 +150,9 @@ export function appToolServer(sdk: Sdk, call: CallTool): McpSdkServerConfigWithI
       'edit_annotation',
       'Changes one annotation by id (from list_annotations): a text box its Markdown, x, y, ' +
         'width, font_size or color; a highlight its color or style; a stroke or image its x and ' +
-        'y (top-left), and width for an image. to_page moves it to another page or blank page.',
+        'y (top-left), and width for an image. to_page moves it to another page or blank page. ' +
+        'A text box is fitted on its page like add_text_annotation. Change font_size only when ' +
+        'I ask; it never goes below the default size, so to make text fit, move it instead.',
       {
         file: pdf,
         page: annotationPage,

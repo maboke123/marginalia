@@ -31,7 +31,7 @@ import {
 } from '../annotations/doc'
 import { round, strokeBounds, translateStroke } from '../annotations/geometry'
 import { findTextRects } from '../annotations/findText'
-import { fitWidth, measurer, widestAt } from '../annotations/fit'
+import { measurer, planBox } from '../annotations/fit'
 import { marginSlot } from '../annotations/margin'
 import { pendingEdit, setPendingEdit } from '../editor/proposal'
 import { blockInsert, endOfContent, findSection, headings } from '../editor/sections'
@@ -208,27 +208,25 @@ async function showPdf(path: string, page: number): Promise<OpenPdf & { doc: Ann
 const REJECTED = 'I rejected this change; nothing was changed. Do not try again unless I ask.'
 
 /**
- * Makes a text box as wide as it needs to be for its text to end above the bottom of the page,
- * or explains how much room there is, so Claude can shorten it or use a blank page.
+ * Fits a text box on its page at its font size, like a /claude answer: as wide as it needs up
+ * to the page edge, else moved up (not over the boxes above it). When it cannot fit at all,
+ * explains the room on a blank page, so Claude moves it there instead of shrinking the text.
  */
-function fitOnPage(open: OpenPdf, page: number, box: TextBox): TextBox {
+function fitOnPage(open: OpenPdf & { doc: AnnotationDoc }, page: number, box: TextBox): TextBox {
   const size = open.sizes[slideOf(page) - 1]
   const unit = pageUnit(size.width)
   const fitPage = { width: size.width * (1 + open.margin), height: size.height, gap: 8 * unit }
-  const measure = measurer(box.markdown, box.fontSize ?? DEFAULT_TEXT_SIZE * unit)
-  const width = fitWidth(box, fitPage, measure)
-  if (width !== null) return { ...box, width }
+  const font = DEFAULT_TEXT_SIZE * unit
+  const plan = planBox(open.doc.getState().pages, page, box, fitPage, font)
+  if (plan.kind === 'fits') return { ...box, width: plan.width, y: plan.y }
   const n = Math.round
-  const { gap } = fitPage
-  const widest = widestAt(box, fitPage)
-  const full = fitPage.width - 2 * gap
+  const tall = n(measurer(box.markdown, box.fontSize ?? font, true)(plan.width))
+  const room = n(size.height - 2 * fitPage.gap)
   throw new ToolError(
-    `This text does not fit on page ${page}: even ${n(widest)} points wide (to the page edge) ` +
-      `it is ${n(measure(widest))} points tall, and ${n(fitPage.height - box.y - gap)} fit ` +
-      `below y=${n(box.y)}. The page with its margin is ${n(fitPage.width)}x${n(size.height)} ` +
-      'points. Shorten it, start it higher, or put it on a blank page (add_blank_page) at ' +
-      `x=${n(gap)}, y=${n(gap)}, width=${n(full)}, where it is ${n(measure(full))} points tall; ` +
-      `split it over more blank pages if that is more than ${n(size.height - 2 * gap)}.`
+    `This text does not fit on page ${page}, not even moved up at the full width of the margin. ` +
+      'Do not make the font smaller. Put it on a blank page (add_blank_page) as one box at ' +
+      `x=${n(plan.x)}, y=${n(plan.y)}, width=${n(plan.width)}: there it is ${tall} points tall ` +
+      `and ${room} fit${tall > room ? ', so split it over two blank pages at a heading' : ''}.`
   )
 }
 
@@ -510,7 +508,13 @@ const TOOLS: Record<string, (args: Args) => Promise<Result>> = {
         x: n('x') ?? box.x,
         y: n('y') ?? box.y,
         width: Math.max(20, n('width') ?? box.width),
-        ...(n('font_size') !== undefined && { fontSize: Math.max(4, n('font_size')!) }),
+        // Smaller than the default only makes text hard to read; moving it makes room instead.
+        ...(n('font_size') !== undefined && {
+          fontSize: Math.max(
+            round(DEFAULT_TEXT_SIZE * pageUnit(open.sizes[slideOf(to) - 1].width)),
+            n('font_size')!
+          )
+        }),
         ...(color && { color })
       }
       if (!next.markdown) {
@@ -587,8 +591,13 @@ const TOOLS: Record<string, (args: Args) => Promise<Result>> = {
     )
     const { width, height } = open.sizes[slideOf(below) - 1]
     const size = `${Math.round(width)}x${Math.round(height)} points`
+    const gap = 8 * pageUnit(width)
+    const full = Math.round(width * (1 + open.margin) - 2 * gap)
     return {
-      text: `Added blank page ${planned.id} (${size}). Write on it with page ${planned.id}.`
+      text:
+        `Added blank page ${planned.id} (${size}, ${full + Math.round(2 * gap)} wide with the margin). ` +
+        `Write on it with page ${planned.id}: one text box at x=${Math.round(gap)}, ` +
+        `y=${Math.round(gap)}, width=${full} uses the whole page; no columns.`
     }
   },
 

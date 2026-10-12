@@ -940,6 +940,10 @@ h2 {
 }
 
 .text-box-content {
+  /* Formulas (fractions, subscripts) reach below the last line; without this room they made a
+     scrollbar on boxes that fit. The margin keeps the box as tall as its text. */
+  margin-bottom: -0.4em;
+  padding-bottom: 0.4em;
   overflow-y: auto;
   scrollbar-width: thin;
 }

@@ -377,6 +377,25 @@ test('/claude in a text box keeps its answer when I click away to start another 
   await expect.poll(boxes).toEqual(['Later: $\\alpha^* = \\arg\\min_\\alpha L(\\alpha)$'])
 })
 
+test('a box Claude wrote into the file past the page bottom moves up when the slides open', async () => {
+  // The terminal tab can write the annotation file directly, without the app fitting the box.
+  const sidecar = path.join(env.vault, `${pdfRel}.annotations.json`)
+  const markdown = Array.from({ length: 12 }, (_, i) => `- Step ${i + 1} of the proof`).join('\n')
+  const box = { id: 't_term', x: 972, y: 480, width: 300, markdown, author: 'claude' }
+  const pages = { '1': { strokes: [], highlights: [], textBoxes: [box] } }
+  await fs.writeFile(sidecar, JSON.stringify({ version: 1, pdf: 'slides.pdf', pages }))
+  await openSlides()
+
+  const shown = page.locator('.pdf-page[data-page="1"] .text-box')
+  await expect(shown).toContainText('Step 12')
+  const saved = async (): Promise<{ y: number; fontSize?: number }> =>
+    JSON.parse(await fs.readFile(sidecar, 'utf8')).pages['1'].textBoxes[0]
+  await expect.poll(async () => (await saved()).y).toBeLessThan(300)
+  expect((await saved()).fontSize).toBeUndefined()
+  const content = shown.locator('.text-box-content')
+  expect(await content.evaluate((el) => el.scrollHeight <= el.clientHeight)).toBe(true)
+})
+
 test('a /claude answer too long for the slide moves to a new blank page', async () => {
   await openSlides()
   const sidecar = path.join(env.vault, `${pdfRel}.annotations.json`)

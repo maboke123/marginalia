@@ -1,7 +1,7 @@
-import type { AnnotationPages, TextBox } from '../../../shared/annotations'
+import type { AnnotationPages, PageAnnotations, TextBox } from '../../../shared/annotations'
 import { insertBlankPage } from '../../../shared/blankPages'
 import { renderMarkdown } from '../lib/markdown'
-import { moveToPage, replaceItem } from './doc'
+import { moveToPage, pageOf, replaceItem } from './doc'
 import { round } from './geometry'
 
 /** Height of a text box (in PDF points) given its width. */
@@ -15,8 +15,17 @@ export interface FitPage {
   gap: number
 }
 
+/** Another box on the page, in PDF points. */
+export interface Rect {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
 export type FitPlan =
-  | { kind: 'fits'; width: number }
+  /** Fits on the page at this width, at its own spot or moved up to y. */
+  | { kind: 'fits'; width: number; y: number }
   /** Does not fit below its spot even at the widest: goes on a new blank page, full width. */
   | { kind: 'blank'; x: number; y: number; width: number }
 
@@ -44,11 +53,26 @@ export function fitWidth(box: Spot, page: FitPage, measure: Measure): number | n
   return Math.ceil(high)
 }
 
-/** Where a box Claude wrote in goes so all of its text can be read on paper. */
-export function planFit(box: Spot, page: FitPage, measure: Measure): FitPlan {
-  const width = fitWidth(box, page, measure)
-  if (width !== null) return { kind: 'fits', width }
+/**
+ * Where a box Claude wrote in goes so all of its text can be read on paper, at its own font
+ * size: as wide as needed at its spot; else as wide as it gets, moved up just enough (but not
+ * over the boxes above it); else on a new blank page at the full width.
+ */
+export function planFit(spot: Spot, page: FitPage, measure: Measure, others: Rect[] = []): FitPlan {
   const { gap } = page
+  // Not past the right edge of the page either.
+  const box = {
+    ...spot,
+    width: Math.min(spot.width, Math.max(20, round(page.width - spot.x - gap)))
+  }
+  const width = fitWidth(box, page, measure)
+  if (width !== null) return { kind: 'fits', width, y: box.y }
+  const widest = widestAt(box, page)
+  const top = page.height - gap - measure(widest)
+  const above = others
+    .filter((o) => o.y < box.y && o.x < box.x + widest && o.x + o.width > box.x)
+    .map((o) => o.y + o.height + gap)
+  if (top >= Math.max(gap, ...above)) return { kind: 'fits', width: widest, y: round(top) }
   return { kind: 'blank', x: round(gap), y: round(gap), width: round(page.width - 2 * gap) }
 }
 
@@ -56,11 +80,12 @@ export function planFit(box: Spot, page: FitPage, measure: Measure): FitPlan {
  * Measures a text box the way the overlay draws it. Everything in the overlay is laid out in
  * PDF points (the scale is a transform), so a hidden copy anywhere gives the same height.
  */
-export function measurer(markdown: string, fontSize: number): Measure {
+export function measurer(markdown: string, fontSize: number, byClaude = false): Measure {
   const html = renderMarkdown(markdown)
   return (width) => {
     const el = document.createElement('div')
-    el.className = 'text-box'
+    // Claude's boxes have a wider border.
+    el.className = byClaude ? 'text-box by-claude' : 'text-box'
     el.style.cssText = `visibility:hidden;left:0;top:0;width:${width}px;font-size:${fontSize}px`
     el.innerHTML = `<div class="text-box-content">${html}</div>`
     document.body.append(el)
@@ -89,6 +114,31 @@ export function placeFitted(
     const placed = { ...box, x: plan.x, y: plan.y, width: plan.width }
     return moveToPage(added.pages, ref, added.id, () => placed)
   }
-  const width = plan.kind === 'fits' ? plan.width : widestAt(box, fitPage)
-  return replaceItem(pages, page, 'textBoxes', { ...box, width })
+  if (plan.kind === 'fits') {
+    return replaceItem(pages, page, 'textBoxes', { ...box, width: plan.width, y: plan.y })
+  }
+  return replaceItem(pages, page, 'textBoxes', { ...box, width: widestAt(box, fitPage) })
+}
+
+/** The other boxes and images on a page, as rectangles a box should not be moved over. */
+export function othersOn(page: PageAnnotations, id: string, defaultFont: number): Rect[] {
+  const boxes = page.textBoxes
+    .filter((b) => b.id !== id)
+    .map((b) => {
+      const measure = measurer(b.markdown, b.fontSize ?? defaultFont, b.author === 'claude')
+      return { x: b.x, y: b.y, width: b.width, height: measure(b.width) }
+    })
+  return [...boxes, ...(page.images ?? []).filter((im) => im.id !== id)]
+}
+
+/** Plans where a box on `page` fits (see planFit), at its own font size. */
+export function planBox(
+  pages: AnnotationPages,
+  page: number,
+  box: TextBox,
+  fitPage: FitPage,
+  defaultFont: number
+): FitPlan {
+  const measure = measurer(box.markdown, box.fontSize ?? defaultFont, box.author === 'claude')
+  return planFit(box, fitPage, measure, othersOn(pageOf(pages, page), box.id, defaultFont))
 }

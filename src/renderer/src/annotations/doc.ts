@@ -37,6 +37,8 @@ const HISTORY_LIMIT = 200
 
 export interface DocState {
   pages: AnnotationPages
+  /** The pages as read from disk. Items not changed since are the same objects. */
+  loaded: AnnotationPages
   past: AnnotationPages[]
   future: AnnotationPages[]
   selection: Selection | null
@@ -80,6 +82,7 @@ export function createAnnotationDoc(pages: AnnotationPages): AnnotationDoc {
 
     return {
       pages,
+      loaded: pages,
       past: [],
       future: [],
       selection: null,
