@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { applyChanges, mapPosition, parseAnswer, planWrite } from './writePlan'
+import { applyChanges, mapPosition, parseAnswer, placeInsert, planWrite } from './writePlan'
 
 const apply = applyChanges
 
@@ -7,6 +7,11 @@ describe('parseAnswer', () => {
   it('takes plain text as new text', () => {
     expect(parseAnswer('$\\alpha^*$')).toEqual({ insert: '$\\alpha^*$', edits: [] })
     expect(parseAnswer('```markdown\n$x$\n```')).toEqual({ insert: '$x$', edits: [] })
+  })
+
+  it('keeps the fence of a chart or code', () => {
+    const chart = '```mermaid\ngraph TD\n  A-->B\n```'
+    expect(parseAnswer(chart).insert).toBe(chart)
   })
 
   it('reads FIND/REPLACE blocks with LaTeX left as it is', () => {
@@ -84,5 +89,29 @@ describe('planWrite', () => {
     })
     expect(missing).toEqual(['not in the note'])
     expect(changes).toHaveLength(1)
+  })
+})
+
+describe('placeInsert', () => {
+  const at = (text: string): number => text.indexOf('/claude')
+
+  it('leaves a one-line answer where the request was', () => {
+    const text = 'Rule: /claude formula'
+    expect(placeInsert(text, at(text), '$x$')).toBe('$x$')
+  })
+
+  it('puts a block after text on its own line', () => {
+    const text = 'Risk /claude formula'
+    expect(placeInsert(text, at(text), '$$\nR\n$$')).toBe('\n\n$$\nR\n$$')
+    expect(placeInsert(text, at(text), '| a |\n| - |')).toBe('\n\n| a |\n| - |')
+  })
+
+  it('keeps a block inside the list item of the request', () => {
+    const item = '\t- Online: 24 Oct /claude chart'
+    expect(placeInsert(item, at(item), '```mermaid\ngraph TD\n```')).toBe(
+      '\n\t  ```mermaid\n\t  graph TD\n\t  ```'
+    )
+    const indented = '- item\n\n    /claude more'
+    expect(placeInsert(indented, at(indented), 'a\n\nb')).toBe('a\n\n    b')
   })
 })

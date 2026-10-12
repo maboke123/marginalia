@@ -143,6 +143,10 @@ export async function complete(input) {
       reject(new Error('aborted'))
     })
   })
+  // Blocks: display math right under a line of text, and a chart in a fence.
+  if (ask.startsWith('block')) {
+    return 'The risk:\n$$\nR = L \\times I\n$$\n\n```mermaid\ngraph TD\n  A-->B\n```'
+  }
   if (ask.startsWith('long')) {
     return Array.from({ length: 30 }, (_, i) => `Point ${i + 1} of a long answer.`).join('\n\n')
   }

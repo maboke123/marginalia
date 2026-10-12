@@ -16,6 +16,8 @@ export const mathSyntax: MarkdownConfig = {
     {
       name: 'BlockMath',
       before: 'FencedCode',
+      // Like a code fence, $$ may follow a line of text directly ("The risk:\n$$\n...").
+      endLeaf: (_cx, line) => line.text.slice(line.pos, line.pos + 2) === '$$',
       parse(cx, line) {
         if (line.text.slice(line.pos, line.pos + 2) !== '$$') return false
         const start = cx.lineStart + line.pos

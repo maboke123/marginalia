@@ -438,3 +438,27 @@ test('answers with display math inside a line keep the editor working', async ()
   await expect(page.locator('.cm-math-inline')).toHaveCount(3)
   expect(errors).toEqual([])
 })
+
+test('/claude at the end of a list item sends and its blocks render', async () => {
+  // Enter used to continue the list instead, and a block answer landed mid-line as plain text.
+  await row('Machine Learning').click()
+  await row('B2 Decision trees').first().click()
+  await row('Summary').click()
+  await page.locator('.md-editor .cm-content').click()
+  await page.keyboard.press('Control+End')
+  await page.keyboard.type('- Risk /claude block')
+  await page.keyboard.press('Enter')
+
+  await expect(page.locator('.cm-claude-writing')).toHaveCount(0, { timeout: 10_000 })
+  await expect
+    .poll(readSummary)
+    .toContain('- Risk \n  The risk:\n  $$\n  R = L \\times I\n  $$\n\n  ```mermaid\n')
+  await page.keyboard.press('Control+Home')
+  await expect(page.locator('.md-editor .cm-math-block')).toBeVisible()
+  await expect(page.locator('.md-editor .cm-diagram svg')).toBeVisible()
+  // The / menu still works afterwards.
+  await page.keyboard.press('Control+End')
+  await page.keyboard.press('Enter')
+  await page.keyboard.type('/')
+  await expect(page.locator('.cm-tooltip-autocomplete')).toBeVisible()
+})

@@ -43,6 +43,11 @@ describe('math syntax', () => {
     expect(nodes(text, 'Paragraph')).toEqual(['Before', 'After'])
   })
 
+  it('starts display math right under a line of text, also in a list item', () => {
+    expect(nodes('The risk:\n$$\nR = L I\n$$\nso', 'BlockMath')).toEqual(['$$\nR = L I\n$$'])
+    expect(nodes('- item\n  $$\n  x\n  $$', 'BlockMath')).toEqual(['$$\n  x\n  $$'])
+  })
+
   it('treats an unclosed block as running to the end', () => {
     expect(nodes('$$\nx^2', 'BlockMath')).toEqual(['$$\nx^2'])
   })

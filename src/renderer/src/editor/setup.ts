@@ -39,6 +39,9 @@ export function editorExtensions({ path, onOpenLink }: EditorOptions): Extension
     drawSelection(),
     dropCursor(),
     EditorView.lineWrapping,
+    // Before markdown(): its keymap has the same precedence, and its Enter continues lists, so
+    // "- item /claude ..." would never be sent.
+    Prec.high(keymap.of(editorKeymap)),
     markdown({ base: markdownLanguage, extensions: [mathSyntax] }),
     syntaxHighlighting(highlight),
     livePreview,
@@ -48,8 +51,6 @@ export function editorExtensions({ path, onOpenLink }: EditorOptions): Extension
     claudeChanges,
     autocompletion({ override: [slashCommands], icons: false }),
     placeholder('Type / for headings, tables, math, slides and Claude'),
-    // Before the Markdown keymap, whose Enter continues lists.
-    Prec.high(keymap.of(editorKeymap)),
     keymap.of([...defaultKeymap, ...historyKeymap, indentWithTab]),
     EditorView.domEventHandlers({
       mousedown(event) {

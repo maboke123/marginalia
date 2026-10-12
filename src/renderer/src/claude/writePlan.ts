@@ -20,9 +20,10 @@ export interface Change {
 
 const BLOCK = /<{7}\s*FIND[^\n]*\n([\s\S]*?)\n?={7}[^\n]*\n([\s\S]*?)\n?>{7}[^\n]*(?:\n|$)/g
 
-/** Claude sometimes wraps its text in a code fence anyway; the note wants the content. */
+/** Claude sometimes wraps its text in a code fence anyway; the note wants the content. A chart
+ * (mermaid, vega-lite) or code fence is the content itself. */
 function unwrap(text: string): string {
-  const fenced = /^```[\w-]*\n([\s\S]*?)\n```$/.exec(text.trim())
+  const fenced = /^```(?:markdown|md)?\n([\s\S]*?)\n```$/.exec(text.trim())
   return (fenced ? fenced[1] : text).trim()
 }
 
@@ -34,6 +35,28 @@ export function parseAnswer(answer: string): WriteAnswer {
     return ''
   })
   return { insert: unwrap(rest), edits }
+}
+
+/**
+ * The answer as it goes in at `from`. A block (several lines, a heading, a table, a fence) only
+ * parses at the start of a line, and inside a list item only when each line is indented like
+ * the item: otherwise $$ math or a chart showed as plain text.
+ */
+export function placeInsert(text: string, from: number, insert: string): string {
+  const block = insert.includes('\n') || /^(#{1,6}\s|\||```|>\s)/.test(insert)
+  if (!block) return insert
+  const before = text.slice(text.lastIndexOf('\n', from - 1) + 1, from)
+  const lead = /^\s*/.exec(before)![0]
+  const onOwnLine = lead.length === before.length
+  const item = /^\s*(?:[-*+]|\d+[.)])\s+/.exec(before)
+  const indent = !onOwnLine && item ? lead + ' '.repeat(item[0].length - lead.length) : lead
+  const body = insert
+    .split('\n')
+    .map((line, i) => (i === 0 || !line ? line : indent + line))
+    .join('\n')
+  if (onOwnLine) return body
+  // After text: on a new line, inside the list item when the request was in one.
+  return (item ? '\n' : '\n\n') + indent + body
 }
 
 const escape = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
@@ -63,7 +86,7 @@ export function planWrite(
   let { to } = request
   // Nothing new to add and the request had its own line: take the line out entirely.
   if (!answer.insert && (from === 0 || text[from - 1] === '\n') && text[to] === '\n') to += 1
-  const changes: Change[] = [{ from, to, insert: answer.insert }]
+  const changes: Change[] = [{ from, to, insert: placeInsert(text, from, answer.insert) }]
   const missing: string[] = []
   const overlaps = (c: { from: number; to: number }): boolean =>
     changes.some((d) => c.from < d.to && c.to > d.from)
