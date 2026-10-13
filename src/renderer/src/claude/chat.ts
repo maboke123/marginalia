@@ -39,6 +39,8 @@ interface ChatState {
   attached: string[]
   /** Text I selected in the chat, sent along with the next message. */
   quoted: string | null
+  /** The chat whose running answer may edit without asking ("Accept all"). */
+  acceptingAll: string | null
 
   setOpen(open: boolean): void
   load(chat: string): Promise<void>
@@ -56,6 +58,8 @@ interface ChatState {
    */
   confirm(label: string, show: (decide: (accept: boolean) => void) => () => void): Promise<boolean>
   decide(id: string, accept: boolean): void
+  /** Accepts what is waiting and every other edit until this answer is done. */
+  acceptAll(): void
 }
 
 /** The chat for what I am looking at: one conversation per section (lesson folder). */
@@ -183,7 +187,7 @@ export const useChat = create<ChatState>((set, get) => {
     // done
     for (const decide of [...decisions.values()]) decide(false)
     updateAnswer(chat, (m) => ({ ...m, ...(event.error ? { error: event.error } : {}) }))
-    set({ running: null })
+    set({ running: null, acceptingAll: null })
   }
 
   window.api.claude.onEvent(onEvent)
@@ -196,6 +200,7 @@ export const useChat = create<ChatState>((set, get) => {
     removedChips: [],
     attached: [],
     quoted: null,
+    acceptingAll: null,
 
     setOpen(open) {
       set({ open })
@@ -290,8 +295,9 @@ export const useChat = create<ChatState>((set, get) => {
     },
 
     confirm(label, show) {
-      if (get().settings?.askBeforeEditing === false) return Promise.resolve(true)
       const chat = get().running
+      if (get().settings?.askBeforeEditing === false) return Promise.resolve(true)
+      if (chat !== null && get().acceptingAll === chat) return Promise.resolve(true)
       const proposal = id()
       return new Promise((resolve) => {
         let hide = (): void => {}
@@ -322,6 +328,11 @@ export const useChat = create<ChatState>((set, get) => {
       })
     },
 
-    decide: (proposal, accept) => decisions.get(proposal)?.(accept)
+    decide: (proposal, accept) => decisions.get(proposal)?.(accept),
+
+    acceptAll() {
+      set({ acceptingAll: get().running })
+      for (const decide of [...decisions.values()]) decide(true)
+    }
   }
 })

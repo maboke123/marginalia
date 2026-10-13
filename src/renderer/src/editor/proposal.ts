@@ -1,5 +1,6 @@
 import { StateEffect, StateField, type Range } from '@codemirror/state'
 import { Decoration, EditorView, WidgetType, type DecorationSet } from '@codemirror/view'
+import { useChat } from '../claude/chat'
 
 /** An edit Claude proposes, shown in the note until I accept or reject it. */
 export interface PendingEdit {
@@ -30,15 +31,16 @@ class ProposalWidget extends WidgetType {
     text.textContent = this.edit.insert.trim() || '(removes the struck-through text)'
     const actions = document.createElement('div')
     actions.className = 'cm-proposal-actions'
-    for (const [label, accept] of [
-      ['Accept', true],
-      ['Reject', false]
+    for (const [label, onclick, className] of [
+      ['Accept', () => this.edit.decide(true), 'button primary'],
+      ['Accept all', () => useChat.getState().acceptAll(), 'button'],
+      ['Reject', () => this.edit.decide(false), 'button']
     ] as const) {
       const button = document.createElement('button')
-      button.className = accept ? 'button primary' : 'button'
+      button.className = className
       button.textContent = label
       button.onmousedown = (e) => e.preventDefault()
-      button.onclick = () => this.edit.decide(accept)
+      button.onclick = onclick
       actions.append(button)
     }
     box.append(text, actions)

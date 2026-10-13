@@ -165,7 +165,10 @@ test('adds to the summary under a heading after Accept, and one undo removes it'
   await page.screenshot({ path: path.join('test-results', 'claude-proposal.png') })
   expect(await readSummary()).toBe(SUMMARY)
 
-  await page.locator('.claude-proposal').getByRole('button', { name: 'Accept' }).click()
+  await page
+    .locator('.claude-proposal')
+    .getByRole('button', { name: 'Accept', exact: true })
+    .click()
   await expect(answers().last()).toHaveText('Added it under Information gain.')
   await expect
     .poll(readSummary)
@@ -193,7 +196,7 @@ test('puts a note in the margin of the slide; Reject leaves nothing', async () =
   await expect(page.locator('.text-box.by-claude')).toHaveCount(0)
 
   await ask('Put a note next to this slide')
-  await page.locator('.ghost-actions').getByRole('button', { name: 'Accept' }).click()
+  await page.locator('.ghost-actions').getByRole('button', { name: 'Accept', exact: true }).click()
   const note = page.locator('.text-box.by-claude:not(.ghost)')
   await expect(note).toHaveCount(1)
   await expect(note.locator('.katex')).toBeVisible()
@@ -216,9 +219,22 @@ test('draws on the slide after I accept', async () => {
   await openSlides()
   await ask('Circle the title')
   await expect(page.locator('svg.ink.ghost path')).toHaveCount(1)
-  await page.locator('.ghost-actions').getByRole('button', { name: 'Accept' }).click()
+  await page.locator('.ghost-actions').getByRole('button', { name: 'Accept', exact: true }).click()
   await expect(answers().last()).toHaveText('Circled it.')
   await expect(page.locator('.pdf-page[data-page="1"] svg.ink:not(.ghost) > path')).toHaveCount(1)
+})
+
+test('Accept all lets the rest of the answer edit without asking', async () => {
+  await openSlides()
+  await ask('Rework the notes on this slide')
+  await page.locator('.claude-proposal').getByRole('button', { name: 'Accept all' }).click()
+  await expect(answers().last()).toContainText('delete_annotations: No annotation "t_nope"')
+  const text = await answers().last().innerText()
+  expect(text.split('\n').filter((l) => l.endsWith(': ok'))).toHaveLength(7)
+
+  // Only for that answer: the next one asks again.
+  await ask('Put a note next to this slide')
+  await expect(page.locator('.text-box.ghost')).toBeVisible()
 })
 
 test('adds a blank page and changes, moves and removes annotations', async () => {
@@ -433,7 +449,10 @@ test('/summary runs a skill that writes a new note linked to the slides', async 
   await input.press('Enter')
 
   await expect(page.locator('.claude-question').last()).toHaveText('/summary')
-  await page.locator('.claude-proposal').getByRole('button', { name: 'Accept' }).click()
+  await page
+    .locator('.claude-proposal')
+    .getByRole('button', { name: 'Accept', exact: true })
+    .click()
   await expect(answers().last()).toContainText('got the steps, read 8 pages.')
   await expect(answers().last()).toContainText(`Made ${section}/slides summary.md`)
 

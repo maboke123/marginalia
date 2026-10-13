@@ -337,6 +337,13 @@ function PartView({ part }: { part: Part }): React.JSX.Element {
           >
             Accept
           </button>
+          <button
+            className="button"
+            title="Accept this and every other change in this answer"
+            onClick={() => useChat.getState().acceptAll()}
+          >
+            Accept all
+          </button>
           <button className="button" onClick={() => useChat.getState().decide(part.id, false)}>
             Reject
           </button>

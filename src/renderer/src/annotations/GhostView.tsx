@@ -1,4 +1,5 @@
 import { useMemo } from 'react'
+import { useChat } from '../claude/chat'
 import { RenderedHtml } from '../components/RenderedHtml'
 import { renderMarkdown } from '../lib/markdown'
 import type { Ghost } from './doc'
@@ -61,6 +62,13 @@ export function GhostView({ ghost, scale }: { ghost: Ghost; scale: number }): Re
         >
           <button className="button primary" onClick={() => ghost.decide(true)}>
             Accept
+          </button>
+          <button
+            className="button"
+            title="Accept this and every other change in this answer"
+            onClick={() => useChat.getState().acceptAll()}
+          >
+            Accept all
           </button>
           <button className="button" onClick={() => ghost.decide(false)}>
             Reject
