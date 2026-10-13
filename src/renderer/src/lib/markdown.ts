@@ -1,7 +1,8 @@
 import 'katex/dist/katex.min.css'
 import MarkdownIt from 'markdown-it'
 import katex from '@vscode/markdown-it-katex'
-import { CLOSE_TAG, OPEN_TAG } from '../../../shared/textColor'
+import { CLOSE_TAG, TEXT_COLORS } from '../../../shared/textColor'
+import { parseStyle, STYLE_TAG } from '../../../shared/textStyle'
 import { DIAGRAM_LANGS, diagramPlaceholder } from './diagrams'
 
 /**
@@ -21,11 +22,14 @@ function underline(md: InstanceType<typeof MarkdownIt>): void {
   })
 }
 
-/** `<span style="color: red">` with a notebook colour name, drawn with the theme's colour. */
+/**
+ * `<span style="color: red">` with a notebook colour name, drawn with the theme's colour, and
+ * in text boxes also a pen colour (#cf222e) or a size (font-size: 1.4em).
+ */
 function textColor(md: InstanceType<typeof MarkdownIt>): void {
   md.inline.ruler.before('html_inline', 'text_color', (state, silent) => {
     const rest = state.src.slice(state.pos)
-    const open = OPEN_TAG.exec(rest)
+    const open = STYLE_TAG.exec(rest)
     const close = open ? null : CLOSE_TAG.exec(rest)
     if (!open && !close) return false
     // A closing tag only counts when a colour span is open; otherwise it stays plain text.
@@ -35,8 +39,16 @@ function textColor(md: InstanceType<typeof MarkdownIt>): void {
     )
     if (close && depth <= 0) return false
     if (!silent) {
-      if (open) state.push('color_open', 'span', 1).attrSet('class', `tc-${open[1].toLowerCase()}`)
-      else state.push('color_close', 'span', -1)
+      if (open) {
+        const token = state.push('color_open', 'span', 1)
+        const { color, size } = parseStyle(open[1])
+        const css: string[] = []
+        if (color && (TEXT_COLORS as readonly string[]).includes(color)) {
+          token.attrSet('class', `tc-${color}`)
+        } else if (color) css.push(`color: ${color}`)
+        if (size) css.push(`font-size: ${size}em`)
+        if (css.length) token.attrSet('style', css.join('; '))
+      } else state.push('color_close', 'span', -1)
     }
     state.pos += (open ?? close)![0].length
     return true

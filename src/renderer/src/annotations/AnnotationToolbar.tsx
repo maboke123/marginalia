@@ -1,10 +1,13 @@
+import { useState } from 'react'
 import { useStore } from 'zustand'
+import { restyle } from '../../../shared/textStyle'
 import { colorName, type AppSettings } from '../../../shared/settings'
 import type { HotkeyAction } from '../../../shared/hotkeys'
 import { Icon, type IconName } from '../components/Icon'
 import { useApp, type Tool } from '../store'
 import { findItem, replaceItem, type AnnotationDoc } from './doc'
 import { round } from './geometry'
+import { editedSelection, restyleSelection } from './textEdit'
 import { ERASER_SIZES, PEN_WIDTHS, pageUnit, TEXT_SIZES } from '../../../shared/palette'
 
 const TOOLS: { tool: Tool; label: string; icon: IconName }[] = [
@@ -146,7 +149,18 @@ export function AnnotationToolbar({ doc, pageWidth }: Props): React.JSX.Element 
   )
 }
 
-/** Shown for the text tool and when a text box is selected; changes that box right away. */
+interface Sizing {
+  page: number
+  id: string
+  value: string
+  start: number
+  end: number
+}
+
+/**
+ * Shown for the text tool and when a text box is selected; changes that box right away, or
+ * only the selected text while I type in it.
+ */
 function TextStyle({
   doc,
   pageWidth
@@ -160,13 +174,17 @@ function TextStyle({
   const colors = useApp((s) => s.settings.penColors)
   const setInk = useApp((s) => s.setInk)
   const selection = useStore(doc, (s) => (s.selection?.kind === 'textBoxes' ? s.selection : null))
+  // The box and the text selected in it when the size menu was opened. Opening the menu ends
+  // the typing (and selects nothing), so the new size goes to the text remembered here.
+  const [sizing, setSizing] = useState<Sizing | null>(null)
+  const target = selection ?? sizing
   // Subscribed so the pressed swatch and size follow undo and Claude's edits.
   const box = useStore(doc, (s) =>
-    selection ? findItem(s.pages, { ...selection, kind: 'textBoxes' }) : null
+    target ? findItem(s.pages, { page: target.page, kind: 'textBoxes', id: target.id }) : null
   )
-  if (tool !== 'text' && !selection) return null
+  if (tool !== 'text' && !target) return null
 
-  const unit = selection ? pageUnit(pageWidth(selection.page)) : 1
+  const unit = target ? pageUnit(pageWidth(target.page)) : 1
   const current = box?.fontSize ? box.fontSize / unit : textSize
   const currentColor = (box ? box.color : textColor) ?? colors[0]
   // A box can have a size that is not in the list (imported ones); show it as it is.
@@ -175,19 +193,38 @@ function TextStyle({
     ? TEXT_SIZES
     : [...TEXT_SIZES, shown].sort((a, b) => a - b)
 
-  function changeBox(changes: { fontSize?: number; color?: string }): void {
-    if (!selection || !box) return
-    doc
-      .getState()
-      .change((p) => replaceItem(p, selection.page, 'textBoxes', { ...box, ...changes }))
+  function changeBox(changes: { fontSize?: number; color?: string; markdown?: string }): void {
+    if (!target || !box) return
+    doc.getState().change((p) => replaceItem(p, target.page, 'textBoxes', { ...box, ...changes }))
   }
 
   function pick(size: number): void {
+    if (sizing && box) {
+      setSizing(null)
+      // The typed text was saved when the menu opened, trimmed.
+      if (box.markdown !== sizing.value.trim()) return
+      const lead = sizing.value.length - sizing.value.trimStart().length
+      const at = (n: number): number => Math.min(Math.max(0, n - lead), box.markdown.length)
+      // Relative to the box, so the part keeps its proportion when the box's size changes.
+      const em = Math.round((size / current) * 100) / 100
+      const result = restyle(box.markdown, at(sizing.start), at(sizing.end), {
+        size: em === 1 ? null : em
+      })
+      if (result) changeBox({ markdown: result.text })
+      doc.getState().select({ page: sizing.page, kind: 'textBoxes', id: sizing.id })
+      return
+    }
     setInk({ textSize: size })
     changeBox({ fontSize: round(size * unit) })
   }
 
   function pickColor(color: string): void {
+    // While typing with text selected, only that text changes colour.
+    const el = editedSelection()
+    if (el) {
+      restyleSelection(el, { color: color === currentColor ? null : color })
+      return
+    }
     setInk({ textColor: color })
     changeBox({ color })
   }
@@ -201,6 +238,16 @@ function TextStyle({
         title="Text size"
         aria-label="Text size"
         value={shown}
+        onPointerDown={() => {
+          const el = editedSelection()
+          const editing = doc.getState().editing
+          setSizing(
+            el && editing
+              ? { ...editing, value: el.value, start: el.selectionStart, end: el.selectionEnd }
+              : null
+          )
+        }}
+        onBlur={() => setSizing(null)}
         onChange={(e) => pick(Number(e.target.value))}
       >
         {sizes.map((size) => (

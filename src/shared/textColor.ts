@@ -10,7 +10,6 @@ export const TEXT_COLORS = NOTEBOOK_COLORS
 export type TextColor = NotebookColor
 
 const NAMES = TEXT_COLORS.join('|')
-export const OPEN_TAG = new RegExp(`^<span style=["']color:\\s*(${NAMES})\\s*;?\\s*["']>`, 'i')
 export const CLOSE_TAG = /^<\/span>/i
 const SPAN = new RegExp(`<span style=["']color:\\s*(${NAMES})\\s*;?\\s*["']>(.*?)</span>`, 'gi')
 const ANY_TAG = new RegExp(`<span style=["']color:\\s*(?:${NAMES})\\s*;?\\s*["']>|</span>`, 'gi')

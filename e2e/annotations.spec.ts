@@ -443,6 +443,41 @@ test('text boxes take a colour from the toolbar', async () => {
   await expect(box).toHaveCSS('color', 'rgb(207, 34, 46)')
 })
 
+test('part of a text box gets its own colour and size', async () => {
+  await openSlides()
+  await page.keyboard.press('t')
+  await drawOnPage([0.7, 0.2], [0.7, 0.2])
+  await page.keyboard.type('Gain is the drop')
+  await page.keyboard.press('Control+Shift+ArrowLeft')
+  const editor = page.locator('.text-box-editor')
+  await page.getByRole('button', { name: 'Red', exact: true }).click()
+  await expect(editor).toHaveValue('Gain is the <span style="color: #cf222e">drop</span>')
+  await expect(editor).toBeFocused()
+  // The size menu takes the keyboard, which ends the typing; the size goes to the same word.
+  const size = page.getByRole('combobox', { name: 'Text size' })
+  await size.click()
+  await size.selectOption('21')
+  const box = firstPage().locator('.text-box')
+  const word = box.locator('.text-box-content span')
+  await expect(word).toHaveText('drop')
+  await expect(word).toHaveCSS('color', 'rgb(207, 34, 46)')
+  const fonts = await box.evaluate((el) => [
+    parseFloat(getComputedStyle(el).fontSize),
+    parseFloat(getComputedStyle(el.querySelector('span')!).fontSize)
+  ])
+  expect(fonts[1]).toBeGreaterThan(fonts[0] * 1.4)
+  await expect
+    .poll(async () => (await readSidecar().catch(() => null))?.pages['1']?.textBoxes[0])
+    .toMatchObject({
+      markdown: expect.stringMatching(
+        /^Gain is the <span style="color: #cf222e; font-size: [\d.]+em">drop<\/span>$/
+      )
+    })
+  await page.screenshot({ path: path.join('test-results', 'text-box-span.png') })
+  // The rest of the box kept its size and colour.
+  await expect(box).toHaveCSS('color', 'rgb(31, 35, 40)')
+})
+
 test('selected slide text goes away with Escape or a click elsewhere', async () => {
   await openSlides()
   const span = firstPage().locator('.textLayer span', { hasText: 'Information gain' })

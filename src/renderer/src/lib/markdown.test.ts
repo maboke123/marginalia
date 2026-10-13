@@ -15,6 +15,16 @@ describe('renderMarkdown', () => {
     expect(html).not.toContain('<script>')
   })
 
+  it('lets coloured and sized spans through, and nothing else in a style', () => {
+    expect(renderMarkdown('<span style="color: red">a</span>')).toContain(
+      '<span class="tc-red">a</span>'
+    )
+    expect(renderMarkdown('<span style="color: #cf222e; font-size: 1.4em">a</span>')).toContain(
+      '<span style="color: #cf222e; font-size: 1.4em">a</span>'
+    )
+    expect(renderMarkdown('<span style="position: fixed">a</span>')).toContain('&lt;span')
+  })
+
   it('turns mermaid and vega-lite blocks into diagram placeholders', () => {
     const source = '```mermaid\ngraph TD\n  A --> B["<b>"]\n```\n\n```js\nx\n```'
     const html = renderMarkdown(source)

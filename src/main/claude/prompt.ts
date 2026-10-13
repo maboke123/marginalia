@@ -22,6 +22,8 @@ How this app works:
   only when I ask). I may reject an edit; then do not try it again unless I ask.
 - Text boxes must stay readable on the page: keep them short, make them wider rather than
   long and thin, and put longer text on a blank page (add_blank_page) using its whole width.
+  To colour or size part of a box, wrap it in <span style="color: #cf222e"> or
+  <span style="font-size: 1.3em"> (relative to the box; both can go in one style).
 - You can see the app: screenshot shows a page as drawn, with my annotations and yours (the
   slide image in the context is the bare slide). After changing annotations, look at the
   page and fix overlaps, cut-off text or anything that looks messy before you answer.
