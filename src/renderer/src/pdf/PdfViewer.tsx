@@ -32,6 +32,8 @@ import {
   stepZoom,
   type PageSize
 } from './layout'
+import { FindBar } from './FindBar'
+import { useFind } from './find'
 import { loadPdf, pageSizes } from './pdfjs'
 import { PdfPage } from './PdfPage'
 import { SidebarButton } from '../components/SidebarButton'
@@ -145,6 +147,8 @@ function Document({
   const anchor = useRef<Anchor>({ id: startPage, fraction: 0, viewY: VIEW_PADDING })
   const setPdfView = useApp((s) => s.setPdfView)
   const [pageMenu, setPageMenu] = useState<{ x: number; y: number; id: number } | null>(null)
+  // Ctrl+F: 0 while closed, then counts up on every press so the field takes the keyboard.
+  const [finding, setFinding] = useState(0)
 
   // Blank pages added below slides sit between the PDF's own pages.
   const blankKeys = useStore(activeDoc ?? NO_DOC, (s) =>
@@ -421,6 +425,28 @@ function Document({
     [path, goTo]
   )
 
+  // Brings the hit Ctrl+F is on into view, unless it is already.
+  useEffect(
+    () =>
+      useFind.subscribe((s, previous) => {
+        if (s.path !== path || s.current === -1) return
+        if (s.current === previous.current && s.hits === previous.hits) return
+        const hit = s.hits[s.current]
+        const i = indexOf(hit.page)
+        const el = scrollRef.current!
+        const [x, y, w, h] = hit.rects[0]
+        const top = layout.tops[i] + y * scale
+        const left = (contentWidth - layout.widths[i]) / 2 + x * scale
+        if (top < el.scrollTop || top + Math.max(h * scale, 40) > el.scrollTop + el.clientHeight) {
+          el.scrollTop = top - el.clientHeight / 3
+        }
+        if (left < el.scrollLeft || left + w * scale > el.scrollLeft + el.clientWidth) {
+          el.scrollLeft = left - el.clientWidth / 3
+        }
+      }),
+    [path, indexOf, layout, scale, contentWidth]
+  )
+
   function onKeyDown(e: React.KeyboardEvent): void {
     const target = e.target as HTMLElement
     if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return
@@ -484,7 +510,17 @@ function Document({
   )
 
   return (
-    <div className="pdf-viewer" ref={viewerRef} data-path={path}>
+    <div
+      className="pdf-viewer"
+      ref={viewerRef}
+      data-path={path}
+      onKeyDown={(e) => {
+        if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'f') {
+          e.preventDefault()
+          setFinding((n) => n + 1)
+        }
+      }}
+    >
       <div className="pdf-toolbar">
         <SidebarButton />
         <AnnotationToolbar doc={activeDoc} pageWidth={(n) => sizes[slideOf(n) - 1].width} />
@@ -583,6 +619,20 @@ function Document({
             Show annotations anyway
           </button>
         </div>
+      )}
+
+      {finding > 0 && (
+        <FindBar
+          path={path}
+          pdf={pdf}
+          views={views}
+          doc={activeDoc}
+          focusKey={finding}
+          onClose={() => {
+            setFinding(0)
+            scrollRef.current?.focus({ preventScroll: true })
+          }}
+        />
       )}
 
       <AnnotationContext.Provider value={activeDoc}>

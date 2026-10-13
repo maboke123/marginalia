@@ -134,3 +134,50 @@ test('adds a suffix when the same PDF is imported twice', async () => {
     'B2 Decision trees.pdf'
   ])
 })
+
+test('Ctrl+F finds text on the slides and in text boxes', async () => {
+  const pdf = path.join(env.vault, 'Machine Learning/B2 Decision trees/slides.pdf')
+  await fs.copyFile(source, pdf)
+  const box = { id: 't1', x: 980, y: 60, width: 200, markdown: 'Like **Slide 7**', author: 'me' }
+  await fs.writeFile(
+    `${pdf}.annotations.json`,
+    JSON.stringify({
+      version: 1,
+      pdf: 'slides.pdf',
+      pdfSha256: await sha256(pdf),
+      marginWidth: 0.3,
+      pages: { '12': { strokes: [], highlights: [], textBoxes: [box] } }
+    })
+  )
+  await row('Machine Learning').click()
+  await row('B2 Decision trees').click()
+  await row('slides.pdf').click()
+  await expect(page.locator('.pdf-page[data-page="1"] canvas')).toBeVisible()
+
+  await page.keyboard.press('Control+F')
+  const find = page.getByRole('textbox', { name: 'Find in slides and text boxes' })
+  const count = page.locator('.find-count')
+  await expect(find).toBeFocused()
+  // Slide 7, slides 70 to 79 (spaces do not count), and the text box on slide 12.
+  await find.fill('slide 7')
+  await expect(count).toHaveText('1 of 12')
+  await expect(pageInput()).toHaveValue('7')
+  await expect(page.locator('.pdf-page[data-page="7"] .find-hit.current')).toBeVisible()
+
+  await find.press('Enter')
+  await expect(count).toHaveText('2 of 12')
+  await expect(pageInput()).toHaveValue('12')
+  await expect(page.locator('.text-box.found.current')).toContainText('Like Slide 7')
+  await page.screenshot({ path: path.join('test-results', 'find.png') })
+
+  await find.press('Shift+Enter')
+  await find.press('Shift+Enter')
+  await expect(count).toHaveText('12 of 12')
+  await expect(pageInput()).toHaveValue('79')
+
+  await find.press('Escape')
+  await expect(find).toHaveCount(0)
+  await expect(page.locator('.find-hit')).toHaveCount(0)
+  await expect(page.locator('.pdf-scroll')).toBeFocused()
+  expect(errors).toEqual([])
+})

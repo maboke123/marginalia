@@ -30,6 +30,8 @@ import {
 } from './geometry'
 import { applyChanges, planWrite, type WriteAnswer } from '../claude/writePlan'
 import { openPdf } from '../lib/open'
+import { useFind, type FindHit } from '../pdf/find'
+import { FindHits } from '../pdf/FindBar'
 import { placeFitted, planBox, type FitPage } from './fit'
 import { GhostView } from './GhostView'
 import { ImageView } from './ImageView'
@@ -83,6 +85,7 @@ export const PageOverlay = memo(function PageOverlay(props: Props): React.JSX.El
   if (!doc) {
     return (
       <div className="page-overlay" style={style}>
+        <FindHits path={props.path} number={props.number} />
         {!props.blank && (
           <TextLayerView pdf={props.pdf} number={props.number} width={width} height={height} />
         )}
@@ -133,6 +136,7 @@ interface Guides {
   y: number | null
 }
 const NO_GUIDES: Guides = { x: null, y: null }
+const NO_HITS: FindHit[] = []
 const DEFAULT_BOX_WIDTH = 180
 
 function AnnotatedOverlay({
@@ -153,6 +157,8 @@ function AnnotatedOverlay({
   const selection = useStore(doc, (s) => (s.selection?.page === number ? s.selection : null))
   const editing = useStore(doc, (s) => (s.editing?.page === number ? s.editing : null))
   const ghost = useStore(doc, (s) => (s.ghost?.page === number ? s.ghost : null))
+  const found = useFind((s) => (s.path === path ? s.hits : NO_HITS))
+  const currentHit = useFind((s) => (s.path === path ? s.hits[s.current] : undefined))
   const rootRef = useRef<HTMLDivElement>(null)
   const [live, setLive] = useState<Stroke | null>(null)
   const [eraserAt, setEraserAt] = useState<Point | null>(null)
@@ -635,6 +641,7 @@ function AnnotatedOverlay({
   }
 
   const drawing = tool !== 'select'
+  const hits = found.filter((h) => h.page === number)
   const highlighterStrokes = page.strokes.filter((s) => s.tool === 'highlighter')
   const penStrokes = page.strokes.filter((s) => s.tool === 'pen')
   const selectedStroke =
@@ -675,6 +682,8 @@ function AnnotatedOverlay({
           />
         ))
       )}
+
+      <FindHits path={path} number={number} />
 
       {!blank && <TextLayerView pdf={pdf} number={number} width={width} height={height} />}
 
@@ -733,6 +742,13 @@ function AnnotatedOverlay({
           key={box.id}
           box={box}
           selected={selection?.kind === 'textBoxes' && selection.id === box.id}
+          found={
+            currentHit?.box === box.id && currentHit.page === number
+              ? 'current'
+              : hits.some((h) => h.box === box.id)
+                ? 'hit'
+                : undefined
+          }
           editing={editing?.id === box.id}
           interactive={tool === 'select' || tool === 'text'}
           resizable={tool === 'select'}

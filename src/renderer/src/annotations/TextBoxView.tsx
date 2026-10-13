@@ -11,6 +11,8 @@ import { widestAt, type FitPage } from './fit'
 interface Props {
   box: TextBox
   selected: boolean
+  /** Ctrl+F found the text in this box; 'current' is the hit it is on. */
+  found?: 'hit' | 'current'
   editing: boolean
   interactive: boolean
   resizable: boolean
@@ -63,6 +65,7 @@ export const TextBoxView = memo(function TextBoxView(props: Props): React.JSX.El
   const classes = ['text-box']
   if (box.author === 'claude') classes.push('by-claude')
   if (selected) classes.push('selected')
+  if (props.found) classes.push('found', props.found)
   if (editing) classes.push('editing')
   if (!interactive) classes.push('passive')
 

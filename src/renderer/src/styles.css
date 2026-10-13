@@ -13,6 +13,10 @@
   --paper-text: #1f2328;
   --paper-rule: #d9d9d3;
   --claude-ink: #1b7c83;
+  /* Ctrl+F on the slides, which stay paper white in dark mode too */
+  --find-hit: rgb(250 190 0 / 0.4);
+  --find-current: rgb(245 130 0 / 0.45);
+  --find-current-border: #d9730d;
   --bg-warning: #fff6dc;
   --bg-added: #e8f3ea;
   --border-added: #9cc9a6;
@@ -2721,4 +2725,48 @@ h2 {
   align-items: center;
   gap: 6px;
   white-space: nowrap;
+}
+
+/* Ctrl+F in the slides */
+.find-bar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 12px 4px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.find-bar input {
+  width: 260px;
+  height: 26px;
+  padding: 0 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--bg-input);
+  color: var(--text);
+  font: inherit;
+}
+
+.find-count {
+  min-width: 80px;
+  margin: 0 4px 0 8px;
+}
+
+.find-hit {
+  position: absolute;
+  pointer-events: none;
+  background: var(--find-hit);
+}
+
+.find-hit.current {
+  background: var(--find-current);
+  outline: 1px solid var(--find-current-border);
+}
+
+.text-box.found {
+  outline: 2px solid var(--find-hit);
+}
+
+.text-box.found.current {
+  outline-color: var(--find-current-border);
 }
