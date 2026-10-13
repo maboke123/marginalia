@@ -215,6 +215,31 @@ test('puts a note in the margin of the slide; Reject leaves nothing', async () =
   await expect(note).toHaveCount(0)
 })
 
+test('Claude can look at a whole page as it is drawn, also when it is bigger than the view', async () => {
+  await openSlides()
+  await ask('Put a note next to this slide')
+  await page.locator('.ghost-actions').getByRole('button', { name: 'Accept', exact: true }).click()
+  await expect(page.locator('.text-box.by-claude:not(.ghost)')).toHaveCount(1)
+  // Zoomed in, the page takes several pieces of the view to cover.
+  await page.locator('.pdf-scroll').focus()
+  for (let i = 0; i < 4; i++) await page.keyboard.press('Control+=')
+  const view = (await page.locator('.pdf-scroll').boundingBox())!
+  const sheet = (await page.locator('.pdf-page[data-page="1"]').boundingBox())!
+  expect(sheet.height).toBeGreaterThan(view.height)
+
+  await ask('Look at this page')
+  await expect(answers().last()).toContainText('Page 1 of')
+  const text = await answers().last().innerText()
+  const perPoint = Number(/1 PDF point is ([\d.]+) px/.exec(text)![1])
+  // Width and height of the PNG, from its header.
+  const png = await fs.readFile(`${fakeLog(env)}.png`)
+  const [width, height] = [png.readUInt32BE(16), png.readUInt32BE(20)]
+  expect(text).toContain(`(${width}x${height} px)`)
+  expect(Math.abs(height - 540 * perPoint)).toBeLessThan(3)
+  expect(width).toBeGreaterThan(960 * perPoint)
+  await fs.copyFile(`${fakeLog(env)}.png`, path.join('test-results', 'claude-screenshot.png'))
+})
+
 test('draws on the slide after I accept', async () => {
   await openSlides()
   await ask('Circle the title')

@@ -109,6 +109,8 @@ function describeTool(name: string, input: Record<string, unknown>): string {
       return `Adding a blank page to ${file} after p.${input.after_page}`
     case 'add_drawing':
       return `Drawing on ${file}${page}`
+    case 'screenshot':
+      return file ? `Looked at ${file}${page}` : 'Looked at the app'
     case 'goto':
       return `Opened ${file}${page}`
     case 'Read':

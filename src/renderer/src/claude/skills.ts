@@ -44,8 +44,10 @@ of a lecture.
    subject), do not quietly change it. Keep my text and add a line under it:
    **Check:** what seems wrong, and the likely correction. Only a clear slip (a wrong sign,
    swapped indices) you fix directly, and you name it in your reply.
-5. Layout: move boxes that overlap each other or cover slide text to free space, usually the
-   margin. Text that does not fit on the page goes on a blank page (add_blank_page).
+5. Layout: look at each page with annotations (screenshot) to see overlaps, boxes that cover
+   slide text or run off the page, and move them to free space, usually the margin. Text that
+   does not fit on the page goes on a blank page (add_blank_page). Look again after changing
+   a page.
 6. Leave highlights, pen strokes and images alone. Delete nothing except boxes you merged.
 7. Make each change with its own edit_annotation call, so I can accept or reject each one.
 8. End with a short list per page of what you changed, and every Check you added.`

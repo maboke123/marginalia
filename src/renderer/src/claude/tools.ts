@@ -43,6 +43,7 @@ import { pageRuns, pageText } from '../pdf/text'
 import { useApp } from '../store'
 import { useChat } from './chat'
 import { buildPacket, currentChips } from './context'
+import { captureArea, captureElement, until, viewOf } from './screenshot'
 
 type Args = Record<string, unknown>
 type Result = Omit<ToolReply, 'id' | 'ok'>
@@ -203,6 +204,14 @@ async function showPdf(path: string, page: number): Promise<OpenPdf & { doc: Ann
     )
   }
   return open as OpenPdf & { doc: AnnotationDoc }
+}
+
+/** Waits for an element of the app to appear. */
+async function found<T>(get: () => T | null): Promise<T> {
+  let item = get()
+  await until(() => (item = get()) !== null)
+  if (!item) throw new ToolError('It is not on screen')
+  return item
 }
 
 const REJECTED = 'I rejected this change; nothing was changed. Do not try again unless I ask.'
@@ -637,6 +646,48 @@ const TOOLS: Record<string, (args: Args) => Promise<Result>> = {
     )
     const count = `${strokes.length} line${strokes.length === 1 ? '' : 's'}`
     return { text: `Drew ${count} on page ${page}.` }
+  },
+
+  async screenshot(args) {
+    if (args.file === undefined) {
+      const shot = await captureArea(null)
+      return { text: 'The whole app window as I see it now.', image: shot.image }
+    }
+    const path = fileArg(args, 'any')
+    if (/\.md$/i.test(path)) {
+      await showNote(path)
+      const scroller = await found(() =>
+        document.querySelector<HTMLElement>('.md-editor .cm-scroller')
+      )
+      const shot = await captureArea(viewOf(scroller))
+      return { text: `The part of ${path} on screen, as I see it.`, image: shot.image }
+    }
+    const slide = slideOf(Number(args.page) || 1)
+    show(path, slide)
+    const open = await whenOpen(() => openPdf(path))
+    if (!open) throw new ToolError(`Could not open ${path}`)
+    const page = open.doc
+      ? annotationPage(args, open as OpenPdf & { doc: AnnotationDoc })
+      : pageArg(args, open.pdf)
+    const selector = `.pdf-viewer[data-path="${CSS.escape(path)}"] .pdf-page[data-page="${page}"]`
+    const el = await found(() => document.querySelector<HTMLElement>(selector))
+    const shot = await captureElement(el, el.closest<HTMLElement>('.pdf-scroll')!, () => {
+      const canvas = el.querySelector('canvas')
+      return isBlankPage(page) || (!!canvas && canvas.width > 0)
+    })
+    const size = open.sizes[slide - 1]
+    const perPoint = shot.width / (size.width * (1 + open.margin))
+    const n = (v: number): number => Math.round(v * 100) / 100
+    return {
+      text:
+        `Page ${page} of ${path} as I see it, with everything on it (${shot.width}x${shot.height} ` +
+        `px). 1 PDF point is ${n(perPoint)} px here, so x and y in points are the pixel ` +
+        `position divided by ${n(perPoint)}. ` +
+        (open.margin
+          ? `The slide is ${Math.round(size.width)} points wide; the margin starts there.`
+          : ''),
+      image: shot.image
+    }
   },
 
   async goto(args) {

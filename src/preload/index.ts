@@ -140,6 +140,7 @@ const api: MarginaliaApi = {
     },
     readyToClose: () => ipcRenderer.send('app:ready-to-close'),
     toggleFullScreen: () => invoke('app:toggleFullScreen'),
+    capture: (rect) => invoke('app:capture', rect),
     saveFeedback: (entry) => invoke('app:feedback', entry),
     openFeedback: () => invoke('app:openFeedback'),
     version: ipcRenderer.sendSync('app:version') as string

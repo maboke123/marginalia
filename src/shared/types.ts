@@ -177,6 +177,8 @@ export interface MarginaliaApi {
     onBeforeClose(listener: () => void): () => void
     readyToClose(): void
     toggleFullScreen(): Promise<void>
+    /** A PNG of part of the window (or all of it) as it is drawn now. */
+    capture(rect: CaptureRect | null): Promise<Uint8Array>
     /** Adds an entry to feedback.md in the app's data folder. */
     saveFeedback(entry: FeedbackEntry): Promise<void>
     /** Opens feedback.md in the default editor. */
@@ -273,6 +275,14 @@ export interface RecordingStatus {
   /** Seconds of the recording that are in the transcript. */
   transcribedTo: number
   error: string | null
+}
+
+/** A part of the window in CSS pixels, as getBoundingClientRect gives it. */
+export interface CaptureRect {
+  x: number
+  y: number
+  width: number
+  height: number
 }
 
 export interface FeedbackEntry {

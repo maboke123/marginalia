@@ -118,7 +118,7 @@ export async function slideContext(
   if (key !== lastImage) {
     images.push({ mediaType: 'image/png', data: await renderPage(open.pdf, page) })
     imageKey = key
-    lines.push('An image of this page is attached.')
+    lines.push('An image of the slide is attached (without annotations; screenshot shows them).')
     const pasted = annotations?.images ?? []
     for (const im of pasted.slice(0, MAX_PASTED_IMAGES)) {
       const data = await window.api.vault.readFile(imagePath(path, im.src)).catch(() => null)

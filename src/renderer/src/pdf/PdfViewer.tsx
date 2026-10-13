@@ -484,7 +484,7 @@ function Document({
   )
 
   return (
-    <div className="pdf-viewer" ref={viewerRef}>
+    <div className="pdf-viewer" ref={viewerRef} data-path={path}>
       <div className="pdf-toolbar">
         <SidebarButton />
         <AnnotationToolbar doc={activeDoc} pageWidth={(n) => sizes[slideOf(n) - 1].width} />

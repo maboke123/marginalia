@@ -102,6 +102,11 @@ export async function* agent(input) {
     })
     const pages = (text.text.match(/^--- Page \d+ ---$/gm) ?? []).length
     yield { type: 'text', text: `${steps}, read ${pages} pages. ${reply.text}` }
+  } else if (/look at/i.test(question)) {
+    // The picture goes next to the log, for the test to measure.
+    const reply = await input.callTool('screenshot', { file: slides, page })
+    if (reply.image) await fs.writeFile(`${LOG}.png`, reply.image.data)
+    yield { type: 'text', text: reply.text }
   } else if (/highlight/i.test(question)) {
     const reply = await input.callTool('add_highlight', {
       file: slides,

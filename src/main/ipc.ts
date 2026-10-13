@@ -5,6 +5,7 @@ import path from 'path'
 import type { AnnotationFile } from '../shared/annotations'
 import { settingsFrom, type AppSettings } from '../shared/settings'
 import type {
+  CaptureRect,
   FeedbackEntry,
   IpcResult,
   LinkHow,
@@ -86,6 +87,23 @@ export function registerIpc(
   handle('app:toggleFullScreen', () => {
     const win = getWindow()
     win?.setFullScreen(!win.isFullScreen())
+  })
+
+  handle('app:capture', async (rect: CaptureRect | null) => {
+    const win = getWindow()
+    if (!win || win.isMinimized()) throw new VaultError('The app window is minimized')
+    const image = await win.webContents.capturePage(
+      rect
+        ? {
+            x: Math.round(rect.x),
+            y: Math.round(rect.y),
+            width: Math.round(rect.width),
+            height: Math.round(rect.height)
+          }
+        : undefined
+    )
+    if (image.isEmpty()) throw new VaultError('The app window is not drawn right now')
+    return new Uint8Array(image.toPNG())
   })
 
   handle('settings:get', async () => (await config.read()).settings)

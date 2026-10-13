@@ -195,6 +195,18 @@ export function appToolServer(sdk: Sdk, call: CallTool): McpSdkServerConfigWithI
       run('add_drawing')
     ),
     sdk.tool(
+      'screenshot',
+      'A picture of how something looks in the app right now, exactly as I see it. With a ' +
+        'PDF and page: that whole page with everything on it (text boxes, highlights, ink, ' +
+        'images, the margin; blank pages like 3.1 too), plus how PDF points map to its pixels. ' +
+        'With a note: the part of it on screen. Without file: the whole window. Use it after ' +
+        'adding or changing annotations to check they fit, are readable and do not overlap, ' +
+        'and fix what looks off.',
+      { file: file.optional(), page: annotationPage.optional() },
+      run('screenshot'),
+      { annotations: READ_ONLY }
+    ),
+    sdk.tool(
       'goto',
       'Opens a file in the app, and a PDF at a page.',
       { file, page: page.optional() },
@@ -220,5 +232,6 @@ export const APP_TOOLS = [
   'delete_annotations',
   'add_blank_page',
   'add_drawing',
+  'screenshot',
   'goto'
 ].map((name) => `mcp__${SERVER_NAME}__${name}`)
