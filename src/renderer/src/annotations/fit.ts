@@ -80,12 +80,11 @@ export function planFit(spot: Spot, page: FitPage, measure: Measure, others: Rec
  * Measures a text box the way the overlay draws it. Everything in the overlay is laid out in
  * PDF points (the scale is a transform), so a hidden copy anywhere gives the same height.
  */
-export function measurer(markdown: string, fontSize: number, byClaude = false): Measure {
+export function measurer(markdown: string, fontSize: number): Measure {
   const html = renderMarkdown(markdown)
   return (width) => {
     const el = document.createElement('div')
-    // Claude's boxes have a wider border.
-    el.className = byClaude ? 'text-box by-claude' : 'text-box'
+    el.className = 'text-box'
     el.style.cssText = `visibility:hidden;left:0;top:0;width:${width}px;font-size:${fontSize}px`
     el.innerHTML = `<div class="text-box-content">${html}</div>`
     document.body.append(el)
@@ -125,7 +124,7 @@ export function othersOn(page: PageAnnotations, id: string, defaultFont: number)
   const boxes = page.textBoxes
     .filter((b) => b.id !== id)
     .map((b) => {
-      const measure = measurer(b.markdown, b.fontSize ?? defaultFont, b.author === 'claude')
+      const measure = measurer(b.markdown, b.fontSize ?? defaultFont)
       return { x: b.x, y: b.y, width: b.width, height: measure(b.width) }
     })
   return [...boxes, ...(page.images ?? []).filter((im) => im.id !== id)]
@@ -139,6 +138,6 @@ export function planBox(
   fitPage: FitPage,
   defaultFont: number
 ): FitPlan {
-  const measure = measurer(box.markdown, box.fontSize ?? defaultFont, box.author === 'claude')
+  const measure = measurer(box.markdown, box.fontSize ?? defaultFont)
   return planFit(box, fitPage, measure, othersOn(pageOf(pages, page), box.id, defaultFont))
 }

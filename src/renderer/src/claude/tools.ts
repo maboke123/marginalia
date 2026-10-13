@@ -229,7 +229,7 @@ function fitOnPage(open: OpenPdf & { doc: AnnotationDoc }, page: number, box: Te
   const plan = planBox(open.doc.getState().pages, page, box, fitPage, font)
   if (plan.kind === 'fits') return { ...box, width: plan.width, y: plan.y }
   const n = Math.round
-  const tall = n(measurer(box.markdown, box.fontSize ?? font, true)(plan.width))
+  const tall = n(measurer(box.markdown, box.fontSize ?? font)(plan.width))
   const room = n(size.height - 2 * fitPage.gap)
   throw new ToolError(
     `This text does not fit on page ${page}, not even moved up at the full width of the margin. ` +

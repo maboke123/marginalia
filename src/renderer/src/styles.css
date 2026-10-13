@@ -941,8 +941,9 @@ h2 {
   pointer-events: none;
 }
 
-.text-box.by-claude {
-  border-left: 2px solid var(--claude-ink);
+/* Who wrote a box shows on hover only; a coloured edge at rest got in the way of drawings. */
+.text-box.by-claude:hover:not(.selected, .editing) {
+  border-left-color: var(--claude-ink);
 }
 
 .text-box-content {

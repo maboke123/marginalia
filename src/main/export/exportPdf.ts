@@ -15,7 +15,6 @@ const PADDING_X = 7
 const PADDING_TOP = 4
 const LINE_HEIGHT = 1.35
 const PAPER_TEXT = '#1f2328'
-const CLAUDE_INK = '#1b7c83'
 const MARGIN_RULE = '#d6d6d2'
 
 // Windows fonts with wide Unicode coverage: text, then symbols such as subscript letters.
@@ -123,11 +122,6 @@ function drawTextBox(
       x += run.font.widthOfTextAtSize(run.text, size)
     }
   })
-  if (box.author === 'claude') {
-    const height = lines.length * size * LINE_HEIGHT + 2 * PADDING_TOP
-    const [x, y] = toPdf(box.x, box.y + height)
-    page.drawRectangle({ x, y, width: 2, height, color: hex(lib, CLAUDE_INK) })
-  }
 }
 
 function drawPage(
