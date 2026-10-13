@@ -30,6 +30,7 @@
   --nb-orange: #df7a2a;
   --nb-yellow: #c99a14;
   --nb-green: #3f9150;
+  --nb-darkgreen: #1f6331;
   --nb-teal: #2a8f8a;
   --nb-blue: #2b65c4;
   --nb-pink: #cf4f8b;
@@ -78,6 +79,7 @@
     --nb-orange: #ec9450;
     --nb-yellow: #dcb440;
     --nb-green: #62b073;
+    --nb-darkgreen: #3d8a4f;
     --nb-teal: #4fb3ad;
     --nb-blue: #5b8fe0;
     --nb-pink: #e277a8;
@@ -1434,6 +1436,10 @@ h2 {
 
 .tc-green {
   color: var(--nb-green);
+}
+
+.tc-darkgreen {
+  color: var(--nb-darkgreen);
 }
 
 .tc-teal {

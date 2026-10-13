@@ -135,8 +135,8 @@ export function registerIpc(
   handle('vault:move', (p: string, parent: string, before: Position) =>
     current().move(p, parent, before)
   )
-  handle('vault:setColor', (notebook: string, color: NotebookColor | null) =>
-    current().setColor(notebook, color)
+  handle('vault:setColor', (folder: string, color: NotebookColor | null) =>
+    current().setColor(folder, color)
   )
   handle('vault:reveal', (p: string) => shell.showItemInFolder(current().resolve(p)))
   handle('vault:readFile', (p: string) => current().readFile(p))

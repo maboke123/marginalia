@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { NOTEBOOK_COLORS, type Position, type VaultNode } from '../../../shared/types'
+import { colorLabel, NOTEBOOK_COLORS, type Position, type VaultNode } from '../../../shared/types'
 import { draggingFiles, importDroppedFiles } from '../lib/drop'
 import {
   childrenOf,
@@ -146,10 +146,8 @@ export function Sidebar(): React.JSX.Element {
       items.push({ separator: true })
     }
     items.push({ label: 'Rename', hint: 'F2', onSelect: () => app.startRename(node.path) })
-    if (node.kind === 'notebook') {
-      items.push({ custom: <ColorPicker notebook={node.name} close={closeMenu} /> })
-    }
     if (isFolder(node)) {
+      items.push({ custom: <ColorPicker folder={node.path} close={closeMenu} /> })
       items.push({ label: 'Hide folder', onSelect: () => app.setFolderHidden(node.path, true) })
     }
     items.push(
@@ -315,7 +313,7 @@ export function Sidebar(): React.JSX.Element {
             selected={selected === row.node.path}
             active={activeFile === row.node.path}
             renaming={renaming === row.node.path}
-            color={row.node.kind === 'notebook' ? colors[row.node.name] : undefined}
+            color={isFolder(row.node) ? colors[row.node.path] : undefined}
             dropZone={drop?.path === row.node.path ? drop.zone : null}
             onClick={() => activate(row)}
             onContextMenu={(e) => {
@@ -369,21 +367,21 @@ function vaultMenu(
   return items
 }
 
-function ColorPicker({ notebook, close }: { notebook: string; close(): void }): React.JSX.Element {
-  const current = useApp((s) => s.colors[notebook])
+function ColorPicker({ folder, close }: { folder: string; close(): void }): React.JSX.Element {
+  const current = useApp((s) => s.colors[folder])
   const setColor = useApp((s) => s.setColor)
   const pick = (color: (typeof NOTEBOOK_COLORS)[number] | null): void => {
     close()
-    setColor(notebook, color)
+    setColor(folder, color)
   }
   return (
-    <div className="menu-swatches" aria-label="Notebook colour">
+    <div className="menu-swatches" aria-label="Folder colour">
       {NOTEBOOK_COLORS.map((c) => (
         <button
           key={c}
           className="swatch"
-          title={c}
-          aria-label={c}
+          title={colorLabel(c)}
+          aria-label={colorLabel(c)}
           aria-pressed={current === c}
           style={{ background: `var(--nb-${c})` }}
           onClick={() => pick(c)}

@@ -27,6 +27,7 @@ interface Entry {
 }
 
 interface VaultSettings {
+  /** Folder path -> colour name (a notebook's path is its name). */
   notebookColors?: Record<string, NotebookColor>
   [key: string]: unknown
 }
@@ -465,7 +466,7 @@ export class Vault {
     const renamed = new Map([[oldName, name]])
     if (note && noteTarget) renamed.set(path.basename(note), path.basename(noteTarget))
     await updateOrder(dir, (names) => names.map((n) => renamed.get(n) ?? n))
-    if (isDir && dir === this.root) await this.renameColor(oldName, name)
+    if (isDir) await this.remapColors(toRel(this.root, abs), toRel(this.root, target))
     await this.remapState(toRel(this.root, abs), toRel(this.root, target))
     if (note && noteTarget) {
       await this.remapState(toRel(this.root, note), toRel(this.root, noteTarget))
@@ -512,7 +513,7 @@ export class Vault {
       }
       const gone = new Set([name, ...notes.map((n) => path.basename(n))])
       await updateOrder(oldParent, (names) => names.filter((n) => !gone.has(n)))
-      if (isDir && oldParent === this.root) await this.renameColor(name, null)
+      if (isDir) await this.remapColors(toRel(this.root, abs), toRel(this.root, target))
       await this.remapState(toRel(this.root, abs), toRel(this.root, target))
       for (const [note, noteTarget] of noteMoves) {
         await this.remapState(toRel(this.root, note), toRel(this.root, noteTarget))
@@ -538,18 +539,18 @@ export class Vault {
       await this.trashItem(abs + SIDECAR_SUFFIX)
     }
     await updateOrder(parent, (names) => names.filter((n) => n !== name))
-    if (isDir && parent === this.root) await this.renameColor(name, null)
+    if (isDir) await this.remapColors(toRel(this.root, abs), null)
     await this.remapState(toRel(this.root, abs), null)
   }
 
-  async setColor(notebook: string, color: NotebookColor | null): Promise<void> {
-    const abs = await this.existingDir(notebook)
-    if (path.dirname(abs) !== this.root) throw new VaultError('Only notebooks have a colour')
-    const name = path.basename(abs)
+  async setColor(folder: string, color: NotebookColor | null): Promise<void> {
+    const abs = await this.existingDir(folder)
+    if (abs === this.root) throw new VaultError('The vault itself cannot have a colour')
+    const rel = toRel(this.root, abs)
     await this.updateData<VaultSettings>(SETTINGS_FILE, (settings) => {
       const colors = { ...settings.notebookColors }
-      if (color) colors[name] = color
-      else delete colors[name]
+      if (color) colors[rel] = color
+      else delete colors[rel]
       return { ...settings, notebookColors: colors }
     })
   }
@@ -700,14 +701,11 @@ export class Vault {
     return abs
   }
 
-  private renameColor(oldName: string, newName: string | null): Promise<void> {
+  /** Folder colours follow a folder and its subfolders when it is renamed, moved or trashed. */
+  private remapColors(from: string, to: string | null): Promise<void> {
     return this.updateData<VaultSettings>(SETTINGS_FILE, (settings) => {
-      const color = settings.notebookColors?.[oldName]
-      if (!color) return null
-      const colors = { ...settings.notebookColors }
-      delete colors[oldName]
-      if (newName) colors[newName] = color
-      return { ...settings, notebookColors: colors }
+      const colors = remapKeys(settings.notebookColors, from, to)
+      return colors && { ...settings, notebookColors: colors }
     })
   }
 

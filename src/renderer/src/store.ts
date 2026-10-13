@@ -152,7 +152,7 @@ interface AppState {
   rename(path: string, name: string): Promise<void>
   move(path: string, parent: string, before?: Position): Promise<void>
   trash(path: string): Promise<void>
-  setColor(notebook: string, color: NotebookColor | null): Promise<void>
+  setColor(folder: string, color: NotebookColor | null): Promise<void>
   setFolderHidden(folder: string, hidden: boolean): Promise<void>
   /** Without `sources` a file dialog asks for them; without `parent` the current section is used. */
   importPdfs(sources?: string[], parent?: string): Promise<void>
@@ -605,8 +605,8 @@ export const useApp = create<AppState>((set, get) => {
       if (done) await get().refresh()
     },
 
-    async setColor(notebook, color) {
-      await attempt(() => api.setColor(notebook, color))
+    async setColor(folder, color) {
+      await attempt(() => api.setColor(folder, color))
       await get().refresh()
     },
 

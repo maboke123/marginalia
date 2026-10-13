@@ -1,6 +1,7 @@
 import { StateEffect, StateField, type ChangeSpec, type EditorState } from '@codemirror/state'
 import { EditorView, showTooltip, type Tooltip } from '@codemirror/view'
 import { recolor, TEXT_COLORS, type TextColor } from '../../../shared/textColor'
+import { colorLabel } from '../../../shared/types'
 
 /** Colours the selection (null removes the colour). With only a cursor, see `recolor`. */
 export function setTextColor(view: EditorView, color: TextColor | null): boolean {
@@ -36,7 +37,7 @@ export function setTextColor(view: EditorView, color: TextColor | null): boolean
   return true
 }
 
-const label = (color: string): string => color[0].toUpperCase() + color.slice(1)
+const label = colorLabel
 
 function createBar(view: EditorView): { dom: HTMLElement } {
   const dom = document.createElement('div')

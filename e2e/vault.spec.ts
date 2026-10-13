@@ -130,6 +130,20 @@ test('the sidebar can be hidden and brought back', async () => {
   await expect(sidebar).toBeVisible()
 })
 
+test('a section takes a colour from its menu', async () => {
+  await row('Machine Learning').click()
+  await row('B2 Decision trees').click({ button: 'right' })
+  await page.getByRole('button', { name: 'Dark green' }).click()
+  await expect(row('B2 Decision trees').locator('.tree-icon')).toHaveAttribute(
+    'style',
+    /--nb-darkgreen/
+  )
+  const settings = JSON.parse(
+    await fs.readFile(path.join(vault, '.marginalia', 'settings.json'), 'utf8')
+  )
+  expect(settings.notebookColors).toEqual({ 'Machine Learning/B2 Decision trees': 'darkgreen' })
+})
+
 test('a folder can be hidden and shown again from Settings', async () => {
   await fs.mkdir(path.join(vault, 'Machine Learning', 'B3 Ensembles', 'assignment-repo'))
   await row('Machine Learning').click()

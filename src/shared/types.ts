@@ -32,7 +32,7 @@ export type LinkHow = 'current' | 'add' | 'remove'
 
 export interface VaultTree {
   nodes: VaultNode[]
-  /** Notebook name -> colour name. */
+  /** Folder path -> colour name. */
   colors: Record<string, NotebookColor>
   /** PDF path -> the notes linked to it; the first is the one lecture mode opens. */
   notes: Record<string, string[]>
@@ -45,6 +45,7 @@ export const NOTEBOOK_COLORS = [
   'orange',
   'yellow',
   'green',
+  'darkgreen',
   'teal',
   'blue',
   'pink',
@@ -52,6 +53,10 @@ export const NOTEBOOK_COLORS = [
 ] as const
 
 export type NotebookColor = (typeof NOTEBOOK_COLORS)[number]
+
+/** "darkgreen" -> "Dark green", for tooltips. */
+export const colorLabel = (color: NotebookColor): string =>
+  color.replace(/^dark/, 'dark ').replace(/^./, (c) => c.toUpperCase())
 
 /**
  * Where to put a moved item among its new siblings.
@@ -74,7 +79,7 @@ export interface MarginaliaApi {
     move(path: string, parent: string, before?: Position): Promise<string>
     trash(path: string): Promise<boolean>
     reveal(path: string): Promise<void>
-    setColor(notebook: string, color: NotebookColor | null): Promise<void>
+    setColor(folder: string, color: NotebookColor | null): Promise<void>
     /** Opens a file dialog; returns absolute paths of the chosen PDFs (empty when cancelled). */
     pickPdfs(): Promise<string[]>
     /** Copies PDFs from anywhere on disk into a section; returns their vault paths. */

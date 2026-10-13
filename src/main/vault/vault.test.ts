@@ -182,6 +182,29 @@ describe('rename', () => {
     expect(names(nodes[0].children!)).toEqual(['Z.md', 'A.md'])
     expect(colors).toEqual({ 'Machine Learning': 'teal' })
   })
+
+  it('keeps colours of subfolders through rename, move and trash', async () => {
+    await fs.mkdir(path.join(root, 'ML/B2/extra'), { recursive: true })
+    await fs.mkdir(path.join(root, 'Stats'))
+    await vault.setColor('ML/B2', 'darkgreen')
+    await vault.setColor('ML/B2/extra', 'orange')
+
+    await vault.rename('ML', 'Machine Learning')
+    expect((await vault.tree()).colors).toEqual({
+      'Machine Learning/B2': 'darkgreen',
+      'Machine Learning/B2/extra': 'orange'
+    })
+
+    await vault.move('Machine Learning/B2', 'Stats')
+    expect((await vault.tree()).colors).toEqual({
+      'Stats/B2': 'darkgreen',
+      'Stats/B2/extra': 'orange'
+    })
+
+    await vault.trash('Stats/B2/extra')
+    expect((await vault.tree()).colors).toEqual({ 'Stats/B2': 'darkgreen' })
+    await expect(vault.setColor('', 'red')).rejects.toThrow('cannot have a colour')
+  })
 })
 
 describe('move', () => {
