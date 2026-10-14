@@ -185,8 +185,8 @@ export function registerIpc(
   })
   handle('vault:linkedNote', (p: string) => current().linkedNote(p))
   handle('vault:linkedPdf', (p: string) => current().linkedPdf(p))
-  handle('vault:setFolderHidden', (p: string, hidden: boolean) =>
-    current().setFolderHidden(p, hidden)
+  handle('vault:setHidden', (p: string, hidden: boolean) =>
+    current().setHidden(p, hidden)
   )
   handle('vault:linkNote', (p: string, note: string, how: LinkHow) =>
     current().linkNote(p, note, how)

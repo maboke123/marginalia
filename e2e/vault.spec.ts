@@ -169,6 +169,19 @@ test('a folder can be hidden and shown again from Settings', async () => {
   await expect(row('assignment-repo')).toBeVisible()
 })
 
+test('a single file can be hidden', async () => {
+  await fs.writeFile(path.join(vault, 'Machine Learning', 'B3 Ensembles', 'README.md'), '')
+  await row('Machine Learning').click()
+  await row('B3 Ensembles').click()
+  await row('README').click({ button: 'right' })
+  await page.getByRole('menuitem', { name: 'Hide file' }).click()
+  await expect(row('README')).toHaveCount(0)
+  await page.keyboard.press('Control+Comma')
+  await expect(page.getByRole('dialog', { name: 'Settings' })).toContainText(
+    'Machine Learning/B3 Ensembles/README.md'
+  )
+})
+
 test('a notebook created in the app appears on disk', async () => {
   await page.getByRole('button', { name: 'New notebook' }).first().click()
   const input = page.locator('.rename-input')

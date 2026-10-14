@@ -36,7 +36,7 @@ export interface VaultTree {
   colors: Record<string, NotebookColor>
   /** PDF path -> the notes linked to it; the first is the one lecture mode opens. */
   notes: Record<string, string[]>
-  /** Folders hidden from the sidebar, search and quick switcher. */
+  /** Folders and files hidden from the sidebar, search and quick switcher. */
   hidden: string[]
 }
 
@@ -98,7 +98,7 @@ export interface MarginaliaApi {
     linkedPdf(note: string): Promise<string | null>
     /** 'current' links the note as the one lecture mode opens, 'add' as one more. */
     linkNote(pdf: string, note: string, how: LinkHow): Promise<void>
-    setFolderHidden(folder: string, hidden: boolean): Promise<void>
+    setHidden(path: string, hidden: boolean): Promise<void>
     readAnnotations(pdf: string): Promise<LoadedAnnotations>
     writeAnnotations(pdf: string, file: AnnotationFile): Promise<void>
     /** Asks where to save, then writes a copy with the annotations drawn in. Null when cancelled. */

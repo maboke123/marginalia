@@ -565,7 +565,7 @@ describe('hidden folders', () => {
   it('leaves hidden folders out of the tree and follows renames of a parent', async () => {
     await write('OvA/les_3/Inhoud.md', '')
     await write('OvA/les_3/assignment-repo/README.md', '')
-    await vault.setFolderHidden('OvA/les_3/assignment-repo', true)
+    await vault.setHidden('OvA/les_3/assignment-repo', true)
     const names = async (): Promise<string[]> =>
       flatten((await vault.tree()).nodes).map((n) => n.path)
     expect(await names()).toEqual(['OvA', 'OvA/les_3', 'OvA/les_3/Inhoud.md'])
@@ -575,9 +575,30 @@ describe('hidden folders', () => {
     expect((await vault.tree()).hidden).toEqual(['Ontwerp van Algoritmen/les_3/assignment-repo'])
     expect(await names()).not.toContain('Ontwerp van Algoritmen/les_3/assignment-repo')
 
-    await vault.setFolderHidden('Ontwerp van Algoritmen/les_3/assignment-repo', false)
+    await vault.setHidden('Ontwerp van Algoritmen/les_3/assignment-repo', false)
     expect(await names()).toContain('Ontwerp van Algoritmen/les_3/assignment-repo/README.md')
-    await expect(vault.setFolderHidden('Nope', true)).rejects.toThrow('does not exist')
+    await expect(vault.setHidden('Nope', true)).rejects.toThrow('does not exist')
+  })
+
+  it('hides a single file, and a PDF together with its notes', async () => {
+    await write('ML/les_1.pdf', '')
+    await write('ML/les_1.md', '')
+    await write('ML/Derivation.md', '')
+    await write('ML/Other.md', '')
+    await vault.linkNote('ML/les_1.pdf', 'ML/Derivation.md', 'add')
+    const names = async (): Promise<string[]> =>
+      flatten((await vault.tree()).nodes).map((n) => n.path)
+
+    await vault.setHidden('ML/Other.md', true)
+    expect(await names()).toEqual(['ML', 'ML/Derivation.md', 'ML/les_1.md', 'ML/les_1.pdf'])
+    await vault.setHidden('ML/les_1.pdf', true)
+    expect(await names()).toEqual(['ML'])
+    expect((await vault.tree()).hidden).toEqual(['ML/Other.md', 'ML/les_1.pdf'])
+
+    await vault.rename('ML/Other.md', 'Kept.md')
+    expect((await vault.tree()).hidden).toEqual(['ML/Kept.md', 'ML/les_1.pdf'])
+    await vault.setHidden('ML/les_1.pdf', false)
+    expect(await names()).toContain('ML/Derivation.md')
   })
 })
 

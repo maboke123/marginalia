@@ -81,8 +81,8 @@ interface AppState {
   colors: Record<string, NotebookColor>
   /** PDF path -> its linked notes (the first opens in lecture mode); the sidebar shows them under it. */
   links: NoteLinks
-  /** Folders hidden from the sidebar, search and quick switcher. */
-  hiddenFolders: string[]
+  /** Folders and files hidden from the sidebar, search and quick switcher. */
+  hidden: string[]
   expanded: Record<string, boolean>
   selected: string | null
   /** The file shown when not in lecture mode. */
@@ -153,7 +153,7 @@ interface AppState {
   move(path: string, parent: string, before?: Position): Promise<void>
   trash(path: string): Promise<void>
   setColor(folder: string, color: NotebookColor | null): Promise<void>
-  setFolderHidden(folder: string, hidden: boolean): Promise<void>
+  setHidden(path: string, hidden: boolean): Promise<void>
   /** Without `sources` a file dialog asks for them; without `parent` the current section is used. */
   importPdfs(sources?: string[], parent?: string): Promise<void>
 }
@@ -316,7 +316,7 @@ export const useApp = create<AppState>((set, get) => {
     nodes: [],
     colors: {},
     links: {},
-    hiddenFolders: [],
+    hidden: [],
     expanded: {},
     selected: null,
     activeFile: null,
@@ -388,7 +388,7 @@ export const useApp = create<AppState>((set, get) => {
         nodes: tree.nodes,
         colors: tree.colors,
         links: tree.notes,
-        hiddenFolders: tree.hidden,
+        hidden: tree.hidden,
         selected: keep(selected),
         activeFile: keep(activeFile),
         slidesFile: keep(slidesFile),
@@ -610,10 +610,10 @@ export const useApp = create<AppState>((set, get) => {
       await get().refresh()
     },
 
-    async setFolderHidden(folder, hidden) {
-      await attempt(() => api.setFolderHidden(folder, hidden))
+    async setHidden(path, hidden) {
+      await attempt(() => api.setHidden(path, hidden))
       await get().refresh()
-      if (hidden) get().showNotice(`Hid ${folder.split('/').pop()}. Settings lists hidden folders.`)
+      if (hidden) get().showNotice(`Hid ${path.split('/').pop()}. Settings lists what is hidden.`)
     }
   }
 })

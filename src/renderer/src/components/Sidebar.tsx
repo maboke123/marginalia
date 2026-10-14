@@ -148,7 +148,9 @@ export function Sidebar(): React.JSX.Element {
     items.push({ label: 'Rename', hint: 'F2', onSelect: () => app.startRename(node.path) })
     if (isFolder(node)) {
       items.push({ custom: <ColorPicker folder={node.path} close={closeMenu} /> })
-      items.push({ label: 'Hide folder', onSelect: () => app.setFolderHidden(node.path, true) })
+      items.push({ label: 'Hide folder', onSelect: () => app.setHidden(node.path, true) })
+    } else {
+      items.push({ label: 'Hide file', onSelect: () => app.setHidden(node.path, true) })
     }
     items.push(
       { label: 'Show in Explorer', onSelect: () => window.api.vault.reveal(node.path) },

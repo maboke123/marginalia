@@ -215,8 +215,8 @@ export function SettingsDialog(): React.JSX.Element {
           </section>
 
           <section>
-            <h3>Hidden folders</h3>
-            <HiddenFolders />
+            <h3>Hidden folders and files</h3>
+            <HiddenItems />
           </section>
 
           <section>
@@ -240,14 +240,14 @@ export function SettingsDialog(): React.JSX.Element {
   )
 }
 
-/** Folders hidden with "Hide folder" in the sidebar, for this vault, each with a way back. */
-function HiddenFolders(): React.JSX.Element {
-  const hidden = useApp((s) => s.hiddenFolders)
+/** Folders and files hidden from the sidebar menu, for this vault, each with a way back. */
+function HiddenItems(): React.JSX.Element {
+  const hidden = useApp((s) => s.hidden)
   if (!hidden.length) {
     return (
       <p className="muted settings-help">
-        None. Right-click a folder in the sidebar and choose Hide folder to keep it out of the
-        sidebar, search and quick switcher.
+        None. Right-click a folder or file in the sidebar and choose Hide to keep it out of the
+        sidebar, search and quick switcher. A hidden PDF takes its notes along.
       </p>
     )
   }
@@ -259,7 +259,7 @@ function HiddenFolders(): React.JSX.Element {
           <button
             className="button"
             aria-label={`Show ${folder}`}
-            onClick={() => void useApp.getState().setFolderHidden(folder, false)}
+            onClick={() => void useApp.getState().setHidden(folder, false)}
           >
             Show
           </button>

@@ -37,7 +37,10 @@ interface VaultState {
   lastPage?: Record<string, number>
   /** Section path -> Claude session id, so each lesson keeps its own conversation. */
   chats?: Record<string, string>
-  /** Folders left out of the sidebar, search and quick switcher (coding projects and such). */
+  /**
+   * Folders and files left out of the sidebar, search and quick switcher (coding projects and
+   * such). The name is older than hiding files.
+   */
   hiddenFolders?: string[]
   /** PDF path -> its notes (`NoteLinks`); older files have one string per PDF. */
   notes?: Record<string, string | string[]>
@@ -166,17 +169,21 @@ export class Vault {
       this.readData<VaultSettings>(SETTINGS_FILE).catch((): VaultSettings => ({})),
       this.readState().catch((): VaultState => ({}))
     ])
-    const nodes = await this.readDir(this.root, 0, new Set(state.hiddenFolders))
+    const notes = noteLinks(state.notes)
+    const nodes = await this.readDir(this.root, 0, new Set(state.hiddenFolders), notes)
     return {
       nodes,
       colors: settings.notebookColors ?? {},
-      notes: noteLinks(state.notes),
+      notes,
       hidden: state.hiddenFolders ?? []
     }
   }
 
-  async setFolderHidden(rel: string, hidden: boolean): Promise<void> {
-    if (hidden) await this.existingDir(rel)
+  /** Hides or shows a folder or a file. */
+  async setHidden(rel: string, hidden: boolean): Promise<void> {
+    if (hidden && !(await exists(this.resolveItem(rel)))) {
+      throw new VaultError(`"${rel}" does not exist`)
+    }
     return this.updateData<VaultState>(STATE_FILE, (state) => {
       const current = state.hiddenFolders ?? []
       if (current.includes(rel) === hidden) return null
@@ -188,7 +195,8 @@ export class Vault {
   private async readDir(
     dir: string,
     depth: number,
-    hidden = new Set<string>()
+    hidden = new Set<string>(),
+    links: NoteLinks = {}
   ): Promise<VaultNode[]> {
     let entries: Entry[]
     try {
@@ -198,9 +206,20 @@ export class Vault {
       if (depth > 0 && (err as NodeJS.ErrnoException).code === 'ENOENT') return []
       throw err
     }
-    const shown = entries.filter(
-      ({ name, isDir }) => !isDir || !hidden.has(toRel(this.root, path.join(dir, name)))
-    )
+    const relOf = (name: string): string => toRel(this.root, path.join(dir, name))
+    const files = entries
+      .filter((e) => !e.isDir)
+      .map(({ name }): VaultNode => ({
+        name,
+        path: relOf(name),
+        kind: isPdf(name) ? 'pdf' : 'markdown'
+      }))
+    // The notes shown under a hidden PDF go with it.
+    const gone = new Set(hidden)
+    for (const [pdf, notes] of pairNotes(files, links)) {
+      if (hidden.has(pdf)) for (const note of notes) gone.add(note.path)
+    }
+    const shown = entries.filter(({ name }) => !gone.has(relOf(name)))
     return Promise.all(
       shown.map(async ({ name, isDir }): Promise<VaultNode> => {
         const abs = path.join(dir, name)
@@ -210,7 +229,7 @@ export class Vault {
           name,
           path: rel,
           kind: depth === 0 ? 'notebook' : 'section',
-          children: await this.readDir(abs, depth + 1, hidden)
+          children: await this.readDir(abs, depth + 1, hidden, links)
         }
       })
     )
