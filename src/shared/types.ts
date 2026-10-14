@@ -1,7 +1,7 @@
 export type NodeKind = 'notebook' | 'section' | 'markdown' | 'pdf'
 
 import type { AnnotationFile, LoadedAnnotations } from './annotations'
-import type { AppSettings } from './settings'
+import type { AppSettings, TranscribeLanguage } from './settings'
 import type { SlideThumb } from './slideMatch'
 import type {
   CompleteRequest,
@@ -38,6 +38,8 @@ export interface VaultTree {
   notes: Record<string, string[]>
   /** Folders and files hidden from the sidebar, search and quick switcher. */
   hidden: string[]
+  /** Notebook path -> the language its lectures are given in, for transcribing. */
+  languages: Record<string, TranscribeLanguage>
 }
 
 /** The vault-wide note in the root folder, pinned at the top of the sidebar. */
@@ -85,6 +87,8 @@ export interface MarginaliaApi {
     trash(path: string): Promise<boolean>
     reveal(path: string): Promise<void>
     setColor(folder: string, color: NotebookColor | null): Promise<void>
+    /** 'auto' removes the course's own language, so the default applies. */
+    setCourseLanguage(notebook: string, language: TranscribeLanguage): Promise<void>
     /** Opens a file dialog; returns absolute paths of the chosen PDFs (empty when cancelled). */
     pickPdfs(): Promise<string[]>
     /** Copies PDFs from anywhere on disk into a section; returns their vault paths. */
@@ -146,6 +150,8 @@ export interface MarginaliaApi {
     transcribeFile(request: TranscribeFileRequest): Promise<string>
     /** Queues a transcript recorded without live transcription; returns the job id. */
     transcribeRecorded(request: TranscribeRecordedRequest): Promise<string>
+    /** Starts recordings not transcribed yet, when plugged in and the setting is on. */
+    transcribePending(): Promise<void>
     /** Takes a waiting job out of the queue, or stops the running one. */
     cancelJob(id: string): Promise<void>
     /** Moves a waiting job `by` places in the queue; negative is sooner. */
@@ -270,6 +276,12 @@ export interface TranscribeJob {
   /** Set when done. */
   transcript?: string
   error?: string
+  /** The transcript note of a recording made in the app. */
+  note?: string
+  /** Started by the app because the laptop is plugged in, not by me. */
+  auto?: boolean
+  /** Taken out of the queue by the app; the window drops it. */
+  removed?: boolean
 }
 
 export interface RecordingStatus {

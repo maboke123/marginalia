@@ -26,6 +26,15 @@ export function TranscribeFileDialog(): React.JSX.Element | null {
   const [model, setModel] = useState(settings.transcribeModel)
   const [language, setLanguage] = useState<TranscribeLanguage>(settings.transcribeLanguage)
   const [linkSlides, setLinkSlides] = useState(true)
+  const course =
+    choosing && (choosing.kind === 'file' ? choosing.folder : choosing.note).split('/')[0]
+  const courseLanguage = useApp((s) => (course ? s.languages[course] : undefined))
+  // Each new recording starts in the language of its course.
+  const [shown, setShown] = useState(choosing)
+  if (shown !== choosing) {
+    setShown(choosing)
+    if (courseLanguage) setLanguage(courseLanguage)
+  }
   if (!choosing) return null
   const file = (p: string): string => p.split(/[\\/]/).pop()!
   const title =
@@ -139,7 +148,8 @@ const LANGUAGE_NAMES: Record<string, string> = Object.fromEntries(
 function jobDetails(job: TranscribeJob): string {
   const lesson = job.folder.split('/').pop()
   const model = job.model === 'accurate' ? 'accurate' : 'fast'
-  return `${lesson}, ${model}, ${LANGUAGE_NAMES[job.language] ?? job.language}`
+  const details = `${lesson}, ${model}, ${LANGUAGE_NAMES[job.language] ?? job.language}`
+  return job.auto ? `${details}, started because the laptop is plugged in` : details
 }
 
 /**
@@ -250,8 +260,9 @@ function TranscribeQueue({
       >
         <h2>Transcription queue</h2>
         <p className="muted">
-          One recording at a time, so the laptop stays usable. Stopping one throws away what it had
-          done so far.
+          One recording at a time, so the laptop stays usable. A stopped one keeps what it finished
+          (saved every 5 minutes of recording) and goes on from there when you start it again with
+          the same language and speed.
         </p>
         {!current && !waiting.length && <p>Nothing left to transcribe.</p>}
         <ol className="queue-list">

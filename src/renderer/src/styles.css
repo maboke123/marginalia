@@ -2415,6 +2415,32 @@ h2 {
   font-size: 12px;
 }
 
+.settings-check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-top: 4px;
+}
+
+.course-languages {
+  display: grid;
+  gap: 6px;
+  max-width: 420px;
+}
+
+.course-languages label {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+}
+
+.course-languages span {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
 .settings-colors {
   display: flex;
   align-items: center;

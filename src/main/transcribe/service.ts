@@ -8,8 +8,10 @@ import type {
   TranscribeRecordedRequest,
   TranscribeJob,
   TranscribePart,
-  TranscribeStatus
+  TranscribeStatus,
+  VaultNode
 } from '../../shared/types'
+import type { ConfigStore } from '../config'
 import type { Handle } from '../ipc'
 import { VaultError } from '../vault/names'
 import type { Vault } from '../vault/vault'
@@ -18,7 +20,7 @@ import { transcribeFile, type FileJob } from './fileJob'
 import { pruneCheckpoints } from './pieces'
 import { LiveSession, timelineName } from './live'
 import { fixMicrophone, type MicFix } from './mic'
-import { audioOf, type SlideMoment } from './transcript'
+import { audioOf, NOT_TRANSCRIBED, type SlideMoment } from './transcript'
 import type { Segment } from './transcript'
 
 /**
@@ -103,11 +105,23 @@ export const MEDIA_EXTENSIONS = [
   'aac'
 ]
 
+/** Transcript notes recorded in the app, anywhere in the vault. */
+function transcriptNotes(nodes: VaultNode[]): string[] {
+  return nodes.flatMap((n) =>
+    n.children
+      ? transcriptNotes(n.children)
+      : n.kind === 'markdown' && /^Transcript .*\.md$/.test(n.name)
+        ? [n.path]
+        : []
+  )
+}
+
 /** Speech to text (SPEC addition): live lecture recording into a transcript note. */
 export function registerTranscription(
   handle: Handle,
   getWindow: () => BrowserWindow | null,
   dataDir: string,
+  config: ConfigStore,
   getVault: () => Vault | null
 ): void {
   const engine: Transcriber = process.env['MARGINALIA_FAKE_WHISPER']
@@ -158,6 +172,7 @@ export function registerTranscription(
     const session = live
     live = null
     await session?.stop()
+    void transcribePending()
   })
 
   // Recordings from a file, one at a time: whisper already uses half the cores.
@@ -171,6 +186,8 @@ export function registerTranscription(
   /** Jobs not started yet, next one first. */
   let waiting: string[] = []
   let running: string | null = null
+  /** Transcripts the app must not start by itself again: stopped by hand or failed. */
+  const skipped = new Set<string>()
   // A cancelled job sends nothing more: the renderer has already let it go.
   const update = (id: string, change: Partial<TranscribeJob>): void => {
     const entry = jobs.get(id)
@@ -197,11 +214,26 @@ export function registerTranscription(
     queueJob(request, path.basename(request.source))
   )
 
-  // A recording made in the app: its own audio, filled into its note, slide links from its
-  // timeline (written next to the audio while recording).
-  handle('transcribe:recorded', async (request: TranscribeRecordedRequest) => {
+  handle('transcribe:recorded', (request: TranscribeRecordedRequest) => {
     const vault = getVault()
     if (!vault) throw new VaultError('No vault is open')
+    // My own choice of language and model wins over one the app started by itself.
+    for (const entry of jobs.values()) {
+      if (entry.job.note !== request.note) continue
+      if (!entry.job.auto) throw new VaultError('This recording is already being transcribed')
+      drop(entry, { removed: true })
+    }
+    skipped.delete(request.note)
+    return queueRecorded(vault, request, false)
+  })
+
+  // A recording made in the app: its own audio, filled into its note, slide links from its
+  // timeline (written next to the audio while recording).
+  async function queueRecorded(
+    vault: Vault,
+    request: TranscribeRecordedRequest,
+    auto: boolean
+  ): Promise<string> {
     const note = await vault.readText(request.note)
     const audio = audioOf(note)
     if (!audio) throw new VaultError('This transcript has no recording to transcribe')
@@ -219,11 +251,16 @@ export function registerTranscription(
         into: request.note,
         timeline
       },
-      request.note.split('/').pop()!.replace(/\.md$/, '')
+      request.note.split('/').pop()!.replace(/\.md$/, ''),
+      { note: request.note, auto }
     )
-  })
+  }
 
-  function queueJob(request: Omit<FileJob, 'signal' | 'onProgress'>, name: string): string {
+  function queueJob(
+    request: Omit<FileJob, 'signal' | 'onProgress'>,
+    name: string,
+    extra: Pick<TranscribeJob, 'note' | 'auto'> = {}
+  ): string {
     const vault = getVault()
     if (!vault) throw new VaultError('No vault is open')
     const id = randomUUID()
@@ -235,7 +272,8 @@ export function registerTranscription(
       language: request.language,
       phase: 'waiting',
       percent: 0,
-      place: waiting.length + 1
+      place: waiting.length + 1,
+      ...extra
     }
     jobs.set(id, { job, vault, request, abort: new AbortController() })
     waiting.push(id)
@@ -284,6 +322,8 @@ export function registerTranscription(
       })
       update(id, { transcript, phase: 'writing', percent: 100 })
     } catch (err) {
+      const { job } = jobs.get(id)!
+      if (job.auto && job.note && !abort.signal.aborted) skipped.add(job.note)
       update(id, { error: (err as Error).message })
     } finally {
       powerSaveBlocker.stop(awake)
@@ -298,13 +338,68 @@ export function registerTranscription(
   handle('transcribe:cancel', (id: string) => {
     const entry = jobs.get(id)
     if (!entry) return
+    // Stopped by hand: the app does not start it again by itself until the next launch.
+    if (entry.job.auto && entry.job.note) skipped.add(entry.job.note)
+    drop(entry)
+  })
+
+  /** Stops a job, or takes it out of the queue, after telling the window `last`. */
+  function drop(entry: Entry, last?: Partial<TranscribeJob>): void {
+    if (last) update(entry.job.id, last)
     entry.abort.abort()
-    if (waiting.includes(id)) {
-      waiting = waiting.filter((w) => w !== id)
-      jobs.delete(id)
+    if (waiting.includes(entry.job.id)) {
+      waiting = waiting.filter((w) => w !== entry.job.id)
+      jobs.delete(entry.job.id)
       renumber()
     }
-  })
+  }
+
+  // Recordings saved without transcribing them are done while the laptop is plugged in, in the
+  // language of their course. Unplugged, those jobs stop; their checkpoints keep the progress.
+  let scanning = false
+  async function transcribePending(): Promise<void> {
+    const vault = getVault()
+    if (!vault || scanning || powerMonitor.isOnBatteryPower()) return
+    const { settings } = await config.read()
+    if (!settings.autoTranscribe) return
+    scanning = true
+    try {
+      const tree = await vault.tree()
+      const queued = new Set([...jobs.values()].map((e) => e.job.note))
+      for (const note of transcriptNotes(tree.nodes)) {
+        if (note === live?.transcript || skipped.has(note) || queued.has(note)) continue
+        const text = await vault.readText(note).catch(() => '')
+        if (!text.includes(NOT_TRANSCRIBED) || !audioOf(text)) continue
+        const language = tree.languages[note.split('/')[0]] ?? settings.transcribeLanguage
+        await queueRecorded(vault, { note, model: settings.transcribeModel, language }, true).catch(
+          () => skipped.add(note)
+        )
+      }
+    } catch (err) {
+      console.error('Could not look for recordings to transcribe', err)
+    } finally {
+      scanning = false
+    }
+  }
+  handle('transcribe:pending', () => transcribePending())
+
+  const onBattery = (): void => {
+    for (const entry of [...jobs.values()]) {
+      if (!entry.job.auto) continue
+      drop(
+        entry,
+        entry.job.id === running
+          ? {
+              error: 'Paused on battery power. It goes on from here once the laptop is plugged in.'
+            }
+          : { removed: true }
+      )
+    }
+  }
+  powerMonitor.on('on-battery', onBattery)
+  powerMonitor.on('on-ac', () => void transcribePending())
+  setTimeout(() => void transcribePending(), 30_000)
+  setInterval(() => void transcribePending(), 5 * 60_000)
 
   /** Moves a waiting job `by` places, negative is sooner. */
   handle('transcribe:move', (id: string, by: number) => {

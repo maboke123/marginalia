@@ -51,7 +51,15 @@ export const useFiles = create<FilesState>((set, get) => {
   const cancelled = new Set<string>()
   window.api.transcribe.onJob((job) => {
     if (cancelled.has(job.id)) return
-    const jobs = get().jobs
+    if (job.removed) {
+      get().dismiss(job.id)
+      return
+    }
+    // A new run of a recording replaces the offer and an earlier stopped run.
+    const jobs = job.note
+      ? get().jobs.filter((j) => j.id === job.id || j.note !== job.note || !j.error)
+      : get().jobs
+    if (job.note) get().dismissOffer(job.note)
     set({
       jobs: jobs.some((j) => j.id === job.id)
         ? jobs.map((j) => (j.id === job.id ? job : j))

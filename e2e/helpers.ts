@@ -18,7 +18,10 @@ export async function createEnv(): Promise<TestEnv> {
   const userData = path.join(dir, 'profile')
   await fs.mkdir(vault)
   await fs.mkdir(userData)
-  await fs.writeFile(path.join(userData, 'config.json'), JSON.stringify({ recentVaults: [vault] }))
+  await fs.writeFile(
+    path.join(userData, 'config.json'),
+    JSON.stringify({ recentVaults: [vault], settings: { autoTranscribe: false } })
+  )
   return { dir, vault, userData }
 }
 

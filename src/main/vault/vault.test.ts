@@ -602,6 +602,19 @@ describe('hidden folders', () => {
   })
 })
 
+describe('course languages', () => {
+  it('keeps a language per notebook that follows a rename', async () => {
+    await write('OvA/les_1/slides.pdf', '')
+    await vault.setCourseLanguage('OvA', 'nl')
+    expect((await vault.tree()).languages).toEqual({ OvA: 'nl' })
+    await vault.rename('OvA', 'Ontwerp van Algoritmen')
+    expect((await vault.tree()).languages).toEqual({ 'Ontwerp van Algoritmen': 'nl' })
+    await vault.setCourseLanguage('Ontwerp van Algoritmen', 'auto')
+    expect((await vault.tree()).languages).toEqual({})
+    await expect(vault.setCourseLanguage('OvA/les_1', 'en')).rejects.toThrow('notebook')
+  })
+})
+
 describe('chat sessions', () => {
   it('keeps one conversation per section that follows renames, moves and trash', async () => {
     await fs.mkdir(path.join(root, 'ML/B2/Entropy'), { recursive: true })

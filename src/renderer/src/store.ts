@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { DEFAULT_SETTINGS, type AppSettings } from '../../shared/settings'
+import { DEFAULT_SETTINGS, type AppSettings, type TranscribeLanguage } from '../../shared/settings'
 import type { LinkHow, NotebookColor, Position, VaultInfo, VaultNode } from '../../shared/types'
 import { withLink, withoutLink, type NoteLinks } from '../../shared/pairing'
 import { ERASER_SIZES, PEN_WIDTHS, DEFAULT_TEXT_SIZE } from '../../shared/palette'
@@ -79,6 +79,8 @@ interface AppState {
   ready: boolean
   nodes: VaultNode[]
   colors: Record<string, NotebookColor>
+  /** Notebook path -> the language its lectures are given in. */
+  languages: Record<string, TranscribeLanguage>
   /** PDF path -> its linked notes (the first opens in lecture mode); the sidebar shows them under it. */
   links: NoteLinks
   /** Folders and files hidden from the sidebar, search and quick switcher. */
@@ -155,6 +157,7 @@ interface AppState {
   move(path: string, parent: string, before?: Position): Promise<void>
   trash(path: string): Promise<void>
   setColor(folder: string, color: NotebookColor | null): Promise<void>
+  setCourseLanguage(notebook: string, language: TranscribeLanguage): Promise<void>
   setHidden(path: string, hidden: boolean): Promise<void>
   /** Without `sources` a file dialog asks for them; without `parent` the current section is used. */
   importPdfs(sources?: string[], parent?: string): Promise<void>
@@ -317,6 +320,7 @@ export const useApp = create<AppState>((set, get) => {
     ready: false,
     nodes: [],
     colors: {},
+    languages: {},
     links: {},
     hidden: [],
     expanded: {},
@@ -389,6 +393,7 @@ export const useApp = create<AppState>((set, get) => {
         recentFiles: recentFiles.filter((p) => findNode(tree.nodes, p)),
         nodes: tree.nodes,
         colors: tree.colors,
+        languages: tree.languages,
         links: tree.notes,
         hidden: tree.hidden,
         selected: keep(selected),
@@ -616,6 +621,11 @@ export const useApp = create<AppState>((set, get) => {
 
     async setColor(folder, color) {
       await attempt(() => api.setColor(folder, color))
+      await get().refresh()
+    },
+
+    async setCourseLanguage(notebook, language) {
+      await attempt(() => api.setCourseLanguage(notebook, language))
       await get().refresh()
     },
 

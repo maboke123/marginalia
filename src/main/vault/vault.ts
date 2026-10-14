@@ -1,6 +1,7 @@
 import { constants as fsConstants, promises as fs } from 'fs'
 import path from 'path'
 import type { AnnotationFile, LoadedAnnotations } from '../../shared/annotations'
+import type { TranscribeLanguage } from '../../shared/settings'
 import { noteLinks, pairNotes, withLink, withoutLink, type NoteLinks } from '../../shared/pairing'
 import {
   TODO_NOTE,
@@ -36,6 +37,8 @@ interface Entry {
 interface VaultSettings {
   /** Folder path -> colour name (a notebook's path is its name). */
   notebookColors?: Record<string, NotebookColor>
+  /** Notebook path -> the language its lectures are given in. */
+  courseLanguages?: Record<string, TranscribeLanguage>
   [key: string]: unknown
 }
 
@@ -182,8 +185,20 @@ export class Vault {
       nodes,
       colors: settings.notebookColors ?? {},
       notes,
-      hidden: state.hiddenFolders ?? []
+      hidden: state.hiddenFolders ?? [],
+      languages: settings.courseLanguages ?? {}
     }
+  }
+
+  async setCourseLanguage(notebook: string, language: TranscribeLanguage): Promise<void> {
+    if (!notebook || notebook.includes('/')) throw new VaultError('Only a notebook has a language')
+    if (language !== 'auto') await this.existingDir(notebook)
+    await this.updateData<VaultSettings>(SETTINGS_FILE, (settings) => {
+      const languages = { ...settings.courseLanguages }
+      if (language === 'auto') delete languages[notebook]
+      else languages[notebook] = language
+      return { ...settings, courseLanguages: languages }
+    })
   }
 
   /** Hides or shows a folder or a file. */
@@ -739,7 +754,14 @@ export class Vault {
   private remapColors(from: string, to: string | null): Promise<void> {
     return this.updateData<VaultSettings>(SETTINGS_FILE, (settings) => {
       const colors = remapKeys(settings.notebookColors, from, to)
-      return colors && { ...settings, notebookColors: colors }
+      // A notebook moved into another one is a section now, without a language of its own.
+      const languages = remapKeys(settings.courseLanguages, from, to?.includes('/') ? null : to)
+      if (!colors && !languages) return null
+      return {
+        ...settings,
+        ...(colors && { notebookColors: colors }),
+        ...(languages && { courseLanguages: languages })
+      }
     })
   }
 

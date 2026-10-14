@@ -114,7 +114,7 @@ app.whenReady().then(async () => {
   const currentVault = registerIpc(() => mainWindow, config, app.getPath('userData'))
   registerClaude(handle, () => mainWindow, config, currentVault)
   registerTerminal(handle, () => mainWindow, config, currentVault)
-  registerTranscription(handle, () => mainWindow, app.getPath('userData'), currentVault)
+  registerTranscription(handle, () => mainWindow, app.getPath('userData'), config, currentVault)
   protocol.handle('vault', (request) => {
     const vault = currentVault()
     if (!vault) return new Response('No vault open', { status: 404 })

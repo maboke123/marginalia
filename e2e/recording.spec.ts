@@ -20,7 +20,10 @@ async function start(
   env = await createEnv()
   const config = path.join(env.userData, 'config.json')
   const current = JSON.parse(await fs.readFile(config, 'utf8'))
-  await fs.writeFile(config, JSON.stringify({ ...current, settings }))
+  await fs.writeFile(
+    config,
+    JSON.stringify({ ...current, settings: { ...current.settings, ...settings } })
+  )
   await fs.mkdir(path.join(env.vault, section), { recursive: true })
   await makeSlides(path.join(env.vault, section, 'slides.pdf'), 3)
   ;({ app, page } = await launch(env, extra, await args(env)))
@@ -364,6 +367,46 @@ test('transcriptions wait in a queue that can be reordered and emptied', async (
   await expect(bar).toContainText('week 3.wav')
   await bar.getByRole('button', { name: 'Cancel' }).click()
   await expect(bar).toBeHidden()
+})
+
+test('saved recordings are transcribed while plugged in, in the language of the course', async () => {
+  await start({ MARGINALIA_FAKE_WHISPER_MS: '3000' })
+  const power = (onBattery: boolean): Promise<void> =>
+    app.evaluate(({ powerMonitor }, battery) => {
+      powerMonitor.isOnBatteryPower = () => battery
+      powerMonitor.emit(battery ? 'on-battery' : 'on-ac')
+    }, onBattery)
+  await power(true)
+  await page.keyboard.press('Control+Shift+R')
+  const bar = page.getByRole('status', { name: 'Recording', exact: true })
+  await expect(bar).toContainText('Recording 00:0')
+  await page.waitForTimeout(1500)
+  await bar.getByRole('button', { name: 'Stop' }).click()
+  await expect(page.getByRole('status', { name: 'Recording saved' })).toBeVisible()
+
+  await page.keyboard.press('Control+Comma')
+  const settings = page.getByRole('dialog', { name: 'Settings' })
+  await settings.getByRole('combobox', { name: 'Language of Machine Learning' }).selectOption('nl')
+  await settings.getByRole('checkbox', { name: 'By itself while the laptop is plugged in' }).check()
+  await page.keyboard.press('Escape')
+  const job = page.getByRole('status', { name: 'Transcribing' })
+  await page.waitForTimeout(500)
+  await expect(job).toHaveCount(0)
+
+  await power(false)
+  await expect(job).toContainText('transcribing')
+  await expect(page.getByRole('status', { name: 'Recording saved' })).toHaveCount(0)
+  await power(true)
+  await expect(job).toContainText('Paused on battery power')
+  await power(false)
+  await expect(job).toContainText('Transcript ready', { timeout: 30_000 })
+
+  const name = (await fs.readdir(path.join(env.vault, section))).find((f) =>
+    f.startsWith('Transcript ')
+  )!
+  const text = await fs.readFile(path.join(env.vault, section, name), 'utf8')
+  expect(text).not.toContain('Not transcribed yet')
+  expect(text).toContain('language nl')
 })
 
 test('recording stops and is kept when the laptop goes to sleep', async () => {

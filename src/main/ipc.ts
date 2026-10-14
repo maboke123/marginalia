@@ -3,7 +3,7 @@ import { BrowserWindow, dialog, ipcMain, nativeTheme, shell } from 'electron'
 import { promises as fs } from 'fs'
 import path from 'path'
 import type { AnnotationFile } from '../shared/annotations'
-import { settingsFrom, type AppSettings } from '../shared/settings'
+import { settingsFrom, type AppSettings, type TranscribeLanguage } from '../shared/settings'
 import type {
   CaptureRect,
   FeedbackEntry,
@@ -153,6 +153,9 @@ export function registerIpc(
   handle('vault:rename', (p: string, name: string) => current().rename(p, name))
   handle('vault:move', (p: string, parent: string, before: Position) =>
     current().move(p, parent, before)
+  )
+  handle('vault:setCourseLanguage', (notebook: string, language: TranscribeLanguage) =>
+    current().setCourseLanguage(notebook, language)
   )
   handle('vault:setColor', (folder: string, color: NotebookColor | null) =>
     current().setColor(folder, color)

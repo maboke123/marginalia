@@ -11,8 +11,10 @@ import {
   DEFAULT_HIGHLIGHT_COLORS,
   DEFAULT_PEN_COLORS,
   MARGIN_WIDTHS,
+  TRANSCRIBE_LANGUAGES,
   type AppSettings,
-  type Theme
+  type Theme,
+  type TranscribeLanguage
 } from '../../../shared/settings'
 import { useApp } from '../store'
 import { Icon } from './Icon'
@@ -215,6 +217,33 @@ export function SettingsDialog(): React.JSX.Element {
           </section>
 
           <section>
+            <h3>Recordings</h3>
+            <div className="settings-row">
+              <span className="settings-label">Transcribe</span>
+              <div>
+                <label className="check settings-check">
+                  <input
+                    type="checkbox"
+                    checked={settings.autoTranscribe}
+                    onChange={(e) =>
+                      void save({ autoTranscribe: e.target.checked }).then(() =>
+                        window.api.transcribe.transcribePending()
+                      )
+                    }
+                  />
+                  By itself while the laptop is plugged in
+                </label>
+                <p className="muted settings-help">
+                  Recordings you saved without transcribing them, in the language of their course
+                  and with the speed you picked last. On battery they stop and later go on from
+                  where they were.
+                </p>
+              </div>
+            </div>
+            <CourseLanguages />
+          </section>
+
+          <section>
             <h3>Hidden folders and files</h3>
             <HiddenItems />
           </section>
@@ -235,6 +264,46 @@ export function SettingsDialog(): React.JSX.Element {
 
           <p className="muted settings-version">Version {window.api.app.version}</p>
         </div>
+      </div>
+    </div>
+  )
+}
+
+/** The spoken language of each course, so its recordings are transcribed without asking. */
+function CourseLanguages(): React.JSX.Element | null {
+  const nodes = useApp((s) => s.nodes)
+  const languages = useApp((s) => s.languages)
+  const fallback = useApp((s) => s.settings.transcribeLanguage)
+  const notebooks = nodes.filter((n) => n.kind === 'notebook')
+  if (!notebooks.length) return null
+  const defaultName = TRANSCRIBE_LANGUAGES.find((l) => l.value === fallback)?.name
+  return (
+    <div className="settings-row">
+      <span className="settings-label">Language per course</span>
+      <div className="course-languages">
+        {notebooks.map((nb) => (
+          <label key={nb.path}>
+            <span title={nb.name}>{nb.name}</span>
+            <select
+              className="toolbar-select"
+              aria-label={`Language of ${nb.name}`}
+              value={languages[nb.path] ?? 'auto'}
+              onChange={(e) =>
+                void useApp
+                  .getState()
+                  .setCourseLanguage(nb.path, e.target.value as TranscribeLanguage)
+                  .then(() => window.api.transcribe.transcribePending())
+              }
+            >
+              <option value="auto">Default ({defaultName})</option>
+              {TRANSCRIBE_LANGUAGES.filter((l) => l.value !== 'auto').map((l) => (
+                <option key={l.value} value={l.value}>
+                  {l.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        ))}
       </div>
     </div>
   )

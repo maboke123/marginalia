@@ -29,6 +29,8 @@ const api: MarginaliaApi = {
     trash: (path) => invoke('vault:trash', path),
     reveal: (path) => invoke('vault:reveal', path),
     setColor: (folder, color) => invoke('vault:setColor', folder, color),
+    setCourseLanguage: (notebook, language) =>
+      invoke('vault:setCourseLanguage', notebook, language),
     pickPdfs: () => invoke('vault:pickPdfs'),
     importPdfs: (parent, sources) => invoke('vault:importPdfs', parent, sources),
     readFile: (path) => invoke('vault:readFile', path),
@@ -88,6 +90,7 @@ const api: MarginaliaApi = {
     pickRecording: () => invoke('transcribe:pickRecording'),
     transcribeFile: (request) => invoke('transcribe:file', request),
     transcribeRecorded: (request) => invoke('transcribe:recorded', request),
+    transcribePending: () => invoke('transcribe:pending'),
     cancelJob: (id) => invoke('transcribe:cancel', id),
     moveJob: (id, by) => invoke('transcribe:move', id, by),
     onJob: (listener) => {
