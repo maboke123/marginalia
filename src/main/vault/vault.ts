@@ -2,7 +2,14 @@ import { constants as fsConstants, promises as fs } from 'fs'
 import path from 'path'
 import type { AnnotationFile, LoadedAnnotations } from '../../shared/annotations'
 import { noteLinks, pairNotes, withLink, withoutLink, type NoteLinks } from '../../shared/pairing'
-import type { LinkHow, NotebookColor, Position, VaultNode, VaultTree } from '../../shared/types'
+import {
+  TODO_NOTE,
+  type LinkHow,
+  type NotebookColor,
+  type Position,
+  type VaultNode,
+  type VaultTree
+} from '../../shared/types'
 import { formatAnnotations, isAnnotationFile, sha256File } from './annotations'
 import { renameWithRetry, tempPathFor, writeFileAtomic } from './atomic'
 import {
@@ -249,6 +256,14 @@ export class Vault {
     const target = path.join(parent, await uniqueName(parent, base, '.md'))
     await fs.writeFile(target, '', { flag: 'wx' })
     return toRel(this.root, target)
+  }
+
+  /** The one note at the vault root, for thoughts and things to do across courses. */
+  async ensureTodo(): Promise<string> {
+    await fs.writeFile(this.resolve(TODO_NOTE), '# Todo\n\n', { flag: 'wx' }).catch((err) => {
+      if ((err as NodeJS.ErrnoException).code !== 'EEXIST') throw err
+    })
+    return TODO_NOTE
   }
 
   /** Adds text to the end of a note, for transcripts written while a lecture goes on. */

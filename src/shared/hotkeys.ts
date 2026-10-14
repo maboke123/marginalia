@@ -7,6 +7,7 @@ export const HOTKEY_ACTIONS = [
   { id: 'snapshot', label: 'Slide snapshot', key: 'Ctrl+Shift+S', scope: 'global' },
   { id: 'switcher', label: 'Quick switcher', key: 'Ctrl+P', scope: 'global' },
   { id: 'search', label: 'Search everything', key: 'Ctrl+Shift+F', scope: 'global' },
+  { id: 'todo', label: 'Todo note', key: 'Ctrl+Shift+T', scope: 'global' },
   { id: 'settings', label: 'Settings', key: 'Ctrl+,', scope: 'global' },
   { id: 'sidebar', label: 'Show or hide the sidebar', key: 'Ctrl+\\', scope: 'global' },
   { id: 'fullScreen', label: 'Full screen', key: 'F11', scope: 'global' },

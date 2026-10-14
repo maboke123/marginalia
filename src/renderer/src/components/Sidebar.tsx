@@ -1,5 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { colorLabel, NOTEBOOK_COLORS, type Position, type VaultNode } from '../../../shared/types'
+import {
+  colorLabel,
+  NOTEBOOK_COLORS,
+  TODO_NOTE,
+  type Position,
+  type VaultNode
+} from '../../../shared/types'
 import { draggingFiles, importDroppedFiles } from '../lib/drop'
 import {
   childrenOf,
@@ -32,7 +38,11 @@ interface DropTarget {
 export function Sidebar(): React.JSX.Element {
   const app = useApp()
   const { vault, nodes, expanded, selected, activeFile, renaming, colors, links } = app
-  const rows = useMemo(() => visibleRows(nodes, expanded, links), [nodes, expanded, links])
+  // The root's Todo.md is pinned above the tree instead.
+  const rows = useMemo(
+    () => visibleRows(nodes, expanded, links).filter((r) => r.node.path !== TODO_NOTE),
+    [nodes, expanded, links]
+  )
   const treeRef = useRef<HTMLDivElement>(null)
   const dragged = useRef<VaultNode | null>(null)
   const [drop, setDrop] = useState<DropTarget | null>(null)
@@ -307,6 +317,17 @@ export function Sidebar(): React.JSX.Element {
           openMenu(e, [{ label: 'New notebook', onSelect: () => app.create('notebook', '') }])
         }
       >
+        <button
+          className={activeFile === TODO_NOTE ? 'todo-row active' : 'todo-row'}
+          title={`Thoughts and things to do, for all courses (${app.settings.hotkeys.todo})`}
+          onClick={() => void app.openTodo()}
+          onContextMenu={(e) => e.stopPropagation()}
+        >
+          <span className="tree-icon">
+            <Icon name="todo" />
+          </span>
+          <span className="tree-label">Todo</span>
+        </button>
         {rows.map((row) => (
           <TreeRow
             key={row.node.path}

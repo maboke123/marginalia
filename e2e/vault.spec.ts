@@ -169,6 +169,21 @@ test('a folder can be hidden and shown again from Settings', async () => {
   await expect(row('assignment-repo')).toBeVisible()
 })
 
+test('the Todo note is made in the vault root and pinned above the notebooks', async () => {
+  const todo = path.join(vault, 'Todo.md')
+  await page.getByRole('button', { name: 'Todo' }).click()
+  await expect(page.locator('.md-editor .cm-content .cm-h1')).toHaveText('Todo')
+  await page.locator('.md-editor .cm-content').press('Control+End')
+  await page.keyboard.type('- [ ] Ask about the exam')
+  await expect.poll(() => fs.readFile(todo, 'utf8')).toBe('# Todo\n\n- [ ] Ask about the exam')
+  await expect(page.locator('.todo-row')).toHaveClass(/active/)
+  await expect(row('Todo')).toHaveCount(0)
+
+  await row('Machine Learning').click()
+  await page.keyboard.press('Control+Shift+T')
+  await expect(page.locator('.todo-row')).toHaveClass(/active/)
+})
+
 test('a single file can be hidden', async () => {
   await fs.writeFile(path.join(vault, 'Machine Learning', 'B3 Ensembles', 'README.md'), '')
   await row('Machine Learning').click()

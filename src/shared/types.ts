@@ -40,6 +40,9 @@ export interface VaultTree {
   hidden: string[]
 }
 
+/** The vault-wide note in the root folder, pinned at the top of the sidebar. */
+export const TODO_NOTE = 'Todo.md'
+
 export const NOTEBOOK_COLORS = [
   'red',
   'orange',
@@ -75,6 +78,8 @@ export interface MarginaliaApi {
     tree(): Promise<VaultTree>
     createFolder(parent: string, name: string): Promise<string>
     createNote(parent: string, name: string): Promise<string>
+    /** Makes the vault's Todo.md when it is missing; returns its path. */
+    ensureTodo(): Promise<string>
     rename(path: string, name: string): Promise<string>
     move(path: string, parent: string, before?: Position): Promise<string>
     trash(path: string): Promise<boolean>

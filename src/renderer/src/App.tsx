@@ -53,6 +53,7 @@ const ACTIONS: Partial<Record<HotkeyAction, () => void>> = {
   snapshot: () => useApp.getState().startSnapshot(),
   switcher: () => toggleOverlay('switcher'),
   search: () => toggleOverlay('search'),
+  todo: () => void useApp.getState().openTodo(),
   settings: () => toggleOverlay('settings'),
   record: () => void useRecording.getState().toggle()
 }

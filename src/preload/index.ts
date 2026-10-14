@@ -23,6 +23,7 @@ const api: MarginaliaApi = {
     tree: () => invoke('vault:tree'),
     createFolder: (parent, name) => invoke('vault:createFolder', parent, name),
     createNote: (parent, name) => invoke('vault:createNote', parent, name),
+    ensureTodo: () => invoke('vault:ensureTodo'),
     rename: (path, name) => invoke('vault:rename', path, name),
     move: (path, parent, before) => invoke('vault:move', path, parent, before),
     trash: (path) => invoke('vault:trash', path),

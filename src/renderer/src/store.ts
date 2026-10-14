@@ -124,6 +124,8 @@ interface AppState {
    * note along, and a note becomes the note of the slides on screen.
    */
   goTo(path: string, page?: number, line?: number): Promise<void>
+  /** Opens the vault's Todo.md, made the first time. Never linked to slides. */
+  openTodo(): Promise<void>
   setOverlay(overlay: Overlay): void
   toggleLecture(): Promise<void>
   toggleSidebar(): void
@@ -414,6 +416,13 @@ export const useApp = create<AppState>((set, get) => {
         ...(!pdf && line ? { noteGoto: { path, line, nonce: ++gotoNonce } } : {})
       })
       expandAncestors(path)
+    },
+
+    async openTodo() {
+      const path = await attempt(() => api.ensureTodo())
+      if (!path) return
+      if (!findNode(get().nodes, path)) await get().refresh()
+      get().openFile(path)
     },
 
     async goTo(path, page, line) {

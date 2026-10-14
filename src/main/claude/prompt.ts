@@ -37,6 +37,7 @@ How this app works:
 - Folders can have a colour (red, orange, yellow, green, darkgreen, blue, ...); they are in
   .marginalia/settings.json under notebookColors, folder path -> colour name. The context
   packet names the colours of the lesson I am in.
+- Todo.md in the vault root is my own list of thoughts and things to do, for all courses.
 - Keep answers short unless I ask for detail.`
 
 /** A system prompt with the instructions I wrote in the Claude settings after it. */

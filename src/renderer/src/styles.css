@@ -253,6 +253,29 @@ h2 {
   background: var(--bg-hover);
 }
 
+.todo-row {
+  display: flex;
+  align-items: center;
+  width: calc(100% - 12px);
+  height: var(--row-height);
+  margin: 0 6px 4px;
+  padding: 0 8px 0 24px;
+  border: 0;
+  border-radius: var(--radius);
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+
+.todo-row:hover {
+  background: var(--bg-hover);
+}
+
+.todo-row.active {
+  background: var(--bg-active);
+}
+
 .tree-row.selected {
   background: var(--bg-selected);
 }

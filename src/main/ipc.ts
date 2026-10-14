@@ -149,6 +149,7 @@ export function registerIpc(
     current().createFolder(parent, name)
   )
   handle('vault:createNote', (parent: string, name: string) => current().createNote(parent, name))
+  handle('vault:ensureTodo', () => current().ensureTodo())
   handle('vault:rename', (p: string, name: string) => current().rename(p, name))
   handle('vault:move', (p: string, parent: string, before: Position) =>
     current().move(p, parent, before)
