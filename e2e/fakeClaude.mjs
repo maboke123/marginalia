@@ -121,7 +121,8 @@ export async function* agent(input) {
   await record(sessionId, {
     text: input.text,
     images: input.images.length,
-    question
+    question,
+    instructions: input.settings.instructions
   })
   yield { type: 'done' }
 }

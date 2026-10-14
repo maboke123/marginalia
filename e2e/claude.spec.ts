@@ -60,6 +60,7 @@ interface LogEntry {
   text: string
   images: number
   question: string
+  instructions: string
 }
 
 async function readLog(): Promise<LogEntry[]> {
@@ -117,6 +118,25 @@ test('answers about the slide on screen, with that slide sent along', async () =
   )
   expect(Object.keys(state.chats)).toEqual([section])
   await page.screenshot({ path: path.join('test-results', 'claude-panel.png') })
+})
+
+test('my instructions and the lesson colours go along with a question', async () => {
+  await fs.mkdir(path.join(env.vault, '.marginalia'), { recursive: true })
+  await fs.writeFile(
+    path.join(env.vault, '.marginalia/settings.json'),
+    JSON.stringify({ notebookColors: { [section]: 'orange' } })
+  )
+  await openSlides()
+  await page.keyboard.press('Control+L')
+  await page.getByRole('button', { name: 'Claude settings' }).click()
+  await page.getByRole('textbox', { name: 'Instructions for Claude' }).fill('Orange: followed.')
+  await page.getByRole('button', { name: 'Done' }).click()
+
+  await ask('Where am I?')
+  await expect(answers()).toHaveCount(1)
+  const [first] = await readLog()
+  expect(first.instructions).toBe('Orange: followed.')
+  expect(first.text).toContain(`Folder colours: ${section}: orange`)
 })
 
 test('text in the chat can be selected, copied and asked about', async () => {

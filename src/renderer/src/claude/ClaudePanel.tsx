@@ -564,6 +564,8 @@ function SettingsView({ onDone }: { onDone(): void }): React.JSX.Element {
   const settings = useChat((s) => s.settings)
   const save = useChat((s) => s.saveSettings)
   const [key, setKey] = useState('')
+  // Edited text until the field loses focus; null shows what is saved.
+  const [instructions, setInstructions] = useState<string | null>(null)
 
   if (!settings) return <p className="muted claude-empty">Loading settings...</p>
   return (
@@ -610,6 +612,27 @@ function SettingsView({ onDone }: { onDone(): void }): React.JSX.Element {
         />
         Allow web search
       </label>
+      <div className="field">
+        <span>Instructions</span>
+        <div className="claude-instructions">
+          <textarea
+            aria-label="Instructions for Claude"
+            rows={4}
+            value={instructions ?? settings.instructions}
+            placeholder="Things Claude should always know, like what your folder colours mean"
+            onChange={(e) => setInstructions(e.target.value)}
+            onBlur={() => {
+              if (instructions !== null && instructions !== settings.instructions) {
+                void save({ instructions })
+              }
+              setInstructions(null)
+            }}
+          />
+          <p className="muted">
+            Kept on this computer and added to the chat, /claude and the terminal (new sessions).
+          </p>
+        </div>
+      </div>
       <div className="field">
         <span>Login</span>
         <div className="claude-login">

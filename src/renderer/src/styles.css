@@ -2123,6 +2123,22 @@ h2 {
   max-width: 220px;
 }
 
+.claude-instructions textarea {
+  display: block;
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--bg-input);
+  color: var(--text);
+  font: inherit;
+  resize: vertical;
+}
+
+.claude-instructions p {
+  margin: 4px 0 0;
+}
+
 .claude-login p {
   margin: 5px 0 8px;
 }

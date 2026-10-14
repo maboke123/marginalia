@@ -136,6 +136,15 @@ export async function slideContext(
   return { lines, images, imageKey }
 }
 
+/** "Course: orange" for the folder and each folder above it that has a colour. */
+export function folderColors(folder: string, colors: Record<string, string>): string[] {
+  const parts = folder ? folder.split('/') : []
+  return parts.flatMap((_, i) => {
+    const p = parts.slice(0, i + 1).join('/')
+    return colors[p] ? [`${p}: ${colors[p]}`] : []
+  })
+}
+
 export interface Packet {
   text: string
   images: ChatImage[]
@@ -156,6 +165,8 @@ export async function buildPacket(
   const { pdfView, pdfSelection, noteCursor } = useApp.getState()
   const ids = new Set(chips.map((c) => c.id))
   const lines = [CONTEXT_START, `Lesson folder: ${chat || '(vault root)'}`]
+  const colored = folderColors(chat, useApp.getState().colors)
+  if (colored.length) lines.push(`Folder colours: ${colored.join(', ')}`)
   // Recorded lectures: Claude reads them itself (Read tool) when a question needs them.
   const transcripts = childrenOf(useApp.getState().nodes, chat)
     .filter((n) => n.kind === 'markdown' && /^Transcript /.test(n.name))

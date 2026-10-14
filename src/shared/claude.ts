@@ -12,6 +12,8 @@ export interface ClaudeSettings {
   /** Edits show as a preview with Accept / Reject before they are applied. */
   askBeforeEditing: boolean
   webSearch: boolean
+  /** My own words added to every Claude prompt (chat, /claude and the terminal). */
+  instructions: string
   /** An API key is stored; it is never sent back to the renderer. */
   hasApiKey: boolean
 }
@@ -26,6 +28,7 @@ export const DEFAULT_CLAUDE_SETTINGS: ClaudeSettings = {
   effort: 'default',
   askBeforeEditing: true,
   webSearch: false,
+  instructions: '',
   hasApiKey: false
 }
 

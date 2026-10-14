@@ -2,6 +2,7 @@ import { app, BrowserWindow, ipcMain } from 'electron'
 import type { IPty } from 'node-pty'
 import type { TerminalSession } from '../shared/types'
 import { claudeEnvironment, claudeExecutable, storedApiKey } from './claude/cli'
+import { withInstructions } from './claude/prompt'
 import type { ConfigStore } from './config'
 import type { Handle } from './ipc'
 import { VaultError } from './vault/names'
@@ -35,8 +36,13 @@ export function registerTerminal(
     if (!vault) throw new VaultError('No vault is open')
     const pty = await import('node-pty')
     // UI tests run a plain shell instead of starting a real Claude session.
-    const command = process.env['MARGINALIA_TERMINAL_COMMAND'] ?? claudeExecutable()
-    const started = pty.spawn(command, [], {
+    const testCommand = process.env['MARGINALIA_TERMINAL_COMMAND']
+    const instructions = (await config.read()).claude.instructions.trim()
+    const args =
+      instructions && !testCommand
+        ? ['--append-system-prompt', withInstructions('', instructions).trim()]
+        : []
+    const started = pty.spawn(testCommand ?? claudeExecutable(), args, {
       name: 'xterm-256color',
       cols,
       rows,

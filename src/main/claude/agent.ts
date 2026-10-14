@@ -3,7 +3,7 @@ import type { ChatEvent, ChatImage } from '../../shared/claude'
 import type { StoredClaudeSettings } from '../config'
 import { claudeEnvironment, claudeExecutable } from './cli'
 import { toChatEvents, type StreamState } from './events'
-import { SYSTEM_APPEND } from './prompt'
+import { SYSTEM_APPEND, withInstructions } from './prompt'
 import { APP_TOOLS, appToolServer, type CallTool } from './tools'
 
 export interface AgentInput {
@@ -61,7 +61,11 @@ export const claudeAgent: Agent = async function* (input) {
     resume: input.sessionId ?? undefined,
     model: settings.model === 'default' ? undefined : settings.model,
     effort: settings.effort === 'default' ? undefined : settings.effort,
-    systemPrompt: { type: 'preset', preset: 'claude_code', append: SYSTEM_APPEND },
+    systemPrompt: {
+      type: 'preset',
+      preset: 'claude_code',
+      append: withInstructions(SYSTEM_APPEND, settings.instructions)
+    },
     // My own CLAUDE.md, hooks and plugins are for coding, not for this app.
     settingSources: [],
     // No Bash, Write or Edit at all: every change goes through the app tools.
@@ -145,7 +149,7 @@ export const claudeComplete: Complete = async (input) => {
       model: input.settings.model === 'default' ? undefined : input.settings.model,
       effort: input.settings.effort === 'default' ? undefined : input.settings.effort,
       // Everything it needs is in the message; no tools keeps it to one quick answer.
-      systemPrompt: WRITER_PROMPT,
+      systemPrompt: withInstructions(WRITER_PROMPT, input.settings.instructions),
       tools: [],
       settingSources: [],
       persistSession: false,

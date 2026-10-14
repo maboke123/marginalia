@@ -34,4 +34,15 @@ How this app works:
 - Charts and diagrams are drawn from a \`\`\`vega-lite block (a Vega-Lite JSON spec; use it for
   plots, including scatter plots and curves computed with sequence and calculate) or a
   \`\`\`mermaid block (flowcharts, UML and other diagrams), in answers, summaries and text boxes.
+- Folders can have a colour (red, orange, yellow, green, darkgreen, blue, ...); they are in
+  .marginalia/settings.json under notebookColors, folder path -> colour name. The context
+  packet names the colours of the lesson I am in.
 - Keep answers short unless I ask for detail.`
+
+/** A system prompt with the instructions I wrote in the Claude settings after it. */
+export function withInstructions(prompt: string, instructions: string): string {
+  const mine = instructions.trim()
+  return mine
+    ? `${prompt}\n\nMy own instructions, for everything you do in this app:\n${mine}`
+    : prompt
+}

@@ -25,7 +25,8 @@ export function claudeSettings(raw: unknown): StoredClaudeSettings {
     model: pick(MODELS, r.model, d.model),
     effort: pick(EFFORTS, r.effort, d.effort),
     askBeforeEditing: typeof r.askBeforeEditing === 'boolean' ? r.askBeforeEditing : true,
-    webSearch: r.webSearch === true
+    webSearch: r.webSearch === true,
+    instructions: typeof r.instructions === 'string' ? r.instructions : ''
   }
 }
 
