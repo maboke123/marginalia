@@ -40,6 +40,7 @@ async function loadAgent(): Promise<AgentModule> {
 }
 
 const STALE_SESSION = /no conversation found/i
+const STOP_GRACE_MS = 1500
 
 export function registerClaude(
   handle: Handle,
@@ -126,7 +127,21 @@ export function registerClaude(
           signal: controller.signal,
           onSession: (id) => void v.setChatSession(request.chat, id).catch(console.error)
         })
-        for await (const event of events) {
+        const iterator = events[Symbol.asyncIterator]()
+        // After Stop the SDK may stay blocked (a tool reply, a stuck process): give up on it.
+        const gaveUp = new Promise<'gaveUp'>((resolve) => {
+          const give = (): void => void setTimeout(() => resolve('gaveUp'), STOP_GRACE_MS)
+          if (controller.signal.aborted) give()
+          else controller.signal.addEventListener('abort', give, { once: true })
+        })
+        for (;;) {
+          const next = await Promise.race([iterator.next(), gaveUp])
+          if (next === 'gaveUp') {
+            void iterator.return?.(undefined)?.catch(() => {})
+            break
+          }
+          if (next.done) break
+          const event = next.value
           if (event.type === 'done') {
             done = event
             break
@@ -190,6 +205,8 @@ export function registerClaude(
 
   handle('claude:stop', () => {
     running?.abort()
+    for (const [id, resolve] of pendingTools) resolve({ id, ok: false, text: 'Stopped' })
+    pendingTools.clear()
   })
 
   handle('claude:history', async (chat: string) => {

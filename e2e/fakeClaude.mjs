@@ -114,6 +114,10 @@ export async function* agent(input) {
       text: 'Information gain'
     })
     yield { type: 'text', text: reply.ok ? 'Highlighted it.' : reply.text }
+  } else if (/get stuck/i.test(question)) {
+    // Like a hung CLI: never ends and ignores the stop signal.
+    yield { type: 'text', text: 'Working on it' }
+    await new Promise(() => {})
   } else {
     yield { type: 'text', text: `You asked: ${question}` }
   }

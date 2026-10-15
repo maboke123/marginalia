@@ -120,6 +120,16 @@ test('answers about the slide on screen, with that slide sent along', async () =
   await page.screenshot({ path: path.join('test-results', 'claude-panel.png') })
 })
 
+test('Stop ends an answer that is stuck, and the chat takes the next question', async () => {
+  await openSlides(1)
+  await ask('Please get stuck')
+  await expect(answers()).toHaveText('Working on it')
+  await page.getByRole('button', { name: 'Stop' }).click()
+  await expect(page.getByRole('button', { name: 'Send' })).toBeVisible({ timeout: 5000 })
+  await ask('Still there?')
+  await expect(answers().last()).toHaveText('You asked: Still there?')
+})
+
 test('my instructions and the lesson colours go along with a question', async () => {
   await fs.mkdir(path.join(env.vault, '.marginalia'), { recursive: true })
   await fs.writeFile(
