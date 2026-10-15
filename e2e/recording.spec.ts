@@ -274,6 +274,36 @@ test('recording works from the slides toolbar, and twice in a row gives two tran
   await expect(page.locator('.tree-row', { hasText: 'Transcript ' })).toHaveCount(2)
 })
 
+test('lecture mode skips a linked transcript, and hiding transcripts hides them all', async () => {
+  const transcript = `${section}/Transcript 2026-10-15 10-00.md`
+  await start({}, {}, async (env) => {
+    await fs.writeFile(path.join(env.vault, transcript), '# Transcript\n')
+    await fs.mkdir(path.join(env.vault, '.marginalia'), { recursive: true })
+    const notes = { [`${section}/slides.pdf`]: [transcript] }
+    await fs.writeFile(path.join(env.vault, '.marginalia/state.json'), JSON.stringify({ notes }))
+    return []
+  })
+  const transcriptRows = page.locator('.tree-row', { hasText: 'Transcript ' })
+
+  // The recording is linked to the slides, but lecture mode makes a note to write in.
+  await page.keyboard.press('Control+Shift+M')
+  await expect(page.locator('.lecture-pane')).toHaveCount(2)
+  await expect
+    .poll(() => fs.readFile(path.join(env.vault, section, 'slides.md'), 'utf8').catch(() => null))
+    .toBe('')
+  await page.keyboard.press('Control+Shift+M')
+  await page.keyboard.press('Control+\\')
+  await expect(transcriptRows).toHaveCount(0)
+
+  // A transcript opened once stays out of the tree after something else is opened.
+  const badge = row('B2 Decision trees').getByRole('button', { name: 'Transcripts' })
+  await badge.click()
+  await transcriptRows.click()
+  await row('slides.pdf').click()
+  await badge.click()
+  await expect(transcriptRows).toHaveCount(0)
+})
+
 test('the recording bar can be hidden, and stays hidden for the next recording', async () => {
   await start()
   const bar = page.getByRole('status', { name: 'Recording', exact: true })

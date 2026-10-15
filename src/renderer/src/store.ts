@@ -4,7 +4,15 @@ import type { LinkHow, NotebookColor, Position, VaultInfo, VaultNode } from '../
 import { withLink, withoutLink, type NoteLinks } from '../../shared/pairing'
 import { ERASER_SIZES, PEN_WIDTHS, DEFAULT_TEXT_SIZE } from '../../shared/palette'
 import { flushAll } from './lib/flush'
-import { childrenOf, findNode, isFolder, pairNotes, parentOf, remap } from './lib/tree'
+import {
+  childrenOf,
+  findNode,
+  isFolder,
+  isTranscript,
+  pairNotes,
+  parentOf,
+  remap
+} from './lib/tree'
 
 const api = window.api.vault
 
@@ -273,11 +281,6 @@ export const useApp = create<AppState>((set, get) => {
     return children.find((n) => n.kind === kind)?.path ?? null
   }
 
-  /**
-   * The note that goes with a PDF in lecture mode: the one linked before; else
-   * "<pdf name>.md" next to it; else, when the PDF is alone in its folder, the note already
-   * there; else a new "<pdf name>.md". The choice is remembered (in .marginalia/state.json).
-   */
   /** Links a note to a PDF; the sidebar then shows it under that PDF. */
   async function link(pdf: string, note: string, how: LinkHow = 'current'): Promise<void> {
     await attempt(() => api.linkNote(pdf, note, how))
@@ -289,9 +292,16 @@ export const useApp = create<AppState>((set, get) => {
     if (next !== links) set({ links: next })
   }
 
+  /**
+   * The note that goes with a PDF in lecture mode: the one linked before; else
+   * "<pdf name>.md" next to it; else, when the PDF is alone in its folder, the note already
+   * there; else a new "<pdf name>.md". The choice is remembered (in .marginalia/state.json).
+   * Transcripts are skipped: a recording is linked to its slides, but it is not where I write.
+   */
   async function noteFor(pdf: string): Promise<string | null> {
-    const linked = await attempt(() => api.linkedNote(pdf))
-    if (linked && findNode(get().nodes, linked)) return linked
+    const { links, nodes } = get()
+    const linked = links[pdf]?.find((n) => !isTranscript(n) && findNode(nodes, n))
+    if (linked) return linked
     const folder = parentOf(pdf)
     if (!folder) return null
     const base = pdf
@@ -303,7 +313,8 @@ export const useApp = create<AppState>((set, get) => {
       (n) => n.kind === 'markdown' && n.name.toLowerCase() === `${base.toLowerCase()}.md`
     )
     const alone = siblings.filter((n) => n.kind === 'pdf').length === 1
-    let note = sameName?.path ?? (alone ? firstIn(folder, 'markdown') : null)
+    const own = siblings.find((n) => n.kind === 'markdown' && !isTranscript(n.path))
+    let note = sameName?.path ?? (alone ? (own?.path ?? null) : null)
     if (!note) {
       note = (await attempt(() => api.createNote(folder, base))) ?? null
       await get().refresh()

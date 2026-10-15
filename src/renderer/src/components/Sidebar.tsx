@@ -39,14 +39,14 @@ interface DropTarget {
 export function Sidebar(): React.JSX.Element {
   const app = useApp()
   const { vault, nodes, expanded, selected, activeFile, renaming, colors, links } = app
-  const { slidesFile, summaryFile } = app
+  const { slidesFile, summaryFile, lectureMode } = app
   // The root's Todo.md is pinned above the tree instead.
   const rows = useMemo(() => {
-    const reveal = new Set(
-      [selected, activeFile, slidesFile, summaryFile].filter((p): p is string => !!p)
-    )
+    // Only what is on screen: slidesFile and summaryFile keep their value after a pane closes.
+    const onScreen = lectureMode ? [slidesFile, summaryFile] : [activeFile]
+    const reveal = new Set(onScreen.filter((p): p is string => !!p))
     return visibleRows(nodes, expanded, links, reveal).filter((r) => r.node.path !== TODO_NOTE)
-  }, [nodes, expanded, links, selected, activeFile, slidesFile, summaryFile])
+  }, [nodes, expanded, links, lectureMode, activeFile, slidesFile, summaryFile])
   const treeRef = useRef<HTMLDivElement>(null)
   const dragged = useRef<VaultNode | null>(null)
   const [drop, setDrop] = useState<DropTarget | null>(null)
