@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { TRANSCRIBE_LANGUAGES, type TranscribeLanguage } from '../../../shared/settings'
-import type { TranscribeJob } from '../../../shared/types'
+import type { PendingRecordings, TranscribeJob } from '../../../shared/types'
 import { Icon } from '../components/Icon'
 import { useApp } from '../store'
 import { useFiles, VIDEO_FILE } from './files'
@@ -156,17 +156,25 @@ function jobDetails(job: TranscribeJob): string {
  * Under the recording bar: the recording being transcribed now, with the queue behind it,
  * and finished ones until they are closed.
  */
-export function TranscribeJobs(): React.JSX.Element | null {
-  const jobs = useFiles((s) => s.jobs)
-  const offers = useFiles((s) => s.offers)
-  const queueOpen = useFiles((s) => s.queueOpen)
-  if (!jobs.length && !offers.length) return null
-  const { cancel, dismiss, transcribeRecorded, dismissOffer, showQueue } = useFiles.getState()
+function queueOf(jobs: TranscribeJob[]): {
+  open: TranscribeJob[]
+  current: TranscribeJob | undefined
+  waiting: TranscribeJob[]
+} {
   const open = jobs.filter((j) => !j.transcript && !j.error)
   const current = open.find((j) => j.phase !== 'waiting')
   const waiting = open
     .filter((j) => j.phase === 'waiting')
     .sort((a, b) => (a.place ?? 0) - (b.place ?? 0))
+  return { open, current, waiting }
+}
+
+export function TranscribeJobs(): React.JSX.Element | null {
+  const jobs = useFiles((s) => s.jobs)
+  const offers = useFiles((s) => s.offers)
+  if (!jobs.length && !offers.length) return null
+  const { cancel, dismiss, transcribeRecorded, dismissOffer, showQueue } = useFiles.getState()
+  const { open, current, waiting } = queueOf(jobs)
   const finished = jobs.filter((j) => j.transcript || j.error)
 
   return (
@@ -234,20 +242,57 @@ export function TranscribeJobs(): React.JSX.Element | null {
           </button>
         </div>
       ))}
-      {queueOpen && <TranscribeQueue current={current} waiting={waiting} />}
     </>
   )
 }
 
-/** Every recording still to transcribe: stop the running one, reorder or remove the rest. */
-function TranscribeQueue({
-  current,
-  waiting
-}: {
-  current: TranscribeJob | undefined
-  waiting: TranscribeJob[]
-}): React.JSX.Element {
+const noteName = (note: string): string => note.split('/').pop()!.replace(/.md$/, '')
+
+function notStartedReason({ onBattery, auto }: PendingRecordings): string {
+  if (!auto) return 'Transcribing by itself is off in Settings, so these wait until you start them.'
+  if (onBattery)
+    return 'These start by themselves once the laptop is plugged in, or now on battery.'
+  return 'These start by themselves within a few minutes.'
+}
+
+/**
+ * Every recording still to transcribe: stop the running one, reorder or remove the rest, and
+ * start the ones not queued yet (say on battery).
+ */
+export function TranscribeQueue(): React.JSX.Element | null {
+  const queueOpen = useFiles((s) => s.queueOpen)
+  return queueOpen ? <QueueDialog /> : null
+}
+
+function QueueDialog(): React.JSX.Element {
+  const jobs = useFiles((s) => s.jobs)
+  const { current, waiting } = queueOf(jobs)
   const { cancel, move, showQueue } = useFiles.getState()
+  const [pending, setPending] = useState<PendingRecordings | null>(null)
+  const [starting, setStarting] = useState(false)
+  const queued = jobs.map((j) => j.id).join()
+
+  useEffect(() => {
+    let live = true
+    void window.api.transcribe
+      .pendingNotes()
+      .then((p) => live && setPending(p))
+      .catch(() => {})
+    return () => {
+      live = false
+    }
+  }, [queued])
+
+  const startAll = (): void => {
+    setStarting(true)
+    void window.api.transcribe
+      .startPending()
+      .then(() => window.api.transcribe.pendingNotes())
+      .then(setPending)
+      .catch((err) => useApp.getState().showError((err as Error).message))
+      .finally(() => setStarting(false))
+  }
+
   const close = (): void => showQueue(false)
   const [dragged, setDragged] = useState<string | null>(null)
   const [drop, setDrop] = useState<{ id: string; after: boolean } | null>(null)
@@ -283,7 +328,9 @@ function TranscribeQueue({
           (saved every 5 minutes of recording) and goes on from there when you start it again with
           the same language and speed.
         </p>
-        {!current && !waiting.length && <p>Nothing left to transcribe.</p>}
+        {!current && !waiting.length && !pending?.notes.length && (
+          <p>Nothing left to transcribe.</p>
+        )}
         <ol className="queue-list">
           {current && (
             <li className="queue-item" aria-label={current.name}>
@@ -361,7 +408,28 @@ function TranscribeQueue({
             </li>
           ))}
         </ol>
+        {!!pending?.notes.length && (
+          <>
+            <h3 className="queue-heading">Not started ({pending.notes.length})</h3>
+            <p className="muted">{notStartedReason(pending)}</p>
+            <ol className="queue-list">
+              {pending.notes.map((note) => (
+                <li key={note} className="queue-item" aria-label={noteName(note)}>
+                  <span className="queue-name">
+                    <strong>{noteName(note)}</strong>
+                    <span className="muted">{note.split('/').slice(0, -1).join(' / ')}</span>
+                  </span>
+                </li>
+              ))}
+            </ol>
+          </>
+        )}
         <div className="transcribe-actions">
+          {!!pending?.notes.length && (
+            <button className="button primary" disabled={starting} onClick={startAll}>
+              Transcribe all now
+            </button>
+          )}
           <button className="button" autoFocus onClick={close}>
             Close
           </button>

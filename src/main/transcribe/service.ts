@@ -4,6 +4,7 @@ import { promises as fs } from 'fs'
 import path from 'path'
 import type {
   LiveChunk,
+  PendingRecordings,
   TranscribeFileRequest,
   TranscribeRecordedRequest,
   TranscribeJob,
@@ -263,6 +264,10 @@ export function registerTranscription(
   ): string {
     const vault = getVault()
     if (!vault) throw new VaultError('No vault is open')
+    const twin = extra.note
+      ? [...jobs.values()].find((e) => e.job.note === extra.note && !e.abort.signal.aborted)
+      : undefined
+    if (twin) return twin.job.id
     const id = randomUUID()
     const job: TranscribeJob = {
       id,
@@ -287,7 +292,15 @@ export function registerTranscription(
     const id = waiting.shift()!
     running = id
     renumber()
-    const { vault, request, abort } = jobs.get(id)!
+    const { vault, request, abort, job } = jobs.get(id)!
+    // Transcribed meanwhile (by hand, or on another PC through OneDrive): nothing left to do.
+    if (job.auto && job.note && !(await untranscribed(vault, job.note))) {
+      update(id, { removed: true })
+      jobs.delete(id)
+      running = null
+      void runNext()
+      return
+    }
     update(id, { phase: 'reading', percent: 0, place: undefined })
     // A laptop on battery sleeps after a few idle minutes, which stopped long jobs halfway.
     const awake = powerSaveBlocker.start('prevent-app-suspension')
@@ -356,32 +369,66 @@ export function registerTranscription(
 
   // Recordings saved without transcribing them are done while the laptop is plugged in, in the
   // language of their course. Unplugged, those jobs stop; their checkpoints keep the progress.
-  let scanning = false
-  async function transcribePending(): Promise<void> {
+  const queuedNote = (note: string): boolean =>
+    [...jobs.values()].some((e) => e.job.note === note && !e.abort.signal.aborted)
+
+  const untranscribed = async (vault: Vault, note: string): Promise<boolean> => {
+    const text = await vault.readText(note).catch(() => '')
+    return text.includes(NOT_TRANSCRIBED) && !!audioOf(text)
+  }
+
+  /** Saved recordings not transcribed yet and not in the queue. */
+  async function pendingNotes(vault: Vault): Promise<string[]> {
+    const notes: string[] = []
+    for (const note of transcriptNotes((await vault.tree()).nodes)) {
+      if (note === live?.transcript || queuedNote(note)) continue
+      if (await untranscribed(vault, note)) notes.push(note)
+    }
+    return notes
+  }
+
+  // Several triggers can come at once (plugging in, a recording ending, a setting changing);
+  // two scans side by side queued every recording twice.
+  let scan: Promise<void> | null = null
+  function transcribePending(now = false): Promise<void> {
+    scan = (scan ?? Promise.resolve()).catch(() => undefined).then(() => scanPending(now))
+    return scan
+  }
+
+  /** `now`: started by hand, so also on battery and when the setting is off. */
+  async function scanPending(now: boolean): Promise<void> {
     const vault = getVault()
-    if (!vault || scanning || powerMonitor.isOnBatteryPower()) return
+    if (!vault) return
+    if (!now && powerMonitor.isOnBatteryPower()) return
     const { settings } = await config.read()
-    if (!settings.autoTranscribe) return
-    scanning = true
+    if (!now && !settings.autoTranscribe) return
     try {
-      const tree = await vault.tree()
-      const queued = new Set([...jobs.values()].map((e) => e.job.note))
-      for (const note of transcriptNotes(tree.nodes)) {
-        if (note === live?.transcript || skipped.has(note) || queued.has(note)) continue
-        const text = await vault.readText(note).catch(() => '')
-        if (!text.includes(NOT_TRANSCRIBED) || !audioOf(text)) continue
-        const language = tree.languages[note.split('/')[0]] ?? settings.transcribeLanguage
-        await queueRecorded(vault, { note, model: settings.transcribeModel, language }, true).catch(
+      const { languages } = await vault.tree()
+      for (const note of await pendingNotes(vault)) {
+        if (!now && skipped.has(note)) continue
+        if (queuedNote(note)) continue
+        if (now) skipped.delete(note)
+        const language = languages[note.split('/')[0]] ?? settings.transcribeLanguage
+        // Started by hand they are not auto jobs, so unplugging does not stop them.
+        await queueRecorded(vault, { note, model: settings.transcribeModel, language }, !now).catch(
           () => skipped.add(note)
         )
       }
     } catch (err) {
       console.error('Could not look for recordings to transcribe', err)
-    } finally {
-      scanning = false
     }
   }
   handle('transcribe:pending', () => transcribePending())
+  handle('transcribe:startPending', () => transcribePending(true))
+  handle('transcribe:pendingNotes', async (): Promise<PendingRecordings> => {
+    const vault = getVault()
+    const { settings } = await config.read()
+    return {
+      notes: vault ? await pendingNotes(vault) : [],
+      onBattery: powerMonitor.isOnBatteryPower(),
+      auto: settings.autoTranscribe
+    }
+  })
 
   const onBattery = (): void => {
     for (const entry of [...jobs.values()]) {

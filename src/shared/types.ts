@@ -152,6 +152,10 @@ export interface MarginaliaApi {
     transcribeRecorded(request: TranscribeRecordedRequest): Promise<string>
     /** Starts recordings not transcribed yet, when plugged in and the setting is on. */
     transcribePending(): Promise<void>
+    /** Starts every recording not transcribed yet now, also on battery or with the setting off. */
+    startPending(): Promise<void>
+    /** Recordings not transcribed yet that are not in the queue. */
+    pendingNotes(): Promise<PendingRecordings>
     /** Takes a waiting job out of the queue, or stops the running one. */
     cancelJob(id: string): Promise<void>
     /** Moves a waiting job `by` places in the queue; negative is sooner. */
@@ -254,6 +258,14 @@ export type TranscribeJobPhase =
   'waiting' | 'downloading' | 'reading' | 'matching' | 'transcribing' | 'writing'
 
 /** A recording file being transcribed in the background. */
+export interface PendingRecordings {
+  /** Vault paths of their transcript notes. */
+  notes: string[]
+  onBattery: boolean
+  /** Whether the app starts them by itself when plugged in. */
+  auto: boolean
+}
+
 export interface TranscribeJob {
   id: string
   /** File name of the recording. */

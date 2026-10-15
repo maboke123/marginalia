@@ -156,6 +156,10 @@ export function Sidebar(): React.JSX.Element {
           label: 'Transcribe the recording',
           onSelect: () => useFiles.getState().transcribeRecorded(node.path)
         })
+        items.push({
+          label: 'Transcription queue',
+          onSelect: () => useFiles.getState().showQueue(true)
+        })
       }
       items.push({ separator: true })
     }

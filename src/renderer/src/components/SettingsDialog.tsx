@@ -17,6 +17,7 @@ import {
   type TranscribeLanguage
 } from '../../../shared/settings'
 import { useApp } from '../store'
+import { useFiles } from '../transcribe/files'
 import { Icon } from './Icon'
 
 const THEMES: { value: Theme; label: string }[] = [
@@ -238,6 +239,15 @@ export function SettingsDialog(): React.JSX.Element {
                   and with the speed you picked last. On battery they stop and later go on from
                   where they were.
                 </p>
+                <button
+                  className="button"
+                  onClick={() => {
+                    useApp.getState().setOverlay(null)
+                    useFiles.getState().showQueue(true)
+                  }}
+                >
+                  Show the queue
+                </button>
               </div>
             </div>
             <CourseLanguages />

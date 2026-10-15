@@ -2783,6 +2783,11 @@ h2 {
   margin-top: 20px;
 }
 
+.queue-heading {
+  margin: 20px 0 4px;
+  font-size: 14px;
+}
+
 .transcribe-dialog.queue {
   display: flex;
   flex-direction: column;

@@ -414,6 +414,63 @@ test('saved recordings are transcribed while plugged in, in the language of the 
   expect(text).toContain('language nl')
 })
 
+const power = (onBattery: boolean): Promise<void> =>
+  app.evaluate(({ powerMonitor }, battery) => {
+    powerMonitor.isOnBatteryPower = () => battery
+    powerMonitor.emit(battery ? 'on-battery' : 'on-ac')
+  }, onBattery)
+
+async function recordTwice(): Promise<void> {
+  const record = page.locator('.pdf-viewer').getByRole('button', { name: 'Record lecture' })
+  const bar = page.getByRole('status', { name: 'Recording', exact: true })
+  for (let i = 0; i < 2; i++) {
+    await record.click()
+    await expect(bar).toBeVisible()
+    await page.waitForTimeout(1500)
+    await record.click()
+    await expect(bar).toBeHidden()
+  }
+}
+
+test('plugging in queues each saved recording once', async () => {
+  await start({ MARGINALIA_FAKE_WHISPER_MS: '3000' }, { autoTranscribe: true })
+  await power(true)
+  await recordTwice()
+  // Several triggers at once used to scan side by side and queue everything twice.
+  await app.evaluate(({ powerMonitor }) => {
+    powerMonitor.isOnBatteryPower = () => false
+    powerMonitor.emit('on-ac')
+    powerMonitor.emit('on-ac')
+    powerMonitor.emit('on-ac')
+  })
+  const job = page.getByRole('status', { name: 'Transcribing' })
+  await expect(job).toContainText('Queue (1 waiting)')
+  await page.waitForTimeout(1000)
+  await expect(job).toContainText('Queue (1 waiting)')
+})
+
+test('the queue shows recordings not started yet, and starts them on battery', async () => {
+  await start({ MARGINALIA_FAKE_WHISPER_MS: '3000' })
+  await power(true)
+  await recordTwice()
+
+  await page.keyboard.press('Control+Comma')
+  await page.getByRole('button', { name: 'Show the queue' }).click()
+  const queue = page.getByRole('dialog', { name: 'Transcription queue' })
+  await expect(queue).toContainText('Not started (2)')
+  await expect(queue).toContainText('Transcribing by itself is off')
+  await queue.getByRole('button', { name: 'Transcribe all now' }).click()
+  await expect(queue).not.toContainText('Not started')
+  await expect(queue.locator('.queue-item')).toHaveCount(2)
+
+  // Started by hand, so unplugging does not pause them.
+  await power(true)
+  const job = page.getByRole('status', { name: 'Transcribing' }).first()
+  await expect(job).toContainText('transcribing')
+  await expect(page.getByText('Paused on battery power')).toHaveCount(0)
+  await expect(queue).toContainText('Nothing left to transcribe.', { timeout: 30_000 })
+})
+
 test('recording stops and is kept when the laptop goes to sleep', async () => {
   await start()
   await page.keyboard.press('Control+Shift+R')

@@ -15,7 +15,7 @@ import { indexPdfs } from './lib/indexer'
 import { useApp } from './store'
 import { RecordingBar } from './transcribe/RecordingBar'
 import { useRecording } from './transcribe/recording'
-import { TranscribeFileDialog, TranscribeJobs } from './transcribe/TranscribeFile'
+import { TranscribeFileDialog, TranscribeJobs, TranscribeQueue } from './transcribe/TranscribeFile'
 
 /** Insert current slide link: typed into the summary wherever focus is. */
 function insertCurrentSlideLink(): void {
@@ -135,6 +135,7 @@ export function App(): React.JSX.Element | null {
         <div className="shell">
           <RecordingBar />
           <TranscribeJobs />
+          <TranscribeQueue />
           <div className="layout">
             {!lectureMode && !sidebarHidden && <Sidebar />}
             <Workspace />
