@@ -249,10 +249,29 @@ function TranscribeQueue({
 }): React.JSX.Element {
   const { cancel, move, showQueue } = useFiles.getState()
   const close = (): void => showQueue(false)
+  const [dragged, setDragged] = useState<string | null>(null)
+  const [drop, setDrop] = useState<{ id: string; after: boolean } | null>(null)
+
+  const dropOn = (e: React.DragEvent, id: string): { id: string; after: boolean } => {
+    const rect = e.currentTarget.getBoundingClientRect()
+    return { id, after: e.clientY > rect.top + rect.height / 2 }
+  }
+
+  const finishDrag = (): void => {
+    if (dragged && drop) {
+      const from = waiting.findIndex((j) => j.id === dragged)
+      let to = waiting.findIndex((j) => j.id === drop.id) + (drop.after ? 1 : 0)
+      if (to > from) to--
+      if (from !== -1 && to !== from) move(dragged, to - from)
+    }
+    setDragged(null)
+    setDrop(null)
+  }
+
   return (
     <div className="overlay-backdrop" onMouseDown={close}>
       <div
-        className="transcribe-dialog"
+        className="transcribe-dialog queue"
         role="dialog"
         aria-label="Transcription queue"
         onMouseDown={(e) => e.stopPropagation()}
@@ -279,7 +298,40 @@ function TranscribeQueue({
             </li>
           )}
           {waiting.map((job, i) => (
-            <li key={job.id} className="queue-item" aria-label={job.name}>
+            <li
+              key={job.id}
+              className={[
+                'queue-item',
+                dragged === job.id ? 'dragging' : '',
+                drop?.id === job.id && dragged !== job.id
+                  ? drop.after
+                    ? 'drop-after'
+                    : 'drop-before'
+                  : ''
+              ].join(' ')}
+              aria-label={job.name}
+              title="Drag to change the order"
+              draggable={waiting.length > 1}
+              onDragStart={(e) => {
+                e.dataTransfer.effectAllowed = 'move'
+                e.dataTransfer.setData('text/plain', job.id)
+                setDragged(job.id)
+              }}
+              onDragOver={(e) => {
+                if (!dragged) return
+                e.preventDefault()
+                const next = dropOn(e, job.id)
+                if (drop?.id !== next.id || drop.after !== next.after) setDrop(next)
+              }}
+              onDrop={(e) => {
+                e.preventDefault()
+                finishDrag()
+              }}
+              onDragEnd={() => {
+                setDragged(null)
+                setDrop(null)
+              }}
+            >
               <span className="queue-name">
                 <strong>{job.name}</strong>
                 <span className="muted">{jobDetails(job)}</span>
