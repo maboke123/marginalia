@@ -36,6 +36,7 @@ import { FindBar } from './FindBar'
 import { useFind } from './find'
 import { loadPdf, pageSizes } from './pdfjs'
 import { PdfPage } from './PdfPage'
+import { CloseButton } from '../components/CloseButton'
 import { SidebarButton } from '../components/SidebarButton'
 import { RecordButton } from '../transcribe/RecordButton'
 import { SnapshotLayer } from './SnapshotLayer'
@@ -601,6 +602,7 @@ function Document({
               <Icon name="columns" />
             </button>
           )}
+          <CloseButton path={path} />
         </div>
       </div>
 

@@ -4,6 +4,7 @@ import { Annotation, Compartment, EditorState, type Extension } from '@codemirro
 import { EditorView } from '@codemirror/view'
 import { Icon } from '../components/Icon'
 import { NoteSwitcher } from '../components/NoteSwitcher'
+import { CloseButton } from '../components/CloseButton'
 import { SidebarButton } from '../components/SidebarButton'
 import { registerFlush } from '../lib/flush'
 import { findNode } from '../lib/tree'
@@ -242,6 +243,7 @@ export function MarkdownEditor({
         >
           <Icon name="columns" />
         </button>
+        <CloseButton path={path} />
       </div>
       {error ? (
         <p className="pdf-message">Could not open this note: {error}</p>

@@ -140,6 +140,30 @@ test('lecture mode, slide links and snapshots', async () => {
   await page.screenshot({ path: path.join('test-results', 'lecture.png') })
 })
 
+test('files close one pane at a time, and Ctrl+W leaves the empty view', async () => {
+  await openSection()
+  await row('slides.pdf').click()
+  await page.keyboard.press('Control+Shift+M')
+  await expect(page.locator('.lecture-pane')).toHaveCount(2)
+  await editor().click()
+  await page.keyboard.type('Gini or entropy')
+
+  // Closing the note leaves the slides on their own, and the note was saved.
+  await page.locator('.md-pane').getByRole('button', { name: 'Close' }).click()
+  await expect(page.locator('.lecture-pane')).toHaveCount(0)
+  await expect(page.locator('.pdf-page').first()).toBeVisible()
+  await expect(page.locator('.md-editor')).toHaveCount(0)
+  await expect
+    .poll(() => fs.readFile(path.join(env.vault, section, 'slides.md'), 'utf8'))
+    .toBe('Gini or entropy')
+
+  await page.locator('.pdf-scroll').focus()
+  await page.keyboard.press('Control+W')
+  await expect(page.locator('.workspace.empty')).toBeVisible()
+  await page.screenshot({ path: path.join('test-results', 'empty-view.png') })
+  await expect(page.locator('.pdf-page')).toHaveCount(0)
+})
+
 test('a wide formula scrolls inside a narrow note pane', async () => {
   const sum = Array.from({ length: 30 }, (_, i) => `C_{${i}}`).join(' + ')
   await fs.writeFile(path.join(env.vault, section, 'slides.md'), `Intro\n\n$$\n${sum}\n$$\n`)

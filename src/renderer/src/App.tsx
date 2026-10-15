@@ -47,6 +47,7 @@ const ACTIONS: Partial<Record<HotkeyAction, () => void>> = {
   claude: toggleClaude,
   lecture: () => useApp.getState().toggleLecture(),
   sidebar: () => useApp.getState().toggleSidebar(),
+  close: () => useApp.getState().closeFile(),
   fullScreen: () => void window.api.app.toggleFullScreen(),
   importPdf: () => useApp.getState().importPdfs(),
   slideLink: insertCurrentSlideLink,

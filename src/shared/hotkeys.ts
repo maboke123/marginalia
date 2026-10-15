@@ -10,6 +10,7 @@ export const HOTKEY_ACTIONS = [
   { id: 'todo', label: 'Todo note', key: 'Ctrl+Shift+T', scope: 'global' },
   { id: 'settings', label: 'Settings', key: 'Ctrl+,', scope: 'global' },
   { id: 'sidebar', label: 'Show or hide the sidebar', key: 'Ctrl+\\', scope: 'global' },
+  { id: 'close', label: 'Close the open files', key: 'Ctrl+W', scope: 'global' },
   { id: 'fullScreen', label: 'Full screen', key: 'F11', scope: 'global' },
   {
     id: 'record',

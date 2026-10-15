@@ -131,6 +131,8 @@ interface AppState {
   setOverlay(overlay: Overlay): void
   toggleLecture(): Promise<void>
   toggleSidebar(): void
+  /** Closes one file (in lecture mode the other stays open), or everything on screen. */
+  closeFile(path?: string): void
   /** Lecture mode: shows this note next to the slides and remembers it as their note. */
   showNote(note: string): Promise<void>
   /** Lecture mode: a new note in the slides' folder, linked to them and shown. */
@@ -446,6 +448,12 @@ export const useApp = create<AppState>((set, get) => {
 
     // Not kept across restarts: with nothing open yet, the sidebar is how to open something.
     toggleSidebar: () => set({ sidebarHidden: !get().sidebarHidden }),
+
+    closeFile(path) {
+      const { lectureMode, slidesFile, summaryFile } = get()
+      const other = !lectureMode || !path ? null : path === slidesFile ? summaryFile : slidesFile
+      set({ lectureMode: false, activeFile: other })
+    },
 
     async showNote(note) {
       const { slidesFile } = get()

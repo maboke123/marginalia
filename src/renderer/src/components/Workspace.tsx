@@ -98,9 +98,9 @@ export function Workspace(): React.JSX.Element {
   if (!view) {
     return (
       <main className={className('empty')} {...dropProps}>
-        <img className="empty-logo" src={logo} alt="" width={40} height={40} />
-        <p className="muted">Select a page in the sidebar, or drop a PDF here to import it.</p>
         <SidebarButton />
+        <p className="muted">Select a page in the sidebar, or drop a PDF here to import it.</p>
+        <img className="empty-logo" src={logo} alt="" width={160} height={160} />
       </main>
     )
   }
