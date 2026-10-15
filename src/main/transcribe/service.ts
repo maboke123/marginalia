@@ -377,26 +377,36 @@ export function registerTranscription(
     return text.includes(NOT_TRANSCRIBED) && !!audioOf(text)
   }
 
-  /** Saved recordings not transcribed yet and not in the queue. */
+  /** The order I put recordings in that are not started yet; others follow in tree order. */
+  let pendingOrder: string[] = []
+
+  /** Saved recordings not transcribed yet and not in the queue, in the order they start. */
   async function pendingNotes(vault: Vault): Promise<string[]> {
     const notes: string[] = []
     for (const note of transcriptNotes((await vault.tree()).nodes)) {
       if (note === live?.transcript || queuedNote(note)) continue
       if (await untranscribed(vault, note)) notes.push(note)
     }
-    return notes
+    const rank = (note: string): number => {
+      const i = pendingOrder.indexOf(note)
+      return i === -1 ? pendingOrder.length : i
+    }
+    return notes.sort((a, b) => rank(a) - rank(b))
   }
 
   // Several triggers can come at once (plugging in, a recording ending, a setting changing);
   // two scans side by side queued every recording twice.
   let scan: Promise<void> | null = null
-  function transcribePending(now = false): Promise<void> {
-    scan = (scan ?? Promise.resolve()).catch(() => undefined).then(() => scanPending(now))
+  function transcribePending(now = false, only?: string[]): Promise<void> {
+    scan = (scan ?? Promise.resolve()).catch(() => undefined).then(() => scanPending(now, only))
     return scan
   }
 
-  /** `now`: started by hand, so also on battery and when the setting is off. */
-  async function scanPending(now: boolean): Promise<void> {
+  /**
+   * `now`: started by hand, so also on battery and when the setting is off; `only`: just
+   * these recordings.
+   */
+  async function scanPending(now: boolean, only?: string[]): Promise<void> {
     const vault = getVault()
     if (!vault) return
     if (!now && powerMonitor.isOnBatteryPower()) return
@@ -405,6 +415,7 @@ export function registerTranscription(
     try {
       const { languages } = await vault.tree()
       for (const note of await pendingNotes(vault)) {
+        if (only && !only.includes(note)) continue
         if (!now && skipped.has(note)) continue
         if (queuedNote(note)) continue
         if (now) skipped.delete(note)
@@ -419,7 +430,10 @@ export function registerTranscription(
     }
   }
   handle('transcribe:pending', () => transcribePending())
-  handle('transcribe:startPending', () => transcribePending(true))
+  handle('transcribe:startPending', (notes?: string[]) => transcribePending(true, notes))
+  handle('transcribe:orderPending', (notes: string[]) => {
+    pendingOrder = notes
+  })
   handle('transcribe:pendingNotes', async (): Promise<PendingRecordings> => {
     const vault = getVault()
     const { settings } = await config.read()

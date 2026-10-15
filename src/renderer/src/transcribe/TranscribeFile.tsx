@@ -264,6 +264,92 @@ export function TranscribeQueue(): React.JSX.Element | null {
   return queueOpen ? <QueueDialog /> : null
 }
 
+/** Moves `items[from]` `by` places, kept inside the list. */
+function moved<T>(items: T[], from: number, by: number): T[] {
+  const to = Math.max(0, Math.min(items.length - 1, from + by))
+  const next = [...items]
+  next.splice(to, 0, ...next.splice(from, 1))
+  return next
+}
+
+/** Drag to reorder one list; `move` gets how many places the dragged item moves. */
+function useDragOrder(
+  ids: string[],
+  move: (id: string, by: number) => void
+): (id: string) => React.LiHTMLAttributes<HTMLLIElement> {
+  const [dragged, setDragged] = useState<string | null>(null)
+  const [drop, setDrop] = useState<{ id: string; after: boolean } | null>(null)
+  const reset = (): void => {
+    setDragged(null)
+    setDrop(null)
+  }
+  return (id) => ({
+    className: [
+      'queue-item',
+      dragged === id ? 'dragging' : '',
+      drop?.id === id && dragged !== id ? (drop.after ? 'drop-after' : 'drop-before') : ''
+    ].join(' '),
+    title: ids.length > 1 ? 'Drag to change the order' : undefined,
+    draggable: ids.length > 1,
+    onDragStart: (e) => {
+      e.dataTransfer.effectAllowed = 'move'
+      e.dataTransfer.setData('text/plain', id)
+      setDragged(id)
+    },
+    onDragOver: (e) => {
+      if (!dragged || !ids.includes(dragged)) return
+      e.preventDefault()
+      const rect = e.currentTarget.getBoundingClientRect()
+      const after = e.clientY > rect.top + rect.height / 2
+      if (drop?.id !== id || drop.after !== after) setDrop({ id, after })
+    },
+    onDrop: (e) => {
+      e.preventDefault()
+      if (dragged && drop) {
+        const from = ids.indexOf(dragged)
+        let to = ids.indexOf(drop.id) + (drop.after ? 1 : 0)
+        if (to > from) to--
+        if (from !== -1 && to !== from) move(dragged, to - from)
+      }
+      reset()
+    },
+    onDragEnd: reset
+  })
+}
+
+function OrderButtons({
+  index,
+  count,
+  move
+}: {
+  index: number
+  count: number
+  move(by: number): void
+}): React.JSX.Element {
+  return (
+    <>
+      <button
+        className="icon-button"
+        title="Sooner"
+        aria-label="Sooner"
+        disabled={index === 0}
+        onClick={() => move(-1)}
+      >
+        <Icon name="up" />
+      </button>
+      <button
+        className="icon-button"
+        title="Later"
+        aria-label="Later"
+        disabled={index === count - 1}
+        onClick={() => move(1)}
+      >
+        <Icon name="down" />
+      </button>
+    </>
+  )
+}
+
 function QueueDialog(): React.JSX.Element {
   const jobs = useFiles((s) => s.jobs)
   const { current, waiting } = queueOf(jobs)
@@ -271,6 +357,7 @@ function QueueDialog(): React.JSX.Element {
   const [pending, setPending] = useState<PendingRecordings | null>(null)
   const [starting, setStarting] = useState(false)
   const queued = jobs.map((j) => j.id).join()
+  const close = (): void => showQueue(false)
 
   useEffect(() => {
     let live = true
@@ -283,35 +370,29 @@ function QueueDialog(): React.JSX.Element {
     }
   }, [queued])
 
-  const startAll = (): void => {
+  const start = (only?: string[]): void => {
     setStarting(true)
     void window.api.transcribe
-      .startPending()
+      .startPending(only)
       .then(() => window.api.transcribe.pendingNotes())
       .then(setPending)
       .catch((err) => useApp.getState().showError((err as Error).message))
       .finally(() => setStarting(false))
   }
 
-  const close = (): void => showQueue(false)
-  const [dragged, setDragged] = useState<string | null>(null)
-  const [drop, setDrop] = useState<{ id: string; after: boolean } | null>(null)
-
-  const dropOn = (e: React.DragEvent, id: string): { id: string; after: boolean } => {
-    const rect = e.currentTarget.getBoundingClientRect()
-    return { id, after: e.clientY > rect.top + rect.height / 2 }
+  const notes = pending?.notes ?? []
+  const movePending = (note: string, by: number): void => {
+    if (!pending) return
+    const order = moved(notes, notes.indexOf(note), by)
+    setPending({ ...pending, notes: order })
+    void window.api.transcribe.orderPending(order)
   }
 
-  const finishDrag = (): void => {
-    if (dragged && drop) {
-      const from = waiting.findIndex((j) => j.id === dragged)
-      let to = waiting.findIndex((j) => j.id === drop.id) + (drop.after ? 1 : 0)
-      if (to > from) to--
-      if (from !== -1 && to !== from) move(dragged, to - from)
-    }
-    setDragged(null)
-    setDrop(null)
-  }
+  const waitingRow = useDragOrder(
+    waiting.map((j) => j.id),
+    move
+  )
+  const pendingRow = useDragOrder(notes, movePending)
 
   return (
     <div className="overlay-backdrop" onMouseDown={close}>
@@ -328,105 +409,70 @@ function QueueDialog(): React.JSX.Element {
           (saved every 5 minutes of recording) and goes on from there when you start it again with
           the same language and speed.
         </p>
-        {!current && !waiting.length && !pending?.notes.length && (
-          <p>Nothing left to transcribe.</p>
-        )}
-        <ol className="queue-list">
-          {current && (
-            <li className="queue-item" aria-label={current.name}>
-              <span className="queue-name">
-                <strong>{current.name}</strong>
-                <span className="muted">{jobDetails(current)}</span>
-                <span>Now {progressText(current)}</span>
-              </span>
-              <button className="button" onClick={() => cancel(current.id)}>
-                Stop
-              </button>
-            </li>
-          )}
-          {waiting.map((job, i) => (
-            <li
-              key={job.id}
-              className={[
-                'queue-item',
-                dragged === job.id ? 'dragging' : '',
-                drop?.id === job.id && dragged !== job.id
-                  ? drop.after
-                    ? 'drop-after'
-                    : 'drop-before'
-                  : ''
-              ].join(' ')}
-              aria-label={job.name}
-              title="Drag to change the order"
-              draggable={waiting.length > 1}
-              onDragStart={(e) => {
-                e.dataTransfer.effectAllowed = 'move'
-                e.dataTransfer.setData('text/plain', job.id)
-                setDragged(job.id)
-              }}
-              onDragOver={(e) => {
-                if (!dragged) return
-                e.preventDefault()
-                const next = dropOn(e, job.id)
-                if (drop?.id !== next.id || drop.after !== next.after) setDrop(next)
-              }}
-              onDrop={(e) => {
-                e.preventDefault()
-                finishDrag()
-              }}
-              onDragEnd={() => {
-                setDragged(null)
-                setDrop(null)
-              }}
-            >
-              <span className="queue-name">
-                <strong>{job.name}</strong>
-                <span className="muted">{jobDetails(job)}</span>
-                <span>{i === 0 ? 'Next' : `Waiting, ${i + 1} in line`}</span>
-              </span>
-              <button
-                className="icon-button"
-                title="Sooner"
-                aria-label="Sooner"
-                disabled={i === 0}
-                onClick={() => move(job.id, -1)}
-              >
-                <Icon name="up" />
-              </button>
-              <button
-                className="icon-button"
-                title="Later"
-                aria-label="Later"
-                disabled={i === waiting.length - 1}
-                onClick={() => move(job.id, 1)}
-              >
-                <Icon name="down" />
-              </button>
-              <button className="text-button" onClick={() => cancel(job.id)}>
-                Remove
-              </button>
-            </li>
-          ))}
-        </ol>
-        {!!pending?.notes.length && (
-          <>
-            <h3 className="queue-heading">Not started ({pending.notes.length})</h3>
-            <p className="muted">{notStartedReason(pending)}</p>
+        <div className="queue-body">
+          {!current && !waiting.length && !notes.length && <p>Nothing left to transcribe.</p>}
+          {(current || waiting.length > 0) && (
             <ol className="queue-list">
-              {pending.notes.map((note) => (
-                <li key={note} className="queue-item" aria-label={noteName(note)}>
+              {current && (
+                <li className="queue-item" aria-label={current.name}>
                   <span className="queue-name">
-                    <strong>{noteName(note)}</strong>
-                    <span className="muted">{note.split('/').slice(0, -1).join(' / ')}</span>
+                    <strong>{current.name}</strong>
+                    <span className="muted">{jobDetails(current)}</span>
+                    <span>Now {progressText(current)}</span>
                   </span>
+                  <button className="button" onClick={() => cancel(current.id)}>
+                    Stop
+                  </button>
+                </li>
+              )}
+              {waiting.map((job, i) => (
+                <li key={job.id} aria-label={job.name} {...waitingRow(job.id)}>
+                  <span className="queue-name">
+                    <strong>{job.name}</strong>
+                    <span className="muted">{jobDetails(job)}</span>
+                    <span>{i === 0 ? 'Next' : `Waiting, ${i + 1} in line`}</span>
+                  </span>
+                  <OrderButtons index={i} count={waiting.length} move={(by) => move(job.id, by)} />
+                  <button className="text-button" onClick={() => cancel(job.id)}>
+                    Remove
+                  </button>
                 </li>
               ))}
             </ol>
-          </>
-        )}
+          )}
+          {notes.length > 0 && pending && (
+            <>
+              <h3 className="queue-heading">Not started ({notes.length})</h3>
+              <p className="muted">{notStartedReason(pending)}</p>
+              <ol className="queue-list">
+                {notes.map((note, i) => (
+                  <li key={note} aria-label={noteName(note)} {...pendingRow(note)}>
+                    <span className="queue-name">
+                      <strong>{noteName(note)}</strong>
+                      <span className="muted">{note.split('/').slice(0, -1).join(' / ')}</span>
+                      <span>{i === 0 ? 'First to start' : `${i + 1} in line`}</span>
+                    </span>
+                    <OrderButtons
+                      index={i}
+                      count={notes.length}
+                      move={(by) => movePending(note, by)}
+                    />
+                    <button
+                      className="text-button"
+                      disabled={starting}
+                      onClick={() => start([note])}
+                    >
+                      Start
+                    </button>
+                  </li>
+                ))}
+              </ol>
+            </>
+          )}
+        </div>
         <div className="transcribe-actions">
-          {!!pending?.notes.length && (
-            <button className="button primary" disabled={starting} onClick={startAll}>
+          {notes.length > 0 && (
+            <button className="button primary" disabled={starting} onClick={() => start()}>
               Transcribe all now
             </button>
           )}

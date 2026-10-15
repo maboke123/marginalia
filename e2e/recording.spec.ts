@@ -459,6 +459,16 @@ test('the queue shows recordings not started yet, and starts them on battery', a
   const queue = page.getByRole('dialog', { name: 'Transcription queue' })
   await expect(queue).toContainText('Not started (2)')
   await expect(queue).toContainText('Transcribing by itself is off')
+
+  // Not started ones are ordered like the queue; Start takes just that one.
+  const items = queue.locator('.queue-item strong')
+  const [first, second] = await items.allTextContents()
+  await queue.getByRole('button', { name: 'Later' }).first().click()
+  await expect(items).toHaveText([second, first])
+  await page.screenshot({ path: path.join('test-results', 'transcribe-queue.png') })
+  await queue.getByRole('listitem', { name: first }).getByRole('button', { name: 'Start' }).click()
+  await expect(queue).toContainText('Not started (1)')
+  await expect(queue).toContainText(`Now`)
   await queue.getByRole('button', { name: 'Transcribe all now' }).click()
   await expect(queue).not.toContainText('Not started')
   await expect(queue.locator('.queue-item')).toHaveCount(2)

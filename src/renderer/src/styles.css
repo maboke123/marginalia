@@ -2794,11 +2794,28 @@ h2 {
   max-height: calc(100vh - 128px);
 }
 
-.queue-list {
+.transcribe-dialog.queue > * {
+  flex: none;
+}
+
+.transcribe-dialog.queue > .queue-body {
+  flex: 0 1 auto;
   min-height: 0;
+  overflow-y: auto;
+}
+
+.queue-body > p {
+  margin: 0 0 12px;
+  line-height: 1.5;
+}
+
+.queue-heading:first-child {
+  margin-top: 0;
+}
+
+.queue-list {
   margin: 0;
   padding: 0;
-  overflow-y: auto;
   list-style: none;
 }
 

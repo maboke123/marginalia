@@ -152,8 +152,13 @@ export interface MarginaliaApi {
     transcribeRecorded(request: TranscribeRecordedRequest): Promise<string>
     /** Starts recordings not transcribed yet, when plugged in and the setting is on. */
     transcribePending(): Promise<void>
-    /** Starts every recording not transcribed yet now, also on battery or with the setting off. */
-    startPending(): Promise<void>
+    /**
+     * Starts recordings not transcribed yet (`notes`, else all) now, also on battery or with
+     * the setting off.
+     */
+    startPending(notes?: string[]): Promise<void>
+    /** The order recordings not started yet go in, also when the app starts them by itself. */
+    orderPending(notes: string[]): Promise<void>
     /** Recordings not transcribed yet that are not in the queue. */
     pendingNotes(): Promise<PendingRecordings>
     /** Takes a waiting job out of the queue, or stops the running one. */
