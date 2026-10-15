@@ -214,6 +214,35 @@ test('adds to the summary under a heading after Accept, and one undo removes it'
   await expect.poll(readSummary).toBe(SUMMARY)
 })
 
+test('clicking a waiting change in the chat opens the file at it again', async () => {
+  await openSlides()
+  await page.keyboard.press('Control+Shift+M')
+  await ask('Add a short version under Information gain')
+  await expect(page.locator('.cm-proposal')).toBeVisible()
+
+  // Back to the slides alone: the note closes while the change still waits.
+  await page.keyboard.press('Control+Shift+M')
+  await expect(page.locator('.md-editor')).toHaveCount(0)
+  await page.locator('.claude-proposal-label', { hasText: 'Summary.md' }).click()
+  await expect(page.locator('.cm-proposal')).toContainText('Short version: pick the split')
+  await page.locator('.cm-proposal').getByRole('button', { name: 'Accept', exact: true }).click()
+  await expect.poll(readSummary).toContain('Short version: pick the split')
+
+  await page.keyboard.press('Control+Shift+M')
+  await row('slides.pdf').click()
+  await expect(page.locator('.md-editor')).toHaveCount(0)
+  await ask('Put a note next to this slide')
+  await expect(page.locator('.text-box.ghost')).toBeVisible()
+  await row('Summary').click()
+  await expect(page.locator('.pdf-page')).toHaveCount(0)
+  await page.locator('.claude-proposal-label').last().click()
+  await expect(page.locator('.text-box.ghost')).toBeVisible()
+  await page.locator('.ghost-actions').getByRole('button', { name: 'Accept', exact: true }).click()
+  await expect(page.locator('.text-box.by-claude:not(.ghost)')).toHaveCount(1)
+  // Done changes are plain text again.
+  await expect(page.locator('button.claude-proposal-label')).toHaveCount(0)
+})
+
 test('puts a note in the margin of the slide; Reject leaves nothing', async () => {
   await openSlides()
   const ghost = page.locator('.text-box.ghost')

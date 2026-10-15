@@ -27,6 +27,7 @@ import {
   removeItems,
   replaceItem,
   type AnnotationDoc,
+  type Ghost,
   type Kind
 } from '../annotations/doc'
 import { round, strokeBounds, translateStroke } from '../annotations/geometry'
@@ -136,24 +137,56 @@ function listPage(key: string, page: PageAnnotations): string[] {
 async function changeAnnotations(
   open: OpenPdf & { doc: AnnotationDoc },
   label: string,
+  page: number,
   preview: (decide: (accept: boolean) => void) => () => void,
   fn: (pages: AnnotationPages) => AnnotationPages
 ): Promise<void> {
-  const accepted = await useChat.getState().confirm(label, preview)
+  const accepted = await useChat.getState().confirm(label, preview, revealPdf(open.path, page))
   if (!accepted) throw new ToolError(REJECTED)
-  open.doc.getState().change(fn)
+  docAfterAccept(open).getState().change(fn)
+}
+
+/** The PDF's annotations as open now: closing and opening the PDF again makes a new doc. */
+function liveDoc(open: OpenPdf & { doc: AnnotationDoc }): AnnotationDoc {
+  return openPdf(open.path)?.doc ?? open.doc
+}
+
+function docAfterAccept(open: OpenPdf & { doc: AnnotationDoc }): AnnotationDoc {
+  const doc = openPdf(open.path)?.doc
+  if (!doc) throw new ToolError('The PDF was closed before the change was made')
+  return doc
+}
+
+/** Opens the PDF at a change that waits for my answer, when I click it in the chat. */
+function revealPdf(path: string, page: number): () => Promise<void> {
+  return async () => {
+    await showPdf(path, slideOf(page))
+  }
 }
 
 /** Selects an item while I decide, so I see which one Claude means. */
 function pointAt(
-  doc: AnnotationDoc,
+  open: OpenPdf & { doc: AnnotationDoc },
   page: number,
   kind: Kind,
   id: string
 ): (decide: (accept: boolean) => void) => () => void {
   return () => {
+    const doc = liveDoc(open)
     doc.getState().select({ page, kind, id })
     return () => doc.getState().select(null)
+  }
+}
+
+/** Draws a change as a ghost on the page while I decide. */
+function ghostOf(
+  open: OpenPdf & { doc: AnnotationDoc },
+  ghost: Omit<Ghost, 'decide'>
+): (decide: (accept: boolean) => void) => () => void {
+  return (decide) => {
+    const doc = liveDoc(open)
+    doc.getState().setGhost({ ...ghost, decide })
+    return () => doc.getState().setGhost(null)
   }
 }
 
@@ -241,19 +274,23 @@ function fitOnPage(open: OpenPdf & { doc: AnnotationDoc }, page: number, box: Te
 
 /** Applies a change to an open note as one undo step, after I accept it if I want to be asked. */
 async function editNote(
-  view: EditorView,
+  { path, view: first }: OpenNote,
   change: { from: number; to: number; insert: string },
   label: string
 ): Promise<void> {
-  const original = view.state.sliceDoc(change.from, change.to)
+  const original = first.state.sliceDoc(change.from, change.to)
   // Positions may move while I type elsewhere; the preview keeps track of them.
   let range = { from: change.from, to: change.to }
-  const accepted = await useChat.getState().confirm(label, (decide) => {
+  // Closing and opening the note again gives a new editor.
+  const current = (): EditorView => openNote(path)?.view ?? first
+  const show = (decide: (accept: boolean) => void): (() => void) => {
+    const view = current()
+    if (!view.dom.isConnected) return () => {}
     // Scrolls to the preview without moving my cursor, in case I am still typing.
     view.dispatch({
       effects: [
-        setPendingEdit.of({ ...change, original, decide }),
-        EditorView.scrollIntoView(change.to, { y: 'center' })
+        setPendingEdit.of({ ...range, insert: change.insert, original, decide }),
+        EditorView.scrollIntoView(range.to, { y: 'center' })
       ]
     })
     return () => {
@@ -262,8 +299,13 @@ async function editNote(
       range = { from: pending.from, to: pending.to }
       view.dispatch({ effects: setPendingEdit.of(null) })
     }
-  })
+  }
+  const reveal = async (): Promise<void> => {
+    await showNote(path)
+  }
+  const accepted = await useChat.getState().confirm(label, show, reveal)
   if (!accepted) throw new ToolError(REJECTED)
+  const view = current()
   if (!view.dom.isConnected) throw new ToolError('The note was closed before the change was made')
 
   const { from, to } = range
@@ -285,13 +327,11 @@ async function annotate(
   item: { textBox: TextBox } | { highlight: Highlight },
   label: string
 ): Promise<void> {
-  const { doc } = open
-  const accepted = await useChat.getState().confirm(label, (decide) => {
-    doc.getState().setGhost({ page, ...item, decide })
-    return () => doc.getState().setGhost(null)
-  })
+  const accepted = await useChat
+    .getState()
+    .confirm(label, ghostOf(open, { page, ...item }), revealPdf(open.path, page))
   if (!accepted) throw new ToolError(REJECTED)
-  doc
+  docAfterAccept(open)
     .getState()
     .change((pages) =>
       'textBox' in item
@@ -390,7 +430,8 @@ const TOOLS: Record<string, (args: Args) => Promise<Result>> = {
     const path = fileArg(args, 'markdown')
     const markdown = String(args.markdown ?? '')
     if (!markdown.trim()) throw new ToolError('Nothing to insert')
-    const { view } = await showNote(path)
+    const note = await showNote(path)
+    const { view } = note
     const text = view.state.doc.toString()
     let pos: number
     let where: string
@@ -407,7 +448,7 @@ const TOOLS: Record<string, (args: Args) => Promise<Result>> = {
       where = 'at the end'
     }
     const { from, insert } = blockInsert(text, pos, markdown)
-    await editNote(view, { from, to: from, insert }, `Add to ${fileName(path)} ${where}`)
+    await editNote(note, { from, to: from, insert }, `Add to ${fileName(path)} ${where}`)
     return { text: `Inserted into ${path} ${where}.` }
   },
 
@@ -416,7 +457,8 @@ const TOOLS: Record<string, (args: Args) => Promise<Result>> = {
     const oldText = String(args.old_text ?? '')
     const newText = String(args.new_text ?? '')
     if (!oldText) throw new ToolError('old_text is empty')
-    const { view } = await showNote(path)
+    const note = await showNote(path)
+    const { view } = note
     const text = view.state.doc.toString()
     const at = text.indexOf(oldText)
     if (at === -1) throw new ToolError('old_text was not found; read the summary again')
@@ -424,7 +466,7 @@ const TOOLS: Record<string, (args: Args) => Promise<Result>> = {
       throw new ToolError('old_text appears more than once; include more surrounding text')
     }
     await editNote(
-      view,
+      note,
       { from: at, to: at + oldText.length, insert: newText },
       `Change text in ${fileName(path)}`
     )
@@ -508,7 +550,7 @@ const TOOLS: Record<string, (args: Args) => Promise<Result>> = {
       typeof args[key] === 'number' ? round(args[key] as number) : undefined
 
     let changed: (pages: AnnotationPages) => AnnotationPages
-    let preview = pointAt(open.doc, page, kind, id)
+    let preview = pointAt(open, page, kind, id)
     if (kind === 'textBoxes') {
       const box = findItem(pages, { page, kind, id })!
       let next: TextBox = {
@@ -534,10 +576,7 @@ const TOOLS: Record<string, (args: Args) => Promise<Result>> = {
       )
       if (resized) next = fitOnPage(open, to, next)
       changed = (p) => replaceItem(p, page, 'textBoxes', next)
-      preview = (decide) => {
-        open.doc.getState().setGhost({ page: to, textBox: next, decide })
-        return () => open.doc.getState().setGhost(null)
-      }
+      preview = ghostOf(open, { page: to, textBox: next })
     } else if (kind === 'highlights') {
       const next: Highlight = { ...findItem(pages, { page, kind, id })!, ...(color && { color }) }
       const style = args.style as TextMarkup | undefined
@@ -560,6 +599,7 @@ const TOOLS: Record<string, (args: Args) => Promise<Result>> = {
     await changeAnnotations(
       open,
       moving ? `Move an annotation to p.${to}` : `Change an annotation on p.${page}`,
+      page,
       preview,
       (p) => (moving ? moveToPage(changed(p), { page, kind, id }, to, (i) => i) : changed(p))
     )
@@ -577,7 +617,8 @@ const TOOLS: Record<string, (args: Args) => Promise<Result>> = {
     await changeAnnotations(
       open,
       `Remove ${what} on p.${page}`,
-      pointAt(open.doc, page, kinds[0], ids[0]),
+      page,
+      pointAt(open, page, kinds[0], ids[0]),
       (p) => KINDS.reduce((acc, kind) => removeItems(acc, page, kind, ids), p)
     )
     return { text: `Removed ${ids.join(', ')} from page ${page}.` }
@@ -595,6 +636,7 @@ const TOOLS: Record<string, (args: Args) => Promise<Result>> = {
     await changeAnnotations(
       open,
       `Add a blank page after p.${below}`,
+      below,
       () => () => {},
       (p) => insertBlankPage(p, below)?.pages ?? p
     )
@@ -638,10 +680,8 @@ const TOOLS: Record<string, (args: Args) => Promise<Result>> = {
     await changeAnnotations(
       open,
       `Draw on ${fileName(path)} p.${page}`,
-      (decide) => {
-        open.doc.getState().setGhost({ page, strokes, decide })
-        return () => open.doc.getState().setGhost(null)
-      },
+      page,
+      ghostOf(open, { page, strokes }),
       (p) => strokes.reduce((acc, s) => addItem(acc, page, 'strokes', s), p)
     )
     const count = `${strokes.length} line${strokes.length === 1 ? '' : 's'}`

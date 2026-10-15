@@ -328,7 +328,17 @@ function PartView({ part }: { part: Part }): React.JSX.Element {
   if (part.kind === 'tool') return <div className="claude-tool muted">{part.label}</div>
   return (
     <div className={`claude-proposal ${part.status}`}>
-      <span>{part.label}</span>
+      {part.status === 'pending' && part.canReveal ? (
+        <button
+          className="claude-proposal-label"
+          title="Show this change"
+          onClick={() => void useChat.getState().reveal(part.id)}
+        >
+          {part.label}
+        </button>
+      ) : (
+        <span className="claude-proposal-label">{part.label}</span>
+      )}
       {part.status === 'pending' ? (
         <>
           <button

@@ -7,7 +7,13 @@ import { buildPacket, currentChips } from './context'
 export type Part =
   | { kind: 'text'; text: string }
   | { kind: 'tool'; label: string }
-  | { kind: 'proposal'; id: string; label: string; status: 'pending' | 'accepted' | 'rejected' }
+  | {
+      kind: 'proposal'
+      id: string
+      label: string
+      status: 'pending' | 'accepted' | 'rejected'
+      canReveal?: boolean
+    }
 
 export interface Message {
   id: string
@@ -54,10 +60,17 @@ interface ChatState {
   saveSettings(update: ClaudeSettingsUpdate): Promise<void>
   /**
    * Asks me to accept an edit. `show` draws the preview and returns a function that removes
-   * it. Resolves true at once when "ask before editing" is off.
+   * it. `reveal` opens the file at the change, for when I click the proposal in the chat.
+   * Resolves true at once when "ask before editing" is off.
    */
-  confirm(label: string, show: (decide: (accept: boolean) => void) => () => void): Promise<boolean>
+  confirm(
+    label: string,
+    show: (decide: (accept: boolean) => void) => () => void,
+    reveal?: () => Promise<void>
+  ): Promise<boolean>
   decide(id: string, accept: boolean): void
+  /** Opens the file of a waiting change and shows its preview again. */
+  reveal(id: string): Promise<void>
   /** Accepts what is waiting and every other edit until this answer is done. */
   acceptAll(): void
 }
@@ -136,6 +149,7 @@ export function focusChatInput(): void {
 }
 
 const decisions = new Map<string, (accept: boolean) => void>()
+const reveals = new Map<string, () => Promise<void>>()
 let nextId = 0
 const id = (): string => `m${++nextId}`
 
@@ -296,7 +310,7 @@ export const useChat = create<ChatState>((set, get) => {
       }
     },
 
-    confirm(label, show) {
+    confirm(label, show, reveal) {
       const chat = get().running
       if (get().settings?.askBeforeEditing === false) return Promise.resolve(true)
       if (chat !== null && get().acceptingAll === chat) return Promise.resolve(true)
@@ -306,6 +320,7 @@ export const useChat = create<ChatState>((set, get) => {
         const decide = (accept: boolean): void => {
           if (!decisions.has(proposal)) return
           decisions.delete(proposal)
+          reveals.delete(proposal)
           hide()
           if (chat !== null) {
             updateAnswer(chat, (m) => ({
@@ -320,10 +335,22 @@ export const useChat = create<ChatState>((set, get) => {
           resolve(accept)
         }
         decisions.set(proposal, decide)
+        if (reveal) {
+          reveals.set(proposal, async () => {
+            await reveal()
+            // I may have decided while the file opened.
+            if (!decisions.has(proposal)) return
+            hide()
+            hide = show(decide)
+          })
+        }
         if (chat !== null) {
           updateAnswer(chat, (m) => ({
             ...m,
-            parts: [...m.parts, { kind: 'proposal', id: proposal, label, status: 'pending' }]
+            parts: [
+              ...m.parts,
+              { kind: 'proposal', id: proposal, label, status: 'pending', canReveal: !!reveal }
+            ]
           }))
         }
         hide = show(decide)
@@ -331,6 +358,14 @@ export const useChat = create<ChatState>((set, get) => {
     },
 
     decide: (proposal, accept) => decisions.get(proposal)?.(accept),
+
+    async reveal(proposal) {
+      try {
+        await reveals.get(proposal)?.()
+      } catch (err) {
+        useApp.getState().showError((err as Error).message)
+      }
+    },
 
     acceptAll() {
       set({ acceptingAll: get().running })
