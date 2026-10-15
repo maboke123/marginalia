@@ -126,6 +126,10 @@ function describeTool(name: string, input: Record<string, unknown>): string {
       return file ? `Looked at ${file}${page}` : 'Looked at the app'
     case 'goto':
       return `Opened ${file}${page}`
+    case 'remember':
+      return input.about === 'me'
+        ? 'Updated what it remembers about you'
+        : `Updated what it remembers about ${input.course || 'this course'}`
     case 'Read':
       return `Read ${file}`
     case 'Glob':

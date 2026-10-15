@@ -138,6 +138,7 @@ async function request(view: EditorView, pending: Pending, ask: string): Promise
   try {
     const answer = await writeWithClaude({
       id: pending.id,
+      file: path,
       where: `my note ${path}${headings.length ? `, under ${headings.join(' > ')}` : ''}`,
       around: textAround(marked, pending.from),
       ask,

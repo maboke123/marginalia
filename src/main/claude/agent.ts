@@ -3,7 +3,7 @@ import type { ChatEvent, ChatImage } from '../../shared/claude'
 import type { StoredClaudeSettings } from '../config'
 import { claudeEnvironment, claudeExecutable } from './cli'
 import { toChatEvents, type StreamState } from './events'
-import { SYSTEM_APPEND, withInstructions } from './prompt'
+import { SYSTEM_APPEND, withInstructions, withMemory, type Memory } from './prompt'
 import { APP_TOOLS, appToolServer, type CallTool } from './tools'
 
 export interface AgentInput {
@@ -14,6 +14,7 @@ export interface AgentInput {
   /** Continue this conversation, or start a new one. */
   sessionId: string | null
   settings: StoredClaudeSettings
+  memory: Memory
   apiKey: string | null
   callTool: CallTool
   signal: AbortSignal
@@ -64,7 +65,9 @@ export const claudeAgent: Agent = async function* (input) {
     systemPrompt: {
       type: 'preset',
       preset: 'claude_code',
-      append: withInstructions(SYSTEM_APPEND, settings.instructions)
+      append: withMemory(withInstructions(SYSTEM_APPEND, settings.instructions), input.memory, {
+        tool: true
+      })
     },
     // My own CLAUDE.md, hooks and plugins are for coding, not for this app.
     settingSources: [],
@@ -113,6 +116,7 @@ export interface CompleteInput {
   text: string
   images: ChatImage[]
   settings: StoredClaudeSettings
+  memory: Memory
   apiKey: string | null
   signal: AbortSignal
 }
@@ -149,7 +153,11 @@ export const claudeComplete: Complete = async (input) => {
       model: input.settings.model === 'default' ? undefined : input.settings.model,
       effort: input.settings.effort === 'default' ? undefined : input.settings.effort,
       // Everything it needs is in the message; no tools keeps it to one quick answer.
-      systemPrompt: withInstructions(WRITER_PROMPT, input.settings.instructions),
+      systemPrompt: withMemory(
+        withInstructions(WRITER_PROMPT, input.settings.instructions),
+        input.memory,
+        null
+      ),
       tools: [],
       settingSources: [],
       persistSession: false,

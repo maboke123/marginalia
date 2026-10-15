@@ -4,6 +4,7 @@ import path from 'path'
 import { pathToFileURL } from 'url'
 import icon from '../../build/icon.ico?asset'
 import { ConfigStore } from './config'
+import { MemoryStore } from './claude/memory'
 import { registerClaude } from './claude/service'
 import { handle, registerIpc } from './ipc'
 import { registerTerminal } from './terminal'
@@ -112,8 +113,9 @@ app.whenReady().then(async () => {
   const config = new ConfigStore(path.join(app.getPath('userData'), 'config.json'))
   nativeTheme.themeSource = (await config.read()).settings.theme
   const currentVault = registerIpc(() => mainWindow, config, app.getPath('userData'))
-  registerClaude(handle, () => mainWindow, config, currentVault)
-  registerTerminal(handle, () => mainWindow, config, currentVault)
+  const memory = new MemoryStore(path.join(app.getPath('userData'), 'memory'))
+  registerClaude(handle, () => mainWindow, config, currentVault, memory)
+  registerTerminal(handle, () => mainWindow, config, currentVault, memory)
   registerTranscription(handle, () => mainWindow, app.getPath('userData'), config, currentVault)
   protocol.handle('vault', (request) => {
     const vault = currentVault()

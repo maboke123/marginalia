@@ -195,6 +195,7 @@ function Editor({
     setWrites(box.id, (w) => [...w, id])
     writeWithClaude({
       id,
+      file: pdf,
       where:
         `a text box on page ${page}${pdf ? ` of ${pdf}` : ''}, my note on that slide. ` +
         sizeHint(box, fitPage, fontSize),

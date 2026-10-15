@@ -114,6 +114,13 @@ export async function* agent(input) {
       text: 'Information gain'
     })
     yield { type: 'text', text: reply.ok ? 'Highlighted it.' : reply.text }
+  } else if (/^remember/i.test(question)) {
+    // "remember: <note>" saves the course note, "remember me: <note>" the one about me.
+    const about = /^remember me/i.test(question) ? 'me' : 'course'
+    const note = question.slice(question.indexOf(':') + 1).trim()
+    yield { type: 'tool', name: 'remember', input: { about } }
+    const reply = await input.callTool('remember', { about, note })
+    yield { type: 'text', text: reply.text }
   } else if (/get stuck/i.test(question)) {
     // Like a hung CLI: never ends and ignores the stop signal.
     yield { type: 'text', text: 'Working on it' }
@@ -126,7 +133,8 @@ export async function* agent(input) {
     text: input.text,
     images: input.images.length,
     question,
-    instructions: input.settings.instructions
+    instructions: input.settings.instructions,
+    memory: input.memory
   })
   yield { type: 'done' }
 }
@@ -142,7 +150,12 @@ export async function history(sessionId) {
 
 /** The one-off request behind /claude in a note. "slow" waits until it is cancelled. */
 export async function complete(input) {
-  await record('complete', { text: input.text, images: input.images.length, question: 'complete' })
+  await record('complete', {
+    text: input.text,
+    images: input.images.length,
+    question: 'complete',
+    memory: input.memory
+  })
   // The request is its own line; instructions may follow it.
   const ask = /My request at ⟦here⟧: (.*)$/m.exec(input.text)?.[1] ?? ''
   const wait = ask.startsWith('slow') ? 60_000 : ask.startsWith('later') ? 1500 : 400

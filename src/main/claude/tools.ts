@@ -212,6 +212,17 @@ export function appToolServer(sdk: Sdk, call: CallTool): McpSdkServerConfigWithI
       { file, page: page.optional() },
       run('goto'),
       { annotations: READ_ONLY }
+    ),
+    sdk.tool(
+      'remember',
+      'Replaces one note of your memory of me with this new version (empty clears it): about ' +
+        'me in general, or about a course (a top folder; by default the one I am in).',
+      {
+        about: z.enum(['me', 'course']),
+        course: z.string().optional().describe('Name of the top folder, if not the current one'),
+        note: z.string().describe('The whole note: short Markdown bullet points')
+      },
+      run('remember')
     )
   ]
   return sdk.createSdkMcpServer({ name: SERVER_NAME, version: '1.0.0', tools })
@@ -233,5 +244,6 @@ export const APP_TOOLS = [
   'add_blank_page',
   'add_drawing',
   'screenshot',
-  'goto'
+  'goto',
+  'remember'
 ].map((name) => `mcp__${SERVER_NAME}__${name}`)

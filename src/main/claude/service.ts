@@ -16,6 +16,8 @@ import type { Handle } from '../ipc'
 import type { Vault } from '../vault/vault'
 import { claudeAgent, claudeComplete, type Agent, type Complete } from './agent'
 import { storedApiKey } from './cli'
+import { courseOf, courseOfFile, type MemoryStore } from './memory'
+import type { Memory } from './prompt'
 import { toHistory } from './events'
 import type { CallTool } from './tools'
 
@@ -46,10 +48,13 @@ export function registerClaude(
   handle: Handle,
   getWindow: () => BrowserWindow | null,
   config: ConfigStore,
-  getVault: () => Vault | null
+  getVault: () => Vault | null,
+  memory: MemoryStore
 ): void {
   const agentModule = loadAgent()
   let running: AbortController | null = null
+  // The section of the running chat: remember writes about its course by default.
+  let runningChat = ''
   const pendingTools = new Map<string, (reply: ToolReply) => void>()
 
   function vault(): Vault {
@@ -63,7 +68,35 @@ export function registerClaude(
     pendingTools.delete(reply.id)
   })
 
+  async function remember(args: Record<string, unknown>): Promise<ToolReply> {
+    const id = randomUUID()
+    const course =
+      args.about === 'me' ? '' : String(args.course ?? '').trim() || courseOf(runningChat)
+    if (args.about !== 'me' && !course) {
+      return { id, ok: false, text: 'Name the course: no course is open' }
+    }
+    try {
+      await memory.write(course, String(args.note ?? ''))
+      return {
+        id,
+        ok: true,
+        text: course ? `Saved the note about ${course}` : 'Saved the note about me'
+      }
+    } catch (err) {
+      return { id, ok: false, text: (err as Error).message }
+    }
+  }
+
+  async function memoryFor(course: string): Promise<Memory> {
+    const [me, courseNote] = await Promise.all([memory.read(''), course ? memory.read(course) : ''])
+    return { me, course, courseNote }
+  }
+
+  // The memory lives in main; every other tool runs in the renderer.
   const callTool: CallTool = (name, args) =>
+    name === 'remember' ? remember(args) : rendererTool(name, args)
+
+  const rendererTool: CallTool = (name, args) =>
     new Promise((resolve) => {
       const id = randomUUID()
       const win = getWindow()
@@ -105,6 +138,7 @@ export function registerClaude(
     const v = vault()
     const controller = new AbortController()
     running = controller
+    runningChat = request.chat
     const emit = (event: ChatEvent): void =>
       getWindow()?.webContents.send('claude:event', request.chat, event)
 
@@ -122,6 +156,7 @@ export function registerClaude(
           images: request.images,
           sessionId,
           settings: claude,
+          memory: await memoryFor(courseOf(request.chat)),
           apiKey,
           callTool,
           signal: controller.signal,
@@ -186,6 +221,7 @@ export function registerClaude(
         text: request.text,
         images: request.images,
         settings: (await config.read()).claude,
+        memory: await memoryFor(courseOfFile(request.file ?? '')),
         apiKey: await storedApiKey(config),
         signal: controller.signal
       })
@@ -219,6 +255,9 @@ export function registerClaude(
       return []
     })
   })
+
+  handle('claude:memory', () => memory.all())
+  handle('claude:setMemory', (course: string, note: string) => memory.write(course, note))
 
   handle('claude:newChat', (chat: string) => vault().setChatSession(chat, null))
 }

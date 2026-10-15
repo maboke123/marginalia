@@ -40,6 +40,55 @@ How this app works:
 - Todo.md in the vault root is my own list of thoughts and things to do, for all courses.
 - Keep answers short unless I ask for detail.`
 
+/** What Claude remembers for one prompt: the note about me and the one for the course. */
+export interface Memory {
+  me: string
+  course: string
+  courseNote: string
+}
+
+const MEMORY_RULES = `- What belongs there: how I like to be helped. The form of summaries, explanations,
+  charts and text boxes, language and level of detail, what I found useful or annoying, my
+  study habits. In a course note also what the course is (say, a programming course in Oz)
+  and how I want help for it. Not the lecture content itself, and not one-off requests.
+- Update it when I ask you to remember something, when I correct you, or when I ask for the
+  same kind of thing again. One exception does not change a lasting preference: change it
+  only when I say so or keep asking for the other way, and then replace the old line instead
+  of adding one that contradicts it.
+- Keep each note short: bullet points, at most about 40 lines; merge lines and drop what no
+  longer holds. Tell me in one short sentence when you changed it.`
+
+/**
+ * The memory notes after a prompt. `keep` says how Claude updates them: with the remember
+ * tool (chat), by editing the files in `dir` (terminal), or not at all (/claude).
+ */
+export function withMemory(
+  prompt: string,
+  memory: Memory,
+  keep: { tool: true } | { dir: string } | null
+): string {
+  const notes = [
+    `<memory about="me">\n${memory.me.trim()}\n</memory>`,
+    memory.course &&
+      `<memory about="course ${memory.course}">\n${memory.courseNote.trim()}\n</memory>`
+  ].filter(Boolean)
+  const intro =
+    'Your memory of me: notes you keep yourself about how I like to work, on my computer only.' +
+    ' Follow them.'
+  if (!keep) {
+    return memory.me.trim() || memory.courseNote.trim()
+      ? `${prompt}\n\n${intro}\n${notes.join('\n')}`
+      : prompt
+  }
+  const how =
+    'tool' in keep
+      ? 'Keep it up to date with the remember tool (send the whole new note).'
+      : `Its notes are files you may edit: ${keep.dir}\\me.md about me, and ` +
+        `${keep.dir}\\courses\\<course>.md per course (the course is the top folder of the ` +
+        'vault). Read the note of the course you work on first, and keep the notes up to date.'
+  return `${prompt}\n\n${intro} ${how}\n${MEMORY_RULES}\n${notes.join('\n')}`
+}
+
 /** A system prompt with the instructions I wrote in the Claude settings after it. */
 export function withInstructions(prompt: string, instructions: string): string {
   const mine = instructions.trim()

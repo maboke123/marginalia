@@ -188,6 +188,10 @@ export interface MarginaliaApi {
     history(chat: string): Promise<ChatHistoryItem[]>
     /** Forgets the section's conversation, so the next message starts a new one. */
     newChat(chat: string): Promise<void>
+    /** What Claude remembers about me: course name -> note, '' for the note about me. */
+    memory(): Promise<Record<string, string>>
+    /** Replaces one note; empty text removes it. */
+    setMemory(course: string, note: string): Promise<void>
     onEvent(listener: (chat: string, event: ChatEvent) => void): () => void
     onToolCall(listener: (call: ToolCall) => void): () => void
     replyTool(reply: ToolReply): void

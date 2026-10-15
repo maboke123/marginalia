@@ -33,6 +33,8 @@ export function cancelWrite(id: string): void {
 
 export interface WriteRequest {
   id: string
+  /** The note or PDF it writes in. */
+  file?: string
   /** Where the text goes, for Claude: "my note ML/B2/Summary.md, under Entropy". */
   where: string
   /** The text around the spot, with ⟦here⟧ where the answer goes. */
@@ -65,6 +67,7 @@ export async function writeWithClaude(request: WriteRequest): Promise<WriteAnswe
     try {
       answer = await window.api.claude.complete({
         id: request.id,
+        file: request.file,
         text,
         images: slide?.images ?? []
       })

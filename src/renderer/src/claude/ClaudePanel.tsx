@@ -570,6 +570,77 @@ function ChatInput({ chat, busy }: { chat: string; busy: boolean }): React.JSX.E
   )
 }
 
+/** What Claude remembers about me and per course; it writes these itself, I can edit them. */
+function MemoryField(): React.JSX.Element {
+  const nodes = useApp((s) => s.nodes)
+  const activeFile = useApp((s) => s.activeFile)
+  const [notes, setNotes] = useState<Record<string, string> | null>(null)
+  const [course, setCourse] = useState('')
+  const [draft, setDraft] = useState<string | null>(null)
+
+  useEffect(() => {
+    void window.api.claude.memory().then((loaded) => {
+      setNotes(loaded)
+      // Start at the course on screen when it has a note.
+      const current = activeFile?.includes('/') ? activeFile.split('/')[0] : ''
+      if (current && loaded[current]) setCourse(current)
+    })
+    // Only when the settings open.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const notebooks = nodes.filter((n) => n.kind === 'notebook').map((n) => n.name)
+  const courses = [...new Set([...notebooks, ...Object.keys(notes ?? {})])]
+    .filter(Boolean)
+    .sort((a, b) => a.localeCompare(b))
+  const saved = notes?.[course] ?? ''
+
+  return (
+    <div className="field">
+      <span>Memory</span>
+      <div className="claude-instructions">
+        <select
+          aria-label="Memory about"
+          value={course}
+          onChange={(e) => {
+            setDraft(null)
+            setCourse(e.target.value)
+          }}
+        >
+          <option value="">About me</option>
+          {courses.map((c) => (
+            <option key={c} value={c}>
+              {notes?.[c] ? c : `${c} (empty)`}
+            </option>
+          ))}
+        </select>
+        <textarea
+          aria-label="Memory"
+          rows={6}
+          value={draft ?? saved}
+          disabled={!notes}
+          placeholder="Nothing yet. Claude adds what it learns about how you like to work."
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={() => {
+            if (draft !== null && draft !== saved) {
+              const text = draft.trim()
+              void window.api.claude
+                .setMemory(course, text)
+                .then(() => setNotes((n) => ({ ...n, [course]: text })))
+                .catch((err: Error) => useApp.getState().showError(err.message))
+            }
+            setDraft(null)
+          }}
+        />
+        <p className="muted">
+          Claude keeps these notes itself as it learns how you like things, and reads them in the
+          chat, /claude and the terminal. Only on this computer, not in your vault.
+        </p>
+      </div>
+    </div>
+  )
+}
+
 function SettingsView({ onDone }: { onDone(): void }): React.JSX.Element {
   const settings = useChat((s) => s.settings)
   const save = useChat((s) => s.saveSettings)
@@ -643,6 +714,7 @@ function SettingsView({ onDone }: { onDone(): void }): React.JSX.Element {
           </p>
         </div>
       </div>
+      <MemoryField />
       <div className="field">
         <span>Login</span>
         <div className="claude-login">

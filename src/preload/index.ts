@@ -127,6 +127,8 @@ const api: MarginaliaApi = {
     cancelComplete: (id) => invoke('claude:cancelComplete', id),
     history: (chat) => invoke('claude:history', chat),
     newChat: (chat) => invoke('claude:newChat', chat),
+    memory: () => invoke('claude:memory'),
+    setMemory: (course, note) => invoke('claude:setMemory', course, note),
     onEvent: (listener) => {
       const handler = (_e: unknown, chat: string, event: ChatEvent): void => listener(chat, event)
       ipcRenderer.on('claude:event', handler)

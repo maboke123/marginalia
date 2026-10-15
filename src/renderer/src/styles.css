@@ -2229,6 +2229,10 @@ button.claude-proposal-label:hover {
   margin: 4px 0 0;
 }
 
+.claude-instructions select {
+  margin-bottom: 6px;
+}
+
 .claude-login p {
   margin: 5px 0 8px;
 }

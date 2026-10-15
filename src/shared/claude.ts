@@ -48,6 +48,8 @@ export interface ChatRequest {
 export interface CompleteRequest {
   /** Chosen by the renderer, to cancel this one request. */
   id: string
+  /** The note or PDF it writes in, for Claude's memory of that course. */
+  file?: string
   text: string
   images: ChatImage[]
 }

@@ -61,6 +61,7 @@ interface LogEntry {
   images: number
   question: string
   instructions: string
+  memory: { me: string; course: string; courseNote: string }
 }
 
 async function readLog(): Promise<LogEntry[]> {
@@ -147,6 +148,41 @@ test('my instructions and the lesson colours go along with a question', async ()
   const [first] = await readLog()
   expect(first.instructions).toBe('Orange: followed.')
   expect(first.text).toContain(`Folder colours: ${section}: orange`)
+})
+
+test('Claude remembers how I like things, per course, and I can edit it', async () => {
+  const memory = (file: string): Promise<string> =>
+    fs.readFile(path.join(env.userData, 'memory', file), 'utf8').catch(() => '')
+  await openSlides()
+  await ask('remember: - Likes short bullet summaries')
+  await expect(answers().last()).toHaveText('Saved the note about Machine Learning')
+  await expect(page.locator('.claude-tool').last()).toContainText(
+    'Updated what it remembers about this course'
+  )
+  await ask('remember me: - Writes in Dutch and English')
+  await expect(answers().last()).toHaveText('Saved the note about me')
+  expect(await memory('courses/Machine Learning.md')).toBe('- Likes short bullet summaries\n')
+  expect(await memory('me.md')).toBe('- Writes in Dutch and English\n')
+
+  // The next question carries both notes.
+  await ask('Where am I?')
+  await expect(answers()).toHaveCount(3)
+  expect((await readLog()).at(-1)!.memory).toEqual({
+    me: '- Writes in Dutch and English\n',
+    course: 'Machine Learning',
+    courseNote: '- Likes short bullet summaries\n'
+  })
+
+  // Settings open at the note of the course on screen.
+  await page.getByRole('button', { name: 'Claude settings' }).click()
+  await expect(page.getByRole('combobox', { name: 'Memory about' })).toHaveValue('Machine Learning')
+  const note = page.getByRole('textbox', { name: 'Memory', exact: true })
+  await expect(note).toHaveValue('- Likes short bullet summaries\n')
+  await note.fill('- Likes short summaries with one example')
+  await page.getByRole('button', { name: 'Done' }).click()
+  await expect
+    .poll(() => memory('courses/Machine Learning.md'))
+    .toBe('- Likes short summaries with one example\n')
 })
 
 test('text in the chat can be selected, copied and asked about', async () => {
