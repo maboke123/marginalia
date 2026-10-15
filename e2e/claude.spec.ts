@@ -231,12 +231,15 @@ test('clicking a waiting change in the chat opens the file at it again', async (
   await page.keyboard.press('Control+Shift+M')
   await row('slides.pdf').click()
   await expect(page.locator('.md-editor')).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Leave out slides.pdf · p.1' })).toBeVisible()
   await ask('Put a note next to this slide')
   await expect(page.locator('.text-box.ghost')).toBeVisible()
   await row('Summary').click()
   await expect(page.locator('.pdf-page')).toHaveCount(0)
   await page.locator('.claude-proposal-label').last().click()
   await expect(page.locator('.text-box.ghost')).toBeVisible()
+  // Wide slides have a large text size; the buttons keep the app's own size.
+  await expect(page.locator('.ghost-actions .button').first()).toHaveCSS('font-size', '13px')
   await page.locator('.ghost-actions').getByRole('button', { name: 'Accept', exact: true }).click()
   await expect(page.locator('.text-box.by-claude:not(.ghost)')).toHaveCount(1)
   // Done changes are plain text again.

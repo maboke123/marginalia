@@ -1833,6 +1833,11 @@ h2 {
   margin: 0;
   padding-bottom: 4px;
   transform-origin: top left;
+  /* The overlay's font size is in page units, so large slides would give huge buttons. */
+  font-family: var(--font);
+  font-size: var(--font-size);
+  line-height: 1.45;
+  white-space: nowrap;
 }
 
 /* Claude panel */
