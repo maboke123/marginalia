@@ -46,7 +46,7 @@ test('with live transcription on, the transcript is written while recording', as
   await expect(bar.getByRole('combobox', { name: 'Spoken language' })).toBeVisible()
 
   // The transcript appears in the lesson and cannot be edited while it is being written.
-  await expect(row('Transcript ')).toBeVisible()
+  await row('B2 Decision trees').getByRole('button', { name: 'Transcripts' }).click()
   await row('Transcript ').click()
   await expect(page.locator('.cm-content')).toHaveAttribute('contenteditable', 'false')
   await expect(page.getByText('Being written while you record')).toBeVisible()
@@ -266,6 +266,11 @@ test('recording works from the slides toolbar, and twice in a row gives two tran
     f.startsWith('Transcript ')
   )
   expect(transcripts).toHaveLength(2)
+  // Transcripts stay out of the tree until the lesson's badge shows them.
+  await expect(page.locator('.tree-row', { hasText: 'Transcript ' })).toHaveCount(0)
+  const badge = row('B2 Decision trees').getByRole('button', { name: 'Transcripts' })
+  await expect(badge).toHaveText('2')
+  await badge.click()
   await expect(page.locator('.tree-row', { hasText: 'Transcript ' })).toHaveCount(2)
 })
 

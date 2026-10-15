@@ -13,6 +13,7 @@ import {
   isFolder,
   isWithin,
   parentOf,
+  transcriptsKey,
   visibleRows,
   type Row
 } from '../lib/tree'
@@ -38,11 +39,14 @@ interface DropTarget {
 export function Sidebar(): React.JSX.Element {
   const app = useApp()
   const { vault, nodes, expanded, selected, activeFile, renaming, colors, links } = app
+  const { slidesFile, summaryFile } = app
   // The root's Todo.md is pinned above the tree instead.
-  const rows = useMemo(
-    () => visibleRows(nodes, expanded, links).filter((r) => r.node.path !== TODO_NOTE),
-    [nodes, expanded, links]
-  )
+  const rows = useMemo(() => {
+    const reveal = new Set(
+      [selected, activeFile, slidesFile, summaryFile].filter((p): p is string => !!p)
+    )
+    return visibleRows(nodes, expanded, links, reveal).filter((r) => r.node.path !== TODO_NOTE)
+  }, [nodes, expanded, links, selected, activeFile, slidesFile, summaryFile])
   const treeRef = useRef<HTMLDivElement>(null)
   const dragged = useRef<VaultNode | null>(null)
   const [drop, setDrop] = useState<DropTarget | null>(null)
@@ -333,6 +337,13 @@ export function Sidebar(): React.JSX.Element {
             key={row.node.path}
             row={row}
             expanded={!!expanded[row.node.path]}
+            transcriptsShown={!!expanded[transcriptsKey(row.node.path)]}
+            onToggleTranscripts={() => {
+              const key = transcriptsKey(row.node.path)
+              const show = !expanded[key]
+              app.setExpanded(key, show)
+              if (show) app.setExpanded(row.node.path, true)
+            }}
             selected={selected === row.node.path}
             active={activeFile === row.node.path}
             renaming={renaming === row.node.path}

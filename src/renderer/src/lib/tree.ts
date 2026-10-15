@@ -7,7 +7,15 @@ export interface Row {
   parent: string
   /** For a note shown under its PDF: that PDF's path. */
   pairedWith?: string
+  /** For a folder: the transcripts directly inside it. */
+  transcripts?: number
 }
+
+/** A transcript note made by recording in the app (its name, as the app gives it). */
+export const isTranscript = (path: string): boolean => /(^|\/)Transcript [^/]*\.md$/.test(path)
+
+/** Key in `expanded` for showing the transcripts of a folder. */
+export const transcriptsKey = (folder: string): string => `${folder}#transcripts`
 
 export const isFolder = (node: VaultNode): boolean =>
   node.kind === 'notebook' || node.kind === 'section'
@@ -42,19 +50,28 @@ export function displayOrder(children: VaultNode[], links: NoteLinks): VaultNode
   )
 }
 
+/**
+ * Transcripts are hidden until their folder's transcripts are shown, except the ones in
+ * `reveal` (say the open file); the folder row counts them.
+ */
 export function visibleRows(
   nodes: VaultNode[],
   expanded: Record<string, boolean>,
-  links: NoteLinks = {}
+  links: NoteLinks = {},
+  reveal: ReadonlySet<string> = new Set()
 ): Row[] {
   const rows: Row[] = []
   const walk = (list: VaultNode[], depth: number, parent: string): void => {
     const pairs = pairNotes(list, links)
     const paired = new Set([...pairs.values()].flat().map((n) => n.path))
+    const shows = (path: string): boolean =>
+      !isTranscript(path) || !!expanded[transcriptsKey(parent)] || reveal.has(path)
     for (const node of list) {
-      if (paired.has(node.path)) continue
-      rows.push({ node, depth, parent })
+      if (paired.has(node.path) || !shows(node.path)) continue
+      const count = node.children?.filter((n) => isTranscript(n.path)).length
+      rows.push({ node, depth, parent, ...(count ? { transcripts: count } : {}) })
       for (const note of pairs.get(node.path) ?? []) {
+        if (!shows(note.path)) continue
         rows.push({ node: note, depth: depth + 1, parent, pairedWith: node.path })
       }
       if (node.children && expanded[node.path]) walk(node.children, depth + 1, node.path)

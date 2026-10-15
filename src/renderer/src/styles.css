@@ -352,6 +352,36 @@ h2 {
   text-overflow: ellipsis;
 }
 
+.tree-transcripts {
+  display: inline-flex;
+  flex: none;
+  gap: 2px;
+  align-items: center;
+  margin-left: auto;
+  padding: 0 4px;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  background: none;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.tree-transcripts svg {
+  width: 12px;
+  height: 12px;
+}
+
+.tree-transcripts:hover {
+  border-color: var(--border-strong);
+}
+
+.tree-transcripts.pressed {
+  background: var(--bg-selected);
+  color: var(--text);
+}
+
 .rename-input {
   flex: 1;
   min-width: 0;
@@ -2753,10 +2783,34 @@ h2 {
   margin-top: 20px;
 }
 
+.transcribe-dialog.queue {
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100vh - 128px);
+}
+
 .queue-list {
+  min-height: 0;
   margin: 0;
   padding: 0;
+  overflow-y: auto;
   list-style: none;
+}
+
+.queue-item[draggable='true'] {
+  cursor: grab;
+}
+
+.queue-item.dragging {
+  opacity: 0.5;
+}
+
+.queue-item.drop-before {
+  border-top: 2px solid var(--accent);
+}
+
+.queue-item.drop-after {
+  border-bottom: 2px solid var(--accent);
 }
 
 .queue-item {

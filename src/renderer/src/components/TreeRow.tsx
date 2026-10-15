@@ -15,6 +15,8 @@ const ICONS: Record<VaultNode['kind'], IconName> = {
 interface Props {
   row: Row
   expanded: boolean
+  transcriptsShown: boolean
+  onToggleTranscripts(): void
   selected: boolean
   active: boolean
   renaming: boolean
@@ -68,6 +70,22 @@ export function TreeRow(props: Props): React.JSX.Element {
         <RenameInput node={node} onDone={props.onRename} />
       ) : (
         <span className="tree-label">{displayName(node)}</span>
+      )}
+      {!!row.transcripts && !renaming && (
+        <button
+          className={props.transcriptsShown ? 'tree-transcripts pressed' : 'tree-transcripts'}
+          title={`${props.transcriptsShown ? 'Hide' : 'Show'} ${row.transcripts} transcript${row.transcripts === 1 ? '' : 's'}`}
+          aria-label="Transcripts"
+          aria-pressed={props.transcriptsShown}
+          draggable={false}
+          onClick={(e) => {
+            e.stopPropagation()
+            props.onToggleTranscripts()
+          }}
+        >
+          <Icon name="mic" />
+          {row.transcripts}
+        </button>
       )}
     </div>
   )

@@ -77,6 +77,31 @@ describe('notes under their PDF', () => {
     expect(names(elsewhere)).toEqual(names(displayOrder(les3.children!, {})))
   })
 
+  it('hides transcripts until their folder shows them, and counts them on the folder', () => {
+    const les = section('ML/les_8', [
+      'slides.pdf',
+      'Transcript 2026-10-15 10-00.md',
+      'Transcript 2026-10-15 12-00.md'
+    ])
+    const links = { 'ML/les_8/slides.pdf': ['ML/les_8/Transcript 2026-10-15 10-00.md'] }
+    const shown = (expanded: Record<string, boolean>, reveal: string[] = []): string[] =>
+      visibleRows([les], expanded, links, new Set(reveal)).map((r) => r.node.name)
+
+    expect(visibleRows([les], {}, links)[0].transcripts).toBe(2)
+    expect(shown({ 'ML/les_8': true })).toEqual(['les_8', 'slides.pdf'])
+    expect(shown({ 'ML/les_8': true }, ['ML/les_8/Transcript 2026-10-15 12-00.md'])).toEqual([
+      'les_8',
+      'slides.pdf',
+      'Transcript 2026-10-15 12-00.md'
+    ])
+    expect(shown({ 'ML/les_8': true, 'ML/les_8#transcripts': true })).toEqual([
+      'les_8',
+      'slides.pdf',
+      'Transcript 2026-10-15 10-00.md',
+      'Transcript 2026-10-15 12-00.md'
+    ])
+  })
+
   it('matches names without caring about case', () => {
     const order = displayOrder(
       section('A/b', ['slides.PDF', 'notes.md', 'Slides.md']).children!,

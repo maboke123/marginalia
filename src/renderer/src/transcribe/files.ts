@@ -11,8 +11,7 @@ export const VIDEO_FILE = /\.(mp4|mkv|mov|webm|avi)$/i
 
 export const MEDIA_FILE = /\.(mp4|mkv|mov|webm|avi|m4a|mp3|wav|ogg|opus|flac|aac)$/i
 
-/** A transcript note made by recording in the app (its name, as the app gives it). */
-export const isTranscript = (path: string): boolean => /(^|\/)Transcript [^/]*\.md$/.test(path)
+export { isTranscript } from '../lib/tree'
 
 /** What is about to be transcribed: a file from outside, or a recording made in the app. */
 export type Choice =
