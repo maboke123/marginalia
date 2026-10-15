@@ -6,6 +6,7 @@
   "description": "Desktop app for annotating lecture slides and writing Markdown summaries",
   "main": "./out/main/index.js",
   "author": "Mathias Bouhon Keulen",
+  "license": "PolyForm-Noncommercial-1.0.0",
   "scripts": {
     "dev": "electron-vite dev",
     "start": "electron-vite preview",
