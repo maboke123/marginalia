@@ -20,6 +20,8 @@ import {
   SIDECAR_SUFFIX,
   VaultError,
   exists,
+  isCodeDoc,
+  isCodeFile,
   isHidden,
   resolveInVault,
   toRel,
@@ -140,8 +142,10 @@ async function updateOrder(dir: string, change: (names: string[]) => string[]): 
 
 async function visibleEntries(dir: string): Promise<Entry[]> {
   const dirents = await fs.readdir(dir, { withFileTypes: true })
+  const code = dirents.some((d) => d.isFile() && isCodeFile(d.name))
   const entries = dirents
     .filter((d) => (d.isDirectory() || d.isFile()) && !isHidden(d.name, d.isDirectory()))
+    .filter((d) => !(code && d.isFile() && isCodeDoc(d.name)))
     .map((d) => ({ name: d.name, isDir: d.isDirectory() }))
   return sortEntries(entries, await readOrder(dir))
 }

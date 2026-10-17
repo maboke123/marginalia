@@ -79,6 +79,22 @@ describe('tree', () => {
     ])
   })
 
+  it('hides tool folders, and the docs of a code folder but not of a notes folder', async () => {
+    await write('OvA/rand1_hiring/hiring.py')
+    await write('OvA/rand1_hiring/README.md')
+    await write('OvA/rand1_hiring/Verslag.md')
+    await write('OvA/rand1_hiring/__pycache__/hiring.cpython-312.pyc')
+    await write('OvA/rand1_hiring/node_modules/x/index.js')
+    await write('OvA/rand1_hiring/figuren/1_random.pdf')
+    await write('OvA/les_1/README.md')
+
+    const { nodes } = await vault.tree()
+
+    const [lesson, code] = nodes[0].children!
+    expect(names(lesson.children!)).toEqual(['README.md'])
+    expect(names(code.children!)).toEqual(['figuren', 'Verslag.md'])
+  })
+
   it('sorts folders first and numbers naturally', async () => {
     await write('ML/B10 Boosting/x.md')
     await write('ML/B2 Trees/x.md')

@@ -26,11 +26,21 @@ export function validateName(name: string): string {
   return trimmed
 }
 
+/** Folders that tools make next to code; never notes. */
+const TOOL_DIRS = new Set(['__pycache__', 'node_modules', 'venv', '__MACOSX'])
+const CODE_FILE = /\.(py|ipynb|java|c|h|cpp|hpp|cs|js|ts|go|rs|hs|jl|r|m|kt|scala|rb|sh|sql)$/i
+const CODE_DOC = /^(readme|changelog|contributing)\.md$/i
+
 export function isHidden(name: string, isDir: boolean): boolean {
   if (name.startsWith('.')) return true
-  if (isDir) return name === ASSETS_DIR
+  if (isDir) return name === ASSETS_DIR || TOOL_DIRS.has(name)
   return !/\.(md|pdf)$/i.test(name)
 }
+
+export const isCodeFile = (name: string): boolean => CODE_FILE.test(name)
+
+/** A repository's own docs: clutter in a folder of code, but kept where they sit among notes. */
+export const isCodeDoc = (name: string): boolean => CODE_DOC.test(name)
 
 export async function exists(p: string): Promise<boolean> {
   try {
