@@ -236,6 +236,14 @@ export function MarkdownEditor({
         <RecordButton />
         <button
           className="icon-button"
+          title="See how the note looks as a PDF"
+          aria-label="Preview as PDF"
+          onClick={() => useApp.getState().showPreview(path)}
+        >
+          <Icon name="pdf" />
+        </button>
+        <button
+          className="icon-button"
           title="Export this note as a PDF"
           aria-label="Export as PDF"
           onClick={() => useApp.getState().exportNote(path)}

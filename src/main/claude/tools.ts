@@ -207,6 +207,16 @@ export function appToolServer(sdk: Sdk, call: CallTool): McpSdkServerConfigWithI
       { annotations: READ_ONLY }
     ),
     sdk.tool(
+      'preview_pdf_export',
+      'How a note comes out when I export it as a PDF (Export as PDF, A4): the number of ' +
+        'pages and a picture of all pages side by side (the first 12), or with page one page ' +
+        'large enough to read. Use it to check length, page breaks, and that formulas, ' +
+        'images and charts came out, before I export or hand something in.',
+      { file, page: page.optional() },
+      run('preview_pdf_export'),
+      { annotations: READ_ONLY }
+    ),
+    sdk.tool(
       'goto',
       'Opens a file in the app, and a PDF at a page.',
       { file, page: page.optional() },
@@ -244,6 +254,7 @@ export const APP_TOOLS = [
   'add_blank_page',
   'add_drawing',
   'screenshot',
+  'preview_pdf_export',
   'goto',
   'remember'
 ].map((name) => `mcp__${SERVER_NAME}__${name}`)

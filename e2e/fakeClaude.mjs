@@ -55,6 +55,11 @@ export async function* agent(input) {
       markdown: 'Gain = drop in entropy, $\\Delta H$'
     })
     yield { type: 'text', text: reply.ok ? 'Put a note in the margin.' : reply.text }
+  } else if (/how long is the pdf/i.test(question)) {
+    yield { type: 'tool', name: 'preview_pdf_export', input: { file: summary } }
+    const reply = await input.callTool('preview_pdf_export', { file: summary })
+    await record(sessionId, { question: 'preview', images: reply.image ? 1 : 0 })
+    yield { type: 'text', text: reply.text }
   } else if (/circle/i.test(question)) {
     const reply = await input.callTool('add_drawing', {
       file: slides,

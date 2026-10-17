@@ -128,6 +128,8 @@ interface AppState {
   notice: string | null
   /** Buttons on the notice, such as opening a file that was just exported. */
   noticeActions: NoticeAction[]
+  /** The note shown in the PDF preview. */
+  previewNote: string | null
   pdfView: PdfView | null
   pdfSelection: PdfSelection | null
   noteCursor: NoteCursor | null
@@ -170,6 +172,7 @@ interface AppState {
   exportPdf(path: string): Promise<void>
   /** Saves the note, then prints it to a PDF where I choose. */
   exportNote(path: string): Promise<void>
+  showPreview(path: string | null): void
   setPdfView(view: PdfView | null): void
   setPdfSelection(selection: PdfSelection | null): void
   setNoteCursor(cursor: NoteCursor | null): void
@@ -368,6 +371,7 @@ export const useApp = create<AppState>((set, get) => {
     error: null,
     notice: null,
     noticeActions: [],
+    previewNote: null,
     pdfView: null,
     pdfSelection: null,
     noteCursor: null,
@@ -584,6 +588,8 @@ export const useApp = create<AppState>((set, get) => {
       )
       get().showNotice(done ? `Exported to ${done}` : null, done ? exportActions(done) : [])
     },
+
+    showPreview: (previewNote) => set({ previewNote }),
 
     setPdfView: (view) => set({ pdfView: view }),
     setPdfSelection: (pdfSelection) => set({ pdfSelection }),

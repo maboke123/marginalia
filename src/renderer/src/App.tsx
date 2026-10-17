@@ -12,6 +12,7 @@ import { Workspace } from './components/Workspace'
 import { slideLink } from './editor/links'
 import { flushAll } from './lib/flush'
 import { indexPdfs } from './lib/indexer'
+import { NotePreview } from './components/NotePreview'
 import { useApp } from './store'
 import { RecordingBar } from './transcribe/RecordingBar'
 import { useRecording } from './transcribe/recording'
@@ -68,6 +69,7 @@ export function App(): React.JSX.Element | null {
   const error = useApp((s) => s.error)
   const notice = useApp((s) => s.notice)
   const noticeActions = useApp((s) => s.noticeActions)
+  const previewNote = useApp((s) => s.previewNote)
   const showError = useApp((s) => s.showError)
   const claudeOpen = useChat((s) => s.open)
 
@@ -151,6 +153,7 @@ export function App(): React.JSX.Element | null {
       ) : (
         <Welcome />
       )}
+      {previewNote && <NotePreview path={previewNote} />}
       {(error || notice) && (
         <div className="toast" role={error ? 'alert' : 'status'}>
           <span>{error ?? notice}</span>

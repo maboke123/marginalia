@@ -126,6 +126,8 @@ function describeTool(name: string, input: Record<string, unknown>): string {
       return `Drawing on ${file}${page}`
     case 'screenshot':
       return file ? `Looked at ${file}${page}` : 'Looked at the app'
+    case 'preview_pdf_export':
+      return `Previewed ${file} as a PDF${page}`
     case 'goto':
       return `Opened ${file}${page}`
     case 'remember':

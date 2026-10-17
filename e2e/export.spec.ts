@@ -202,3 +202,23 @@ test('exports a note as a PDF with its math, chart and image', async () => {
   await page.waitForTimeout(500)
   await page.screenshot({ path: path.join('test-results', 'export-note.png') })
 })
+
+test('a note can be previewed as a PDF before exporting it', async () => {
+  const dir = path.join(env.vault, section)
+  const paragraphs = Array.from(
+    { length: 60 },
+    (_, i) => `Paragraph ${i + 1}: the expected number of hires grows like the harmonic number.`
+  )
+  await fs.writeFile(path.join(dir, 'Report.md'), `# Report\n\n${paragraphs.join('\n\n')}\n`)
+
+  await page.locator('.tree-row', { hasText: 'Machine Learning' }).click()
+  await page.locator('.tree-row', { hasText: 'B2 Decision trees' }).click()
+  await page.locator('.tree-row', { hasText: 'Report' }).click()
+  await page.getByRole('button', { name: 'Preview as PDF' }).click()
+  const dialog = page.getByRole('dialog', { name: 'PDF preview' })
+  await expect(dialog.getByRole('status')).toHaveText('3 pages, A4', { timeout: 20_000 })
+  await expect(dialog.locator('canvas.preview-page')).toHaveCount(3)
+  await page.screenshot({ path: path.join('test-results', 'preview-note.png') })
+  await page.keyboard.press('Escape')
+  await expect(dialog).toHaveCount(0)
+})

@@ -2271,6 +2271,47 @@ button.claude-proposal-label:hover {
   z-index: 30;
 }
 
+.preview-dialog {
+  position: absolute;
+  inset: 24px;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-menu);
+  box-shadow: var(--shadow-menu);
+  outline: none;
+}
+
+.preview-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 8px 8px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.preview-header .muted {
+  flex: 1;
+}
+
+.preview-pages {
+  flex: 1;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 24px;
+  background: var(--bg-canvas);
+}
+
+.preview-page {
+  width: min(760px, 100%);
+  border: 1px solid var(--page-border);
+  background: var(--page-bg);
+}
+
 .overlay {
   position: absolute;
   top: 64px;

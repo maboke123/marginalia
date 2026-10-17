@@ -48,6 +48,7 @@ const api: MarginaliaApi = {
     writeAnnotations: (pdf, file) => invoke('vault:writeAnnotations', pdf, file),
     exportPdf: (pdf) => invoke('vault:exportPdf', pdf),
     exportNote: (note, html) => invoke('vault:exportNote', note, html),
+    printNote: (html) => invoke('vault:printNote', html),
     openExport: (file) => invoke('vault:openExport', file),
     revealExport: (file) => invoke('vault:revealExport', file),
     onChanged: (listener) => {

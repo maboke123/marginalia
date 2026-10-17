@@ -145,7 +145,10 @@ export function Sidebar(): React.JSX.Element {
       if (node.kind === 'pdf') {
         items.push({ label: 'Export annotated PDF...', onSelect: () => app.exportPdf(node.path) })
       } else {
-        items.push({ label: 'Export as PDF...', onSelect: () => app.exportNote(node.path) })
+        items.push(
+          { label: 'Preview as PDF', onSelect: () => app.showPreview(node.path) },
+          { label: 'Export as PDF...', onSelect: () => app.exportNote(node.path) }
+        )
       }
       if (node.kind === 'pdf') {
         items.push({

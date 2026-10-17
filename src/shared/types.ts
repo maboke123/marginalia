@@ -114,6 +114,8 @@ export interface MarginaliaApi {
     exportPdf(pdf: string): Promise<ExportedPdf | null>
     /** Asks where to save, then prints the note's page (from noteHtml) as a PDF. Null when cancelled. */
     exportNote(note: string, html: string): Promise<string | null>
+    /** The PDF Export as PDF would write for this page (from noteHtml), without saving it. */
+    printNote(html: string): Promise<Uint8Array>
     /** Opens a file exported in this session with its default app, or shows it in Explorer. */
     openExport(file: string): Promise<void>
     revealExport(file: string): Promise<void>

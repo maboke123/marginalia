@@ -44,6 +44,7 @@ import { pageRuns, pageText } from '../pdf/text'
 import { useApp } from '../store'
 import { useChat } from './chat'
 import { buildPacket, currentChips } from './context'
+import { contactSheet, drawPages, pageImage, printNote } from '../lib/notePreview'
 import { captureArea, captureElement, until, viewOf } from './screenshot'
 
 type Args = Record<string, unknown>
@@ -686,6 +687,27 @@ const TOOLS: Record<string, (args: Args) => Promise<Result>> = {
     )
     const count = `${strokes.length} line${strokes.length === 1 ? '' : 's'}`
     return { text: `Drew ${count} on page ${page}.` }
+  },
+
+  async preview_pdf_export(args) {
+    const path = fileArg(args, 'markdown')
+    const pages = await drawPages(await printNote(path), 1000)
+    const count = pages.length
+    const intro = `${path} exports to ${count} A4 ${count === 1 ? 'page' : 'pages'}.`
+    if (args.page !== undefined) {
+      const page = Number(args.page)
+      if (!Number.isInteger(page) || page < 1 || page > count) {
+        throw new ToolError(`Page ${args.page} does not exist; the export has ${count} pages`)
+      }
+      return { text: `${intro} This is page ${page}.`, image: await pageImage(pages[page - 1]) }
+    }
+    const shown = pages.slice(0, 12)
+    return {
+      text:
+        `${intro} All pages side by side${count > 12 ? ' (the first 12)' : ''}, left to right ` +
+        'and top to bottom. Ask for one page to read it.',
+      image: await contactSheet(shown, Math.min(shown.length, 4))
+    }
   },
 
   async screenshot(args) {

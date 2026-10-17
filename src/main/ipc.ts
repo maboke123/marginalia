@@ -231,8 +231,12 @@ export function registerIpc(
     }
   })
 
+  const printNote = (html: string): Promise<Buffer> =>
+    printHtml(fileImages(html, (vaultPath) => current().resolve(vaultPath)))
+  // The same PDF the export writes, for a preview; nothing is saved.
+  handle('vault:printNote', async (html: string) => new Uint8Array(await printNote(html)))
+
   handle('vault:exportNote', async (p: string, html: string) => {
-    const v = current()
     const win = getWindow()
     const options: Electron.SaveDialogOptions = {
       title: 'Export as PDF',
@@ -244,8 +248,7 @@ export function registerIpc(
       ? await dialog.showSaveDialog(win, options)
       : await dialog.showSaveDialog(options)
     if (choice.canceled || !choice.filePath) return null
-    const bytes = await printHtml(fileImages(html, (vaultPath) => v.resolve(vaultPath)))
-    await writeFileAtomic(choice.filePath, bytes)
+    await writeFileAtomic(choice.filePath, await printNote(html))
     exported.add(choice.filePath)
     return choice.filePath
   })

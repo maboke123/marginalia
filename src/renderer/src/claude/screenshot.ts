@@ -53,7 +53,7 @@ async function capture(rect: CaptureRect | null): Promise<ImageBitmap> {
   return createImageBitmap(new Blob([png as BlobPart], { type: 'image/png' }))
 }
 
-async function toShot(canvas: HTMLCanvasElement, scale: number): Promise<Shot> {
+export async function toShot(canvas: HTMLCanvasElement, scale: number): Promise<Shot> {
   const shrink = Math.min(1, MAX_SIDE / Math.max(canvas.width, canvas.height))
   let out = canvas
   if (shrink < 1) {

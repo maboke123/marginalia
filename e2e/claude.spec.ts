@@ -121,6 +121,18 @@ test('answers about the slide on screen, with that slide sent along', async () =
   await page.screenshot({ path: path.join('test-results', 'claude-panel.png') })
 })
 
+test('Claude previews how a note comes out as a PDF', async () => {
+  await openSlides(1)
+  await page.keyboard.press('Control+Shift+M')
+  await expect(page.locator('.md-editor .cm-content')).toBeVisible()
+  await ask('How long is the PDF going to be?')
+  await expect(answers()).toContainText(`${section}/Summary.md exports to 1 A4 page.`, {
+    timeout: 20_000
+  })
+  await expect(page.locator('.claude-tool')).toContainText('Previewed Summary.md as a PDF')
+  expect((await readLog()).find((e) => e.question === 'preview')?.images).toBe(1)
+})
+
 test('a folder opens in VS Code with the lesson chat, and that chat comes back', async () => {
   await app.evaluate(({ app: electronApp, shell }) => {
     const g = globalThis as { opened?: string[] }
