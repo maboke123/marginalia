@@ -2,6 +2,7 @@ import { expect, test, type ElectronApplication, type Page } from '@playwright/t
 import { promises as fs } from 'fs'
 import path from 'path'
 import { PDFDocument } from 'pdf-lib'
+import type { MarginaliaApi } from '../src/shared/types'
 import { createEnv, launch, makeSlides, sha256, type TestEnv } from './helpers'
 
 let env: TestEnv
@@ -156,6 +157,30 @@ test('exports a note as a PDF with its math, chart and image', async () => {
   await page.locator('.tree-row', { hasText: 'Summary' }).click()
   await page.getByRole('button', { name: 'Export as PDF' }).click()
   await expect(page.getByRole('status')).toContainText('Exported to', { timeout: 20_000 })
+
+  await app.evaluate(({ shell }) => {
+    const g = globalThis as { shown?: string[] }
+    g.shown = []
+    shell.openPath = async (p: string) => {
+      g.shown!.push(`open ${p}`)
+      return ''
+    }
+    shell.showItemInFolder = (p: string) => void g.shown!.push(`reveal ${p}`)
+  })
+  await page.getByRole('status').getByRole('button', { name: 'Open' }).click()
+  await page.getByRole('status').getByRole('button', { name: 'Show in folder' }).click()
+  await expect
+    .poll(() => app.evaluate(() => (globalThis as { shown?: string[] }).shown))
+    .toEqual([`open ${target}`, `reveal ${target}`])
+  const refused = await page.evaluate(() =>
+    (window as unknown as { api: MarginaliaApi }).api.vault
+      .openExport('C:\\Windows\\notepad.exe')
+      .then(
+        () => 'opened',
+        (err: Error) => err.message
+      )
+  )
+  expect(refused).toContain('not exported here')
 
   const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs')
   const doc = await pdfjs.getDocument({ data: new Uint8Array(await fs.readFile(target)) }).promise

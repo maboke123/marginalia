@@ -199,6 +199,7 @@ export function registerIpc(
     current().writeAnnotations(p, file)
   )
 
+  const exported = new Set<string>()
   handle('vault:exportPdf', async (p: string) => {
     const v = current()
     const source = v.resolve(p)
@@ -221,6 +222,7 @@ export function registerIpc(
       v.readFile(folder + src).catch(() => null)
     )
     await writeFileAtomic(choice.filePath, result.bytes)
+    exported.add(choice.filePath)
     return {
       path: choice.filePath,
       skippedPages: result.skippedPages,
@@ -244,8 +246,20 @@ export function registerIpc(
     if (choice.canceled || !choice.filePath) return null
     const bytes = await printHtml(fileImages(html, (vaultPath) => v.resolve(vaultPath)))
     await writeFileAtomic(choice.filePath, bytes)
+    exported.add(choice.filePath)
     return choice.filePath
   })
+
+  // Only files exported in this session: the renderer cannot open anything else this way.
+  const exportedFile = (file: string): string => {
+    if (!exported.has(file)) throw new VaultError('That file was not exported here')
+    return file
+  }
+  handle('vault:openExport', async (file: string) => {
+    const error = await shell.openPath(exportedFile(file))
+    if (error) throw new VaultError(error)
+  })
+  handle('vault:revealExport', (file: string) => shell.showItemInFolder(exportedFile(file)))
 
   handle('vault:pickPdfs', async () => {
     const win = getWindow()

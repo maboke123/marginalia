@@ -656,6 +656,21 @@ h2 {
   background: var(--bg-hover);
 }
 
+.toast-action {
+  flex: none;
+  padding: 3px 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--text);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.toast-action:hover {
+  background: var(--bg-hover);
+}
+
 /* Buttons with text inside toolbars */
 
 .text-button {

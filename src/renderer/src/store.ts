@@ -17,6 +17,16 @@ import {
 
 const api = window.api.vault
 
+export interface NoticeAction {
+  label: string
+  run(): void
+}
+
+const exportActions = (file: string): NoticeAction[] => [
+  { label: 'Open', run: () => void api.openExport(file) },
+  { label: 'Show in folder', run: () => void api.revealExport(file) }
+]
+
 type NewItem = 'notebook' | 'section' | 'page'
 
 export type Tool = 'select' | 'pen' | 'highlighter' | 'eraser' | 'text'
@@ -116,6 +126,8 @@ interface AppState {
   error: string | null
   /** A short confirmation, shown like an error but not as one. */
   notice: string | null
+  /** Buttons on the notice, such as opening a file that was just exported. */
+  noticeActions: NoticeAction[]
   pdfView: PdfView | null
   pdfSelection: PdfSelection | null
   noteCursor: NoteCursor | null
@@ -153,7 +165,7 @@ interface AppState {
   setSnapshotting(on: boolean): void
   startRename(path: string | null): void
   showError(message: string | null): void
-  showNotice(message: string | null): void
+  showNotice(message: string | null, actions?: NoticeAction[]): void
   /** Saves pending annotations, then writes a flattened copy where I choose. */
   exportPdf(path: string): Promise<void>
   /** Saves the note, then prints it to a PDF where I choose. */
@@ -355,6 +367,7 @@ export const useApp = create<AppState>((set, get) => {
     renaming: null,
     error: null,
     notice: null,
+    noticeActions: [],
     pdfView: null,
     pdfSelection: null,
     noteCursor: null,
@@ -536,10 +549,12 @@ export const useApp = create<AppState>((set, get) => {
       if (message) errorTimer = setTimeout(() => set({ error: null }), 6000)
     },
 
-    showNotice(message) {
+    showNotice(message, actions = []) {
       clearTimeout(errorTimer)
-      set({ notice: message, error: null })
-      if (message) errorTimer = setTimeout(() => set({ notice: null }), 6000)
+      set({ notice: message, noticeActions: actions, error: null })
+      // Longer with buttons, so there is time to reach them.
+      const wait = actions.length ? 15_000 : 6000
+      if (message) errorTimer = setTimeout(() => set({ notice: null, noticeActions: [] }), wait)
     },
 
     async exportPdf(path) {
@@ -556,7 +571,8 @@ export const useApp = create<AppState>((set, get) => {
           : ''
       ].filter(Boolean)
       get().showNotice(
-        `Exported to ${done.path}${notes.length ? `. Note: ${notes.join('; ')}.` : ''}`
+        `Exported to ${done.path}${notes.length ? `. Note: ${notes.join('; ')}.` : ''}`,
+        exportActions(done.path)
       )
     },
 
@@ -566,7 +582,7 @@ export const useApp = create<AppState>((set, get) => {
       const done = await attempt(async () =>
         api.exportNote(path, await noteHtml(path, await api.readText(path)))
       )
-      get().showNotice(done ? `Exported to ${done}` : null)
+      get().showNotice(done ? `Exported to ${done}` : null, done ? exportActions(done) : [])
     },
 
     setPdfView: (view) => set({ pdfView: view }),

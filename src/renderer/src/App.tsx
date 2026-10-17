@@ -67,6 +67,7 @@ export function App(): React.JSX.Element | null {
   const overlay = useApp((s) => s.overlay)
   const error = useApp((s) => s.error)
   const notice = useApp((s) => s.notice)
+  const noticeActions = useApp((s) => s.noticeActions)
   const showError = useApp((s) => s.showError)
   const claudeOpen = useChat((s) => s.open)
 
@@ -153,6 +154,12 @@ export function App(): React.JSX.Element | null {
       {(error || notice) && (
         <div className="toast" role={error ? 'alert' : 'status'}>
           <span>{error ?? notice}</span>
+          {!error &&
+            noticeActions.map((action) => (
+              <button key={action.label} className="toast-action" onClick={action.run}>
+                {action.label}
+              </button>
+            ))}
           <button className="toast-close" aria-label="Dismiss" onClick={() => showError(null)}>
             Dismiss
           </button>
