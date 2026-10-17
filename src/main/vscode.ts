@@ -4,13 +4,16 @@ import { VaultError } from './vault/names'
 /** A new VS Code window needs a moment before it takes links; earlier ones go to another window. */
 const WINDOW_READY_MS = 5000
 
-/** VS Code's own link for opening a folder, so no shell has to quote the path. */
+/**
+ * VS Code's own link for opening a folder, so no shell has to quote the path. Without
+ * windowId=_blank it replaced the folder of the window I was working in.
+ */
 export function vscodeUrl(dir: string): string {
   const parts = dir.replace(/\\/g, '/').replace(/\/+$/, '').split('/')
   const encoded = parts.map((part, i) =>
     i === 0 && /^[A-Za-z]:$/.test(part) ? part : encodeURIComponent(part)
   )
-  return `vscode://file/${encoded.join('/').replace(/^\//, '')}/`
+  return `vscode://file/${encoded.join('/').replace(/^\//, '')}/?windowId=_blank`
 }
 
 /** Opens a conversation in the Claude Code extension's panel. */

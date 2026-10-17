@@ -5,11 +5,15 @@ describe('vscodeUrl', () => {
   it('keeps the drive letter and encodes every folder name', () => {
     expect(
       vscodeUrl('C:\\Users\\mathi\\Notes\\Ontwerp van Algoritmen\\Randomized algoritmen')
-    ).toBe('vscode://file/C:/Users/mathi/Notes/Ontwerp%20van%20Algoritmen/Randomized%20algoritmen/')
+    ).toBe(
+      'vscode://file/C:/Users/mathi/Notes/Ontwerp%20van%20Algoritmen/Randomized%20algoritmen/?windowId=_blank'
+    )
   })
 
   it('encodes characters that would end the path in a link', () => {
-    expect(vscodeUrl('D:\\Vak #3\\Q&A?\\')).toBe('vscode://file/D:/Vak%20%233/Q%26A%3F/')
+    expect(vscodeUrl('D:\\Vak #3\\Q&A?\\')).toBe(
+      'vscode://file/D:/Vak%20%233/Q%26A%3F/?windowId=_blank'
+    )
   })
 })
 

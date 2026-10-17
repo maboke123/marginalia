@@ -253,7 +253,7 @@ test('a folder opens in VS Code through its link', async () => {
   const folder = path.join(vault, 'Machine Learning', 'B2 Decision trees').replace(/\\/g, '/')
   await expect
     .poll(() => app.evaluate(() => (globalThis as { opened?: string[] }).opened))
-    .toEqual([`vscode://file/${folder.replace(/ /g, '%20')}/`])
+    .toEqual([`vscode://file/${folder.replace(/ /g, '%20')}/?windowId=_blank`])
 })
 
 test('dragging a page into another section moves it on disk', async () => {

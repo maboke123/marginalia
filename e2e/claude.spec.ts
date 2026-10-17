@@ -147,7 +147,7 @@ test('a folder opens in VS Code with the lesson chat, and that chat comes back',
   expect(copy).toMatch(/-vscode$/)
   const folder = path.join(env.vault, section, 'exercise code').replace(/\\/g, '/')
   expect(await opened()).toEqual([
-    `vscode://file/${folder.replace(/ /g, '%20')}/`,
+    `vscode://file/${folder.replace(/ /g, '%20')}/?windowId=_blank`,
     `vscode://anthropic.claude-code/open?session=${copy}`
   ])
   const log = JSON.parse(await fs.readFile(fakeLog(env), 'utf8'))
