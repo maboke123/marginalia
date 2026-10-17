@@ -1380,7 +1380,8 @@ h2 {
 /* The fold gutter (14px + 22px) takes the place of most of the left padding. */
 .md-editor .cm-content {
   min-width: 0;
-  max-width: 724px;
+  /* Grows with the zoom, so zooming in keeps the same words per line until the pane is full. */
+  max-width: calc(724px * var(--note-zoom, 1));
   padding: 28px 40px 40vh 4px;
   caret-color: var(--text);
 }

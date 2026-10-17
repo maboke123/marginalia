@@ -180,6 +180,22 @@ test('a wide formula scrolls inside a narrow note pane', async () => {
   expect(await math.evaluate((el) => el.scrollWidth > el.clientWidth)).toBe(true)
 })
 
+test('zooming a note on its own widens the text with it', async () => {
+  await fs.writeFile(
+    summaryFile(),
+    `# Randomized hiring\n\n${'The expected cost is low. '.repeat(40)}\n`
+  )
+  await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setSize(1900, 900))
+  await openSection()
+  await row('Summary').click()
+  await editor().click()
+  const width = async (): Promise<number> => (await editor().boundingBox())!.width
+  const before = await width()
+  for (let i = 0; i < 3; i++) await page.keyboard.press('Control+=')
+  await expect(page.locator('.md-editor')).toHaveAttribute('style', /--note-zoom: 1.5/)
+  expect(await width()).toBeGreaterThan(before * 1.4)
+})
+
 test('mermaid and vega-lite blocks draw as charts', async () => {
   const chart = {
     data: { sequence: { start: 2, stop: 100, step: 7, as: 'n' } },
