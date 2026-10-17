@@ -125,11 +125,19 @@ test('exports a note as a PDF with its math, chart and image', async () => {
   await fs.writeFile(
     path.join(dir, 'Summary.md'),
     [
+      '---',
+      'title: "RAND-1: The Hiring Problem"',
+      'author: "Mathias Bouhon"',
+      'geometry: margin=1.8cm',
+      'fontsize: 10pt',
+      '---',
+      '',
       '# Randomized hiring',
       '',
       'Expected hires: $H_n = \\sum_{i=1}^n \\frac{1}{i}$, see [slide 2](slides.pdf#page=2).',
       '',
-      '![plot](assets/split%20plot.png)',
+      '![plot](assets/split%20plot.png){width=49%}',
+      '![plot](assets/split%20plot.png){width=49%}',
       '',
       '```mermaid',
       'graph LR',
@@ -156,6 +164,13 @@ test('exports a note as a PDF with its math, chart and image', async () => {
   expect(text).toContain('Randomized hiring')
   expect(text).toContain('Interview')
   expect(text).toContain('slide 2')
+  // The front matter is a title block, not text, and the image sizes are applied.
+  expect(text).toContain('RAND-1: The Hiring Problem')
+  expect(text).not.toContain('title:')
+  expect(text).not.toContain('{width')
+  const title = content.items.find((item) => 'str' in item && item.str.startsWith('RAND-1'))
+  const left = (title as { transform: number[] }).transform[4]
+  expect(Math.round((left / 72) * 2.54 * 10) / 10).toBe(1.8)
 
   await page.locator('.tree-row', { hasText: 'Summary.pdf' }).click()
   await expect(page.locator('.pdf-page[data-page="1"] canvas')).toBeAttached()

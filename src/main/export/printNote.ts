@@ -30,9 +30,10 @@ export async function printHtml(html: string): Promise<Buffer> {
     // KaTeX's fonts may still be loading when the page itself has.
     await win.webContents.executeJavaScript('document.fonts.ready.then(() => true)').catch(() => {})
     return await win.webContents.printToPDF({
-      pageSize: 'A4',
+      // The page's @page rule sets size and margins (a note can ask for its own margin).
+      preferCSSPageSize: true,
       printBackground: true,
-      margins: { top: 0.8, bottom: 0.8, left: 0.8, right: 0.8 }
+      margins: { top: 0, bottom: 0, left: 0, right: 0 }
     })
   } finally {
     win.destroy()
