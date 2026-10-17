@@ -53,6 +53,8 @@ interface ChatState {
   send(chat: string, question: string): Promise<void>
   stop(): void
   newChat(chat: string): Promise<void>
+  /** Opens a folder in VS Code, taking its chat along. */
+  openInCode(folder: string): Promise<void>
   removeChip(id: string): void
   attach(path: string): void
   quote(text: string | null): void
@@ -212,6 +214,16 @@ export const useChat = create<ChatState>((set, get) => {
 
   window.api.claude.onEvent(onEvent)
 
+  // Chats that went along to VS Code: what was said there shows when I come back.
+  const inCode = new Set<string>()
+  window.addEventListener('focus', () => {
+    for (const chat of inCode) {
+      if (get().running === chat || !get().chats[chat]?.loaded) continue
+      update(chat, () => EMPTY_CHAT)
+      void get().load(chat)
+    }
+  })
+
   return {
     open: false,
     chats: {},
@@ -282,6 +294,18 @@ export const useChat = create<ChatState>((set, get) => {
       if (get().running === chat) return
       await window.api.claude.newChat(chat)
       update(chat, () => ({ ...EMPTY_CHAT, loaded: true }))
+    },
+
+    async openInCode(folder) {
+      const app = useApp.getState()
+      app.showNotice('Opening in VS Code...')
+      try {
+        const chat = await window.api.claude.openInCode(folder)
+        if (chat !== null) inCode.add(chat)
+        app.showNotice(chat !== null ? 'Opened in VS Code, with the chat' : null)
+      } catch (err) {
+        app.showError(err instanceof Error ? err.message : String(err))
+      }
     },
 
     removeChip: (chipId) => set((s) => ({ removedChips: [...s.removedChips, chipId] })),

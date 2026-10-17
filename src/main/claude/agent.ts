@@ -187,3 +187,49 @@ export const claudeComplete: Complete = async (input) => {
     query.close()
   }
 }
+
+export interface HandOffInput {
+  /** The folder VS Code opens. */
+  cwd: string
+  sessionId: string
+  text: string
+  /** Shown in Claude's list of conversations in VS Code. */
+  title: string
+  apiKey: string | null
+}
+
+/**
+ * Continues a chat once from another folder as a copy, which Claude Code saves with that
+ * folder's conversations, where the VS Code extension looks. Returns the copy's id.
+ */
+export type HandOff = (input: HandOffInput) => Promise<string>
+
+export const claudeHandOff: HandOff = async (input) => {
+  const sdk = await import('@anthropic-ai/claude-agent-sdk')
+  const query = sdk.query({
+    prompt: input.text,
+    options: {
+      cwd: input.cwd,
+      resume: input.sessionId,
+      forkSession: true,
+      model: 'haiku',
+      tools: [],
+      settingSources: [],
+      env: agentEnvironment(input.apiKey),
+      pathToClaudeCodeExecutable: claudeExecutable()
+    }
+  })
+  try {
+    for await (const message of query) {
+      if (message.type !== 'result') continue
+      if (message.subtype !== 'success' || message.is_error) {
+        throw new Error('Claude could not continue this chat in VS Code')
+      }
+      await sdk.renameSession(message.session_id, input.title, { dir: input.cwd })
+      return message.session_id
+    }
+    throw new Error('No answer')
+  } finally {
+    query.close()
+  }
+}

@@ -86,7 +86,6 @@ export interface MarginaliaApi {
     move(path: string, parent: string, before?: Position): Promise<string>
     trash(path: string): Promise<boolean>
     reveal(path: string): Promise<void>
-    openInCode(folder: string): Promise<void>
     setColor(folder: string, color: NotebookColor | null): Promise<void>
     /** 'auto' removes the course's own language, so the default applies. */
     setCourseLanguage(notebook: string, language: TranscribeLanguage): Promise<void>
@@ -189,6 +188,11 @@ export interface MarginaliaApi {
     history(chat: string): Promise<ChatHistoryItem[]>
     /** Forgets the section's conversation, so the next message starts a new one. */
     newChat(chat: string): Promise<void>
+    /**
+     * Opens the folder in VS Code with its chat (or the chat of the lesson around it) in
+     * Claude's panel there. Returns the chat that went along, or null when there was none.
+     */
+    openInCode(folder: string): Promise<string | null>
     /** What Claude remembers about me: course name -> note, '' for the note about me. */
     memory(): Promise<Record<string, string>>
     /** Replaces one note; empty text removes it. */

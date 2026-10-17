@@ -14,7 +14,15 @@ import { claudeSettings, type ConfigStore } from '../config'
 import { VaultError } from '../vault/names'
 import type { Handle } from '../ipc'
 import type { Vault } from '../vault/vault'
-import { claudeAgent, claudeComplete, type Agent, type Complete } from './agent'
+import { openInCode, assertCodeInstalled } from '../vscode'
+import {
+  claudeAgent,
+  claudeComplete,
+  claudeHandOff,
+  type Agent,
+  type Complete,
+  type HandOff
+} from './agent'
 import { storedApiKey } from './cli'
 import { courseOf, courseOfFile, type MemoryStore } from './memory'
 import type { Memory } from './prompt'
@@ -25,7 +33,8 @@ import type { CallTool } from './tools'
 interface AgentModule {
   agent: Agent
   complete?: Complete
-  history?(sessionId: string, vaultRoot: string): Promise<ChatHistoryItem[]>
+  handOff?: HandOff
+  history?(sessionId: string): Promise<ChatHistoryItem[]>
 }
 
 async function loadAgent(): Promise<AgentModule> {
@@ -34,15 +43,27 @@ async function loadAgent(): Promise<AgentModule> {
   return {
     agent: claudeAgent,
     complete: claudeComplete,
-    history: async (sessionId, dir) => {
+    handOff: claudeHandOff,
+    // Without a folder: a chat continued in VS Code is saved with that folder's conversations.
+    history: async (sessionId) => {
       const sdk = await import('@anthropic-ai/claude-agent-sdk')
-      return toHistory(await sdk.getSessionMessages(sessionId, { dir }))
+      return toHistory(await sdk.getSessionMessages(sessionId))
     }
   }
 }
 
 const STALE_SESSION = /no conversation found/i
 const STOP_GRACE_MS = 1500
+
+/** The folder and the folders around it, nearest first. */
+function foldersUp(folder: string): string[] {
+  const parts = folder.split('/')
+  return parts.map((_, i) => parts.slice(0, parts.length - i).join('/'))
+}
+
+const handOffText = (folder: string): string =>
+  `I am continuing this conversation in VS Code, in the folder "${folder}" of my notes, to ` +
+  'work on the code there. Reply with one short line.'
 
 export function registerClaude(
   handle: Handle,
@@ -250,10 +271,41 @@ export function registerClaude(
     const id = await v.chatSession(chat)
     const { history } = await agentModule
     if (!id || !history) return []
-    return history(id, v.root).catch((err) => {
+    return history(id).catch((err) => {
       console.error('[claude:history]', err)
       return []
     })
+  })
+
+  // The chat of the folder (or the lesson around it) goes along, and the app goes on with the
+  // same copy, so what is said in VS Code is in the app's chat afterwards.
+  handle('claude:openInCode', async (folder: string): Promise<string | null> => {
+    const v = vault()
+    const dir = v.resolve(folder)
+    assertCodeInstalled()
+    const { handOff } = await agentModule
+    for (const chat of foldersUp(folder)) {
+      const sessionId = await v.chatSession(chat)
+      if (!sessionId || !handOff) continue
+      if (running) throw new VaultError('Wait until Claude has answered')
+      running = new AbortController()
+      try {
+        const copy = await handOff({
+          cwd: dir,
+          sessionId,
+          text: handOffText(folder),
+          title: `${folder.split('/').pop()} (from Marginalia)`,
+          apiKey: await storedApiKey(config)
+        })
+        await v.setChatSession(chat, copy)
+        await openInCode(dir, copy)
+        return chat
+      } finally {
+        running = null
+      }
+    }
+    await openInCode(dir)
+    return null
   })
 
   handle('claude:memory', () => memory.all())

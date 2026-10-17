@@ -121,6 +121,52 @@ test('answers about the slide on screen, with that slide sent along', async () =
   await page.screenshot({ path: path.join('test-results', 'claude-panel.png') })
 })
 
+test('a folder opens in VS Code with the lesson chat, and that chat comes back', async () => {
+  await app.evaluate(({ app: electronApp, shell }) => {
+    const g = globalThis as { opened?: string[] }
+    g.opened = []
+    electronApp.getApplicationNameForProtocol = () => 'Visual Studio Code'
+    shell.openExternal = async (url: string) => {
+      g.opened!.push(url)
+    }
+  })
+  const opened = (): Promise<string[]> =>
+    app.evaluate(() => (globalThis as { opened?: string[] }).opened ?? [])
+  await fs.mkdir(path.join(env.vault, section, 'exercise code'))
+  await openSlides(1)
+  await ask('Explain this formula')
+  await expect(answers()).toHaveCount(1)
+
+  await row('exercise code').click({ button: 'right' })
+  await page.getByRole('menuitem', { name: 'Open in VS Code' }).click()
+  await expect.poll(opened, { timeout: 15_000 }).toHaveLength(2)
+  const state = JSON.parse(
+    await fs.readFile(path.join(env.vault, '.marginalia/state.json'), 'utf8')
+  )
+  const copy: string = state.chats[section]
+  expect(copy).toMatch(/-vscode$/)
+  const folder = path.join(env.vault, section, 'exercise code').replace(/\\/g, '/')
+  expect(await opened()).toEqual([
+    `vscode://file/${folder.replace(/ /g, '%20')}/`,
+    `vscode://anthropic.claude-code/open?session=${copy}`
+  ])
+  const log = JSON.parse(await fs.readFile(fakeLog(env), 'utf8'))
+  expect(log[copy].at(-1).cwd).toBe(path.join(env.vault, section, 'exercise code'))
+
+  // Something asked in VS Code shows in the app's chat once I come back to it.
+  log[copy].push({ question: 'Why is my loop off by one?' })
+  await fs.writeFile(fakeLog(env), JSON.stringify(log))
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')))
+  await expect(page.locator('.claude-question').last()).toHaveText('Why is my loop off by one?')
+
+  await ask('What did we find in VS Code?')
+  await expect
+    .poll(async () => (await readLog()).at(-1)?.question)
+    .toBe('What did we find in VS Code?')
+  const after = JSON.parse(await fs.readFile(fakeLog(env), 'utf8'))
+  expect(after[copy].at(-1).question).toBe('What did we find in VS Code?')
+})
+
 test('Stop ends an answer that is stuck, and the chat takes the next question', async () => {
   await openSlides(1)
   await ask('Please get stuck')

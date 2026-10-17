@@ -17,6 +17,7 @@ import {
   visibleRows,
   type Row
 } from '../lib/tree'
+import { useChat } from '../claude/chat'
 import { useApp } from '../store'
 import { ContextMenu, type MenuItem } from './ContextMenu'
 import { isTranscript, useFiles } from '../transcribe/files'
@@ -174,10 +175,7 @@ export function Sidebar(): React.JSX.Element {
     if (isFolder(node)) {
       items.push({
         label: 'Open in VS Code',
-        onSelect: () =>
-          void window.api.vault
-            .openInCode(node.path)
-            .catch((err: Error) => app.showError(err.message))
+        onSelect: () => void useChat.getState().openInCode(node.path)
       })
     }
     items.push(

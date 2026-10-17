@@ -148,6 +148,19 @@ export async function history(sessionId) {
   ])
 }
 
+/** Continues a chat as a copy, like Claude Code does when VS Code takes it over. */
+export async function handOff(input) {
+  const copy = `${input.sessionId}-vscode`
+  await record(copy, { question: input.text, cwd: input.cwd })
+  writing = writing.then(async () => {
+    const log = await readLog()
+    log[copy] = [...(log[input.sessionId] ?? []), ...log[copy]]
+    await fs.writeFile(LOG, JSON.stringify(log, null, 2))
+  })
+  await writing
+  return copy
+}
+
 /** The one-off request behind /claude in a note. "slow" waits until it is cancelled. */
 export async function complete(input) {
   await record('complete', {
