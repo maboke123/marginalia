@@ -235,6 +235,14 @@ export function MarkdownEditor({
         {beingWritten && <span className="muted pane-note">Being written while you record</span>}
         <RecordButton />
         <button
+          className="icon-button"
+          title="Export this note as a PDF"
+          aria-label="Export as PDF"
+          onClick={() => useApp.getState().exportNote(path)}
+        >
+          <Icon name="export" />
+        </button>
+        <button
           className={lectureMode ? 'icon-button pressed' : 'icon-button'}
           title={`Lecture mode (${useApp.getState().settings.hotkeys.lecture})`}
           aria-label="Lecture mode"

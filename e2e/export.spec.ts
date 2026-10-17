@@ -109,3 +109,56 @@ test('exports a flattened copy and leaves the original alone', async () => {
   await page.waitForTimeout(500)
   await page.screenshot({ path: path.join('test-results', 'export.png') })
 })
+
+test('exports a note as a PDF with its math, chart and image', async () => {
+  const dir = path.join(env.vault, section)
+  await fs.mkdir(path.join(dir, 'assets'))
+  const png = await app.evaluate(({ nativeImage }) => {
+    const pixels = Buffer.alloc(120 * 60 * 4)
+    for (let i = 0; i < pixels.length; i += 4) pixels.set([200, 80, 40, 255], i)
+    return nativeImage
+      .createFromBitmap(pixels, { width: 120, height: 60 })
+      .toPNG()
+      .toString('base64')
+  })
+  await fs.writeFile(path.join(dir, 'assets', 'split plot.png'), Buffer.from(png, 'base64'))
+  await fs.writeFile(
+    path.join(dir, 'Summary.md'),
+    [
+      '# Randomized hiring',
+      '',
+      'Expected hires: $H_n = \\sum_{i=1}^n \\frac{1}{i}$, see [slide 2](slides.pdf#page=2).',
+      '',
+      '![plot](assets/split%20plot.png)',
+      '',
+      '```mermaid',
+      'graph LR',
+      '  Interview --> Hire',
+      '```',
+      ''
+    ].join('\n')
+  )
+  const target = path.join(dir, 'Summary.pdf')
+  await app.evaluate(({ dialog }, filePath) => {
+    dialog.showSaveDialog = (async () => ({ canceled: false, filePath })) as never
+  }, target)
+
+  await page.locator('.tree-row', { hasText: 'Machine Learning' }).click()
+  await page.locator('.tree-row', { hasText: 'B2 Decision trees' }).click()
+  await page.locator('.tree-row', { hasText: 'Summary' }).click()
+  await page.getByRole('button', { name: 'Export as PDF' }).click()
+  await expect(page.getByRole('status')).toContainText('Exported to', { timeout: 20_000 })
+
+  const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs')
+  const doc = await pdfjs.getDocument({ data: new Uint8Array(await fs.readFile(target)) }).promise
+  const content = await (await doc.getPage(1)).getTextContent()
+  const text = content.items.map((item) => ('str' in item ? item.str : '')).join(' ')
+  expect(text).toContain('Randomized hiring')
+  expect(text).toContain('Interview')
+  expect(text).toContain('slide 2')
+
+  await page.locator('.tree-row', { hasText: 'Summary.pdf' }).click()
+  await expect(page.locator('.pdf-page[data-page="1"] canvas')).toBeAttached()
+  await page.waitForTimeout(500)
+  await page.screenshot({ path: path.join('test-results', 'export-note.png') })
+})

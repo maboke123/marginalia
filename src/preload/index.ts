@@ -47,6 +47,7 @@ const api: MarginaliaApi = {
     readAnnotations: (pdf) => invoke('vault:readAnnotations', pdf),
     writeAnnotations: (pdf, file) => invoke('vault:writeAnnotations', pdf, file),
     exportPdf: (pdf) => invoke('vault:exportPdf', pdf),
+    exportNote: (note, html) => invoke('vault:exportNote', note, html),
     onChanged: (listener) => {
       const handler = (): void => listener()
       ipcRenderer.on('vault:changed', handler)

@@ -1,5 +1,5 @@
 import { createHash } from 'crypto'
-import { BrowserWindow, dialog, ipcMain, nativeTheme, shell } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, nativeTheme, shell } from 'electron'
 import { promises as fs } from 'fs'
 import path from 'path'
 import type { AnnotationFile } from '../shared/annotations'
@@ -15,6 +15,7 @@ import type {
 } from '../shared/types'
 import { ConfigStore } from './config'
 import { exportAnnotated } from './export/exportPdf'
+import { fileImages, printHtml } from './export/printNote'
 import { appendFeedback, ensureFeedbackFile } from './feedback'
 import { writeFileAtomic } from './vault/atomic'
 import { SearchIndex } from './search/searchIndex'
@@ -226,6 +227,24 @@ export function registerIpc(
       missingImages: result.missingImages,
       pdfChanged: !!loaded.file && loaded.file.pdfSha256 !== loaded.pdfSha256
     }
+  })
+
+  handle('vault:exportNote', async (p: string, html: string) => {
+    const v = current()
+    const win = getWindow()
+    const options: Electron.SaveDialogOptions = {
+      title: 'Export as PDF',
+      // Not next to the note: a PDF with the note's name would take the note in as its slides.
+      defaultPath: path.join(app.getPath('downloads'), path.basename(p).replace(/\.md$/i, '.pdf')),
+      filters: [{ name: 'PDF', extensions: ['pdf'] }]
+    }
+    const choice = win
+      ? await dialog.showSaveDialog(win, options)
+      : await dialog.showSaveDialog(options)
+    if (choice.canceled || !choice.filePath) return null
+    const bytes = await printHtml(fileImages(html, (vaultPath) => v.resolve(vaultPath)))
+    await writeFileAtomic(choice.filePath, bytes)
+    return choice.filePath
   })
 
   handle('vault:pickPdfs', async () => {

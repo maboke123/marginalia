@@ -4,6 +4,7 @@ import type { LinkHow, NotebookColor, Position, VaultInfo, VaultNode } from '../
 import { withLink, withoutLink, type NoteLinks } from '../../shared/pairing'
 import { ERASER_SIZES, PEN_WIDTHS, DEFAULT_TEXT_SIZE } from '../../shared/palette'
 import { flushAll } from './lib/flush'
+import { noteHtml } from './lib/notePdf'
 import {
   childrenOf,
   findNode,
@@ -155,6 +156,8 @@ interface AppState {
   showNotice(message: string | null): void
   /** Saves pending annotations, then writes a flattened copy where I choose. */
   exportPdf(path: string): Promise<void>
+  /** Saves the note, then prints it to a PDF where I choose. */
+  exportNote(path: string): Promise<void>
   setPdfView(view: PdfView | null): void
   setPdfSelection(selection: PdfSelection | null): void
   setNoteCursor(cursor: NoteCursor | null): void
@@ -555,6 +558,15 @@ export const useApp = create<AppState>((set, get) => {
       get().showNotice(
         `Exported to ${done.path}${notes.length ? `. Note: ${notes.join('; ')}.` : ''}`
       )
+    },
+
+    async exportNote(path) {
+      await flushAll()
+      get().showNotice('Making the PDF...')
+      const done = await attempt(async () =>
+        api.exportNote(path, await noteHtml(path, await api.readText(path)))
+      )
+      get().showNotice(done ? `Exported to ${done}` : null)
     },
 
     setPdfView: (view) => set({ pdfView: view }),

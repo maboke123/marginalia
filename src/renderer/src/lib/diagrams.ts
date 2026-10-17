@@ -127,6 +127,19 @@ function show(el: HTMLElement, key: string, result: Result): void {
   }
 }
 
+/** Draws every diagram under `root` and resolves once all are drawn, for a printed copy. */
+export async function drawDiagrams(root: HTMLElement, surface: Surface): Promise<void> {
+  const diagrams = [...root.querySelectorAll<HTMLElement>('.diagram[data-source]')]
+  await Promise.all(
+    diagrams.map(async (el) => {
+      const lang = el.dataset.lang ?? ''
+      const source = el.dataset.source ?? ''
+      const key = `${surface}|${dark(surface)}|${lang}|${source}`
+      show(el, key, await render(key, lang, source, surface))
+    })
+  )
+}
+
 /** Draws every diagram placeholder under `root`; `onDrawn` runs when one changed size. */
 export function hydrateDiagrams(root: HTMLElement, surface: Surface, onDrawn?: () => void): void {
   for (const el of root.querySelectorAll<HTMLElement>('.diagram[data-source]')) {

@@ -112,6 +112,8 @@ export interface MarginaliaApi {
     writeAnnotations(pdf: string, file: AnnotationFile): Promise<void>
     /** Asks where to save, then writes a copy with the annotations drawn in. Null when cancelled. */
     exportPdf(pdf: string): Promise<ExportedPdf | null>
+    /** Asks where to save, then prints the note's page (from noteHtml) as a PDF. Null when cancelled. */
+    exportNote(note: string, html: string): Promise<string | null>
     onChanged(listener: () => void): () => void
   }
   settings: {
