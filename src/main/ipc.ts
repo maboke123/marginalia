@@ -21,6 +21,7 @@ import { SearchIndex } from './search/searchIndex'
 import { VaultError } from './vault/names'
 import { Vault } from './vault/vault'
 import { watchVault } from './vault/watcher'
+import { openInCode } from './vscode'
 
 export type Handle = <A extends unknown[], R>(
   channel: string,
@@ -161,6 +162,7 @@ export function registerIpc(
     current().setColor(folder, color)
   )
   handle('vault:reveal', (p: string) => shell.showItemInFolder(current().resolve(p)))
+  handle('vault:openInCode', (p: string) => openInCode(current().resolve(p)))
   handle('vault:readFile', (p: string) => current().readFile(p))
   handle('vault:lastPage', (p: string) => current().lastPage(p))
   handle('vault:setLastPage', (p: string, page: number) => current().setLastPage(p, page))

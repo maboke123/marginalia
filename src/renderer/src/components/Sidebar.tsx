@@ -170,8 +170,17 @@ export function Sidebar(): React.JSX.Element {
     } else {
       items.push({ label: 'Hide file', onSelect: () => app.setHidden(node.path, true) })
     }
+    items.push({ label: 'Show in Explorer', onSelect: () => window.api.vault.reveal(node.path) })
+    if (isFolder(node)) {
+      items.push({
+        label: 'Open in VS Code',
+        onSelect: () =>
+          void window.api.vault
+            .openInCode(node.path)
+            .catch((err: Error) => app.showError(err.message))
+      })
+    }
     items.push(
-      { label: 'Show in Explorer', onSelect: () => window.api.vault.reveal(node.path) },
       { separator: true },
       {
         label: 'Move to Recycle Bin',

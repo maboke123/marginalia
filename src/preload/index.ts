@@ -28,6 +28,7 @@ const api: MarginaliaApi = {
     move: (path, parent, before) => invoke('vault:move', path, parent, before),
     trash: (path) => invoke('vault:trash', path),
     reveal: (path) => invoke('vault:reveal', path),
+    openInCode: (folder) => invoke('vault:openInCode', folder),
     setColor: (folder, color) => invoke('vault:setColor', folder, color),
     setCourseLanguage: (notebook, language) =>
       invoke('vault:setCourseLanguage', notebook, language),

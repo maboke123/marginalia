@@ -237,6 +237,25 @@ test('F2 renames and Delete goes through the recycle bin', async () => {
     .toEqual([path.join(vault, 'ML')])
 })
 
+test('a folder opens in VS Code through its link', async () => {
+  await app.evaluate(({ app: electronApp, shell }) => {
+    const g = globalThis as { opened?: string[] }
+    g.opened = []
+    electronApp.getApplicationNameForProtocol = () => 'Visual Studio Code'
+    shell.openExternal = async (url: string) => {
+      g.opened!.push(url)
+    }
+  })
+
+  await row('Machine Learning').click()
+  await row('B2 Decision trees').click({ button: 'right' })
+  await page.getByRole('menuitem', { name: 'Open in VS Code' }).click()
+  const folder = path.join(vault, 'Machine Learning', 'B2 Decision trees').replace(/\\/g, '/')
+  await expect
+    .poll(() => app.evaluate(() => (globalThis as { opened?: string[] }).opened))
+    .toEqual([`vscode://file/${folder.replace(/ /g, '%20')}/`])
+})
+
 test('dragging a page into another section moves it on disk', async () => {
   await row('Machine Learning').click()
   await row('B2 Decision trees').click()

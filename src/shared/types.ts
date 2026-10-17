@@ -86,6 +86,7 @@ export interface MarginaliaApi {
     move(path: string, parent: string, before?: Position): Promise<string>
     trash(path: string): Promise<boolean>
     reveal(path: string): Promise<void>
+    openInCode(folder: string): Promise<void>
     setColor(folder: string, color: NotebookColor | null): Promise<void>
     /** 'auto' removes the course's own language, so the default applies. */
     setCourseLanguage(notebook: string, language: TranscribeLanguage): Promise<void>
