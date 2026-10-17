@@ -5,6 +5,7 @@ import { existsSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'fs'
 import os from 'os'
 import path from 'path'
 import { fileURLToPath } from 'url'
+import { nextVersion, parseTag } from './version.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const dist = path.join(root, 'dist')
@@ -42,7 +43,23 @@ if (dirty) {
   process.exit(1)
 }
 const commit = out('git rev-parse --short HEAD')
-const version = `0.1.${out('git rev-list --count HEAD')}`
+const git = (...args) => execFileSync('git', args, { cwd: root, env }).toString().trim()
+let lastTag
+try {
+  lastTag = git('describe', '--tags', '--abbrev=0', '--match', 'v*')
+} catch {
+  console.error('No release tag (v1.0.0 and later) found. Get them with: git fetch --tags')
+  process.exit(1)
+}
+const last = parseTag(lastTag)
+if (!last) throw new Error(`The last release tag is not a version: ${lastTag}`)
+// Subject and body of every commit since the last release, to see what kind of change it is.
+const messages = git('log', '--format=%B%x00', `${lastTag}..HEAD`)
+  .split('\0')
+  .map((m) => m.trim())
+  .filter(Boolean)
+const version = nextVersion(last, messages)
+const tag = `v${version}`
 
 step(`Checking ${commit} (version ${version})`)
 run('npm run typecheck')
@@ -123,6 +140,16 @@ step('Installing')
 execFileSync(installer, ['/S'], { stdio: 'inherit' })
 if (!existsSync(installed)) throw new Error(`Not installed at ${installed}`)
 console.log(`Installed version ${version} (${commit}).`)
+
+// The release tag goes on only once it is installed, so a failed deploy uses the version again.
+if (tag !== lastTag) {
+  run(`git tag -a ${tag} -m "Release ${version}"`)
+  try {
+    execFileSync('git', ['push', 'origin', tag], { cwd: root, stdio: 'inherit', env })
+  } catch {
+    console.error(`Tagged ${tag} here, but could not push it; run: git push origin ${tag}`)
+  }
+}
 
 if (start) {
   spawn(installed, [], { detached: true, stdio: 'ignore', env }).unref()
