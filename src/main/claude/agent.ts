@@ -27,6 +27,14 @@ export type Agent = (input: AgentInput) => AsyncIterable<ChatEvent>
 const READ_TOOLS = ['Read', 'Glob', 'Grep']
 const WEB_TOOLS = ['WebSearch', 'WebFetch']
 
+/**
+ * Without the switch the CLI loads my claude.ai connectors (Gmail, Drive, Calendar), and
+ * Claude kept telling me in its answers that they still had to be connected.
+ */
+function agentEnvironment(apiKey: string | null): Record<string, string | undefined> {
+  return { ...claudeEnvironment(apiKey), ENABLE_CLAUDEAI_MCP_SERVERS: 'false' }
+}
+
 async function* oneMessage(text: string, images: ChatImage[]): AsyncIterable<SDKUserMessage> {
   yield {
     type: 'user',
@@ -88,7 +96,7 @@ export const claudeAgent: Agent = async function* (input) {
           },
     includePartialMessages: true,
     abortController,
-    env: claudeEnvironment(input.apiKey),
+    env: agentEnvironment(input.apiKey),
     pathToClaudeCodeExecutable: claudeExecutable()
   }
 
@@ -162,7 +170,7 @@ export const claudeComplete: Complete = async (input) => {
       settingSources: [],
       persistSession: false,
       abortController,
-      env: claudeEnvironment(input.apiKey),
+      env: agentEnvironment(input.apiKey),
       pathToClaudeCodeExecutable: claudeExecutable()
     }
   })
