@@ -2,6 +2,7 @@ import type { Options, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
 import type { ChatEvent, ChatImage } from '../../shared/claude'
 import type { StoredClaudeSettings } from '../config'
 import { claudeEnvironment, claudeExecutable } from './cli'
+import { moveSession, projectsDir } from './sessions'
 import { toChatEvents, type StreamState } from './events'
 import { SYSTEM_APPEND, withInstructions, withMemory, type Memory } from './prompt'
 import { APP_TOOLS, appToolServer, type CallTool } from './tools'
@@ -199,17 +200,16 @@ export interface HandOffInput {
 }
 
 /**
- * Continues a chat once from another folder as a copy, which Claude Code saves with that
- * folder's conversations, where the VS Code extension looks. Returns the copy's id, or the
- * chat's own id when it is saved there already.
+ * Puts a chat with the conversations of another folder, where the VS Code extension looks,
+ * and returns the id to open there: the chat itself, or a copy when it cannot be moved.
  */
 export type HandOff = (input: HandOffInput) => Promise<string>
 
 export const claudeHandOff: HandOff = async (input) => {
   const sdk = await import('@anthropic-ai/claude-agent-sdk')
-  // After an earlier hand-off the chat lives there already. Copying it again took a model call
-  // over the whole history (half a minute for a long chat) and piled up copies.
-  if (await sdk.getSessionInfo(input.sessionId, { dir: input.cwd })) {
+  // A copy took a model call over the whole history (half a minute for a long chat), piled up
+  // copies and split the chat in two.
+  if (await moveSession(projectsDir(), input.sessionId, input.cwd)) {
     await sdk.renameSession(input.sessionId, input.title, { dir: input.cwd })
     return input.sessionId
   }

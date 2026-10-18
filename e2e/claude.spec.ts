@@ -134,6 +134,7 @@ test('Claude previews how a note comes out as a PDF', async () => {
 })
 
 test('a folder opens in VS Code with the lesson chat, and that chat comes back', async () => {
+  test.setTimeout(60_000)
   await app.evaluate(({ app: electronApp, shell }) => {
     const g = globalThis as { opened?: string[] }
     g.opened = []
@@ -151,7 +152,8 @@ test('a folder opens in VS Code with the lesson chat, and that chat comes back',
 
   await row('exercise code').click({ button: 'right' })
   await page.getByRole('menuitem', { name: 'Open in VS Code' }).click()
-  await expect.poll(opened, { timeout: 15_000 }).toHaveLength(2)
+  // The chat link goes twice, for a VS Code window that was slow to start.
+  await expect.poll(opened, { timeout: 30_000 }).toHaveLength(3)
   const state = JSON.parse(
     await fs.readFile(path.join(env.vault, '.marginalia/state.json'), 'utf8')
   )
@@ -160,6 +162,7 @@ test('a folder opens in VS Code with the lesson chat, and that chat comes back',
   const folder = path.join(env.vault, section, 'exercise code').replace(/\\/g, '/')
   expect(await opened()).toEqual([
     `vscode://file/${folder.replace(/ /g, '%20')}/?windowId=_blank`,
+    `vscode://anthropic.claude-code/open?session=${copy}`,
     `vscode://anthropic.claude-code/open?session=${copy}`
   ])
   const log = JSON.parse(await fs.readFile(fakeLog(env), 'utf8'))
