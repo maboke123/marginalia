@@ -49,7 +49,12 @@ export function registerTerminal(
       cols,
       rows,
       cwd: vault.root,
-      env: claudeEnvironment(await storedApiKey(config)) as Record<string, string>
+      env: {
+        ...(claudeEnvironment(await storedApiKey(config)) as Record<string, string>),
+        // The classic renderer clears the scrollback and prints the whole chat again on a
+        // repaint, which threw xterm back to the start of the chat. This one scrolls itself.
+        CLAUDE_CODE_NO_FLICKER: '1'
+      }
     })
     term = started
     started.onData((data) => {
