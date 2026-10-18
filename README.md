@@ -49,6 +49,11 @@ Claude is built in two ways:
 - Zoom with Ctrl+wheel or a touchpad pinch.
 - Files stay standard Markdown, so they open the same in Obsidian or VS Code.
 
+**Canvas**
+- A page you can zoom and pan without end, for diagrams, mind maps and overviews. Text boxes with Markdown and math, images, pen drawings, groups and arrows between boxes.
+- UML shapes and relations: classes with compartments, interfaces, actors, use cases, states, decisions, and arrows for inheritance, realization, composition, aggregation and dependency, with multiplicities.
+- Saved as `.canvas` files in the JSON Canvas format, so they open in Obsidian too. Export a canvas as a one-page PDF.
+
 **Lecture mode**
 - Ctrl+Shift+M puts the slides on the left and their note on the right, and hides the sidebar.
 - A PDF can have several notes (your summary, a derivation, the transcript). The title of the note pane switches between them and remembers your pick.
@@ -73,14 +78,16 @@ Claude is built into the places you already work, and it always knows where you 
 
 **Ask questions in the chat panel (Ctrl+L)**
 - "Explain the formula on this slide" or "Why is entropy maximal here?" works without any setup.
-- Type `@` to add other notes or PDFs from your vault as context.
-- One conversation per lecture, kept when you close the app.
+- Type `@` to add other notes or PDFs from your vault as context, a whole folder (a course or a lecture), or the conversation of another lecture.
+- One conversation per lecture, kept when you close the app. The chat you ask in stays while you open files in its subfolders; the name above the chat switches to the chat of any other folder.
 - Select text in an answer to copy it (formulas come out as LaTeX) or to ask about that part.
 
 **Let it edit your notes and slides**
 - Ask "add a short version of this under Information gain" and it writes into your note, under that heading.
 - On the slides it can add, change, move and remove text boxes, highlight or underline text, draw lines and arrows, and add blank pages.
-- It can take a screenshot of a page as the app draws it, to check that its text boxes fit and do not overlap.
+- On a canvas it reads and draws boxes and arrows, and lays out new diagrams itself.
+- It can take a screenshot of a page or a canvas as the app draws it, to check that things fit and do not overlap.
+- Your view stays where you are reading while it edits; a change to a note that is not open goes straight into the file.
 - With "ask before editing" on (the default), you see each change first and accept or reject it. Click a waiting change in the chat to jump to it. "Accept all" lets the rest of that answer through. Every edit is one undo step.
 
 **Write in place with `/claude`**
@@ -92,6 +99,7 @@ Claude is built into the places you already work, and it always knows where you 
 - Type `/` in the chat for longer jobs on the lecture you have open:
   - `/summary` writes a summary note from the slides, the transcript, your notes and your annotations, linked to the PDF.
   - `/cleanup` tidies your annotations (typos, LaTeX, layout) without dropping anything you wrote, and adds a **Check:** line where something looks wrong.
+  - `/uml` models a system you describe (a class diagram by default, or use case, state and activity diagrams) on a canvas.
   - `/exercise` turns an exercise session (the chat, your notes and annotations) into a note with the solutions, key takeaways, exam tips and what to redo.
 - Text after the command is passed on, for example `/summary only the part on pruning`.
 
@@ -112,6 +120,7 @@ Machine Learning/                       course
     slides.pdf
     slides.pdf.annotations.json         your annotations (JSON)
     slides.md                           your note
+    Class diagram.canvas                a canvas (JSON Canvas)
     Transcript 2026-10-05 11-44.md      a recording's transcript
     assets/                             pasted images, snapshots and recordings
 .marginalia/                            settings and state for this vault
