@@ -36,7 +36,14 @@ import { measurer, planBox } from '../annotations/fit'
 import { marginSlot } from '../annotations/margin'
 import { pendingEdit, setPendingEdit } from '../editor/proposal'
 import { blockInsert, endOfContent, findSection, headings } from '../editor/sections'
-import { openNote, openPdf, whenOpen, type OpenNote, type OpenPdf } from '../lib/open'
+import { canvasFrom, formatCanvas, type CanvasData } from '../../../shared/canvas'
+import {
+  applyChanges,
+  describeCanvas,
+  type CanvasChange,
+  type EditResult
+} from '../canvas/claudeEdits'
+import { openCanvas, openNote, openPdf, whenOpen, type OpenNote, type OpenPdf } from '../lib/open'
 import { findNode, isFolder } from '../lib/tree'
 import { loadPdf } from '../pdf/pdfjs'
 import { renderPage } from '../pdf/snapshot'
@@ -55,7 +62,9 @@ class ToolError extends Error {}
 
 const fileName = (path: string): string => path.split('/').pop() ?? path
 
-function fileArg(args: Args, kind: 'pdf' | 'markdown' | 'any'): string {
+const KIND_NAMES = { pdf: 'PDF', markdown: 'Markdown file', canvas: 'canvas' }
+
+function fileArg(args: Args, kind: 'pdf' | 'markdown' | 'canvas' | 'any'): string {
   const path = String(args.file ?? '')
     .replace(/\\/g, '/')
     .replace(/^\.?\//, '')
@@ -63,7 +72,7 @@ function fileArg(args: Args, kind: 'pdf' | 'markdown' | 'any'): string {
   if (!node)
     throw new ToolError(`No file "${path}" in the vault. Use vault paths like in the context.`)
   if (kind !== 'any' && node.kind !== kind) {
-    throw new ToolError(`"${path}" is not a ${kind === 'pdf' ? 'PDF' : 'Markdown file'}`)
+    throw new ToolError(`"${path}" is not a ${KIND_NAMES[kind]}`)
   }
   return path
 }
@@ -219,6 +228,43 @@ function show(path: string, page?: number): void {
     })
   }
   app.openFile(path, page)
+}
+
+/** A folder in the vault for something new, from the tool's `folder`. */
+function folderArg(args: Args): string {
+  const folder = String(args.folder ?? '')
+    .replace(/\\/g, '/')
+    .replace(/^\.?\/|\/$/g, '')
+  const node = findNode(useApp.getState().nodes, folder)
+  if (!node || !isFolder(node)) {
+    throw new ToolError(`No folder "${folder}" in the vault; it goes in a course or lesson folder`)
+  }
+  return folder
+}
+
+/** A canvas as open now (with unsaved changes), or as it is on disk. */
+async function canvasData(path: string): Promise<CanvasData> {
+  const doc = openCanvas(path)?.doc
+  if (doc) return doc.getState().data
+  try {
+    return canvasFrom(await window.api.vault.readText(path))
+  } catch (err) {
+    throw new ToolError(`${path} cannot be read: ${(err as Error).message}`)
+  }
+}
+
+function changeCount(changes: CanvasChange[]): string {
+  const n = (op: CanvasChange['op']): number => changes.filter((c) => c.op === op).length
+  const parts = [
+    [n('add_box'), 'new box', 'new boxes'],
+    [n('add_arrow'), 'new arrow', 'new arrows'],
+    [n('change_box') + n('change_arrow'), 'change', 'changes'],
+    [n('delete'), 'removal', 'removals']
+  ] as const
+  return parts
+    .filter(([count]) => count)
+    .map(([count, one, many]) => `${count} ${count === 1 ? one : many}`)
+    .join(', ')
 }
 
 function openMade(path: string, pdf: string | null): void {
@@ -415,15 +461,7 @@ const TOOLS: Record<string, (args: Args) => Promise<Result>> = {
   },
 
   async create_note(args) {
-    const folder = String(args.folder ?? '')
-      .replace(/\\/g, '/')
-      .replace(/^\.?\/|\/$/g, '')
-    const node = findNode(useApp.getState().nodes, folder)
-    if (!node || !isFolder(node)) {
-      throw new ToolError(
-        `No folder "${folder}" in the vault; notes go in a course or lesson folder`
-      )
-    }
+    const folder = folderArg(args)
     const name = String(args.name ?? '')
       .trim()
       .replace(/\.md$/i, '')
@@ -444,6 +482,76 @@ const TOOLS: Record<string, (args: Args) => Promise<Result>> = {
         { label: 'Open', run: () => openMade(path, pdf) }
       ])
     return { text: `Made ${path}${pdf ? `, linked to ${pdf}` : ''}.` }
+  },
+
+  async create_canvas(args) {
+    const folder = folderArg(args)
+    const name = String(args.name ?? '')
+      .trim()
+      .replace(/\.canvas$/i, '')
+    if (!name) throw new ToolError('The canvas needs a name')
+    const accepted = await useChat
+      .getState()
+      .confirm(`New canvas ${name} in ${fileName(folder)}`, () => () => {})
+    if (!accepted) throw new ToolError(REJECTED)
+    const path = await window.api.vault.createCanvas(folder, name)
+    await useApp.getState().refresh()
+    useApp
+      .getState()
+      .showNotice(`Claude made ${fileName(path)}`, [{ label: 'Open', run: () => show(path) }])
+    return { text: `Made ${path}. It is empty; fill it with edit_canvas.` }
+  },
+
+  async read_canvas(args) {
+    const path = fileArg(args, 'canvas')
+    return { text: describeCanvas(path, await canvasData(path)) }
+  },
+
+  async edit_canvas(args) {
+    const path = fileArg(args, 'canvas')
+    const changes = Array.isArray(args.changes) ? (args.changes as CanvasChange[]) : []
+    if (!changes.length) throw new ToolError('No changes given')
+    const planned = applyChanges(await canvasData(path), changes)
+    if (!planned.data.nodes.length && !planned.data.edges.length && planned.errors.length) {
+      throw new ToolError(planned.errors.join('\n'))
+    }
+    // The preview: what the canvas would be, drawn over it while I decide.
+    const preview = (decide: (accept: boolean) => void): (() => void) => {
+      const doc = openCanvas(path)?.doc
+      if (!doc) return () => {}
+      doc.getState().setGhost({ data: applyChanges(doc.getState().data, changes).data, decide })
+      return () => doc.getState().setGhost(null)
+    }
+    const reveal = async (): Promise<void> => {
+      if (!openCanvas(path)) show(path)
+      const open = await whenOpen(() => openCanvas(path))
+      if (open && planned.area) open.reveal(planned.area)
+    }
+    const accepted = await useChat
+      .getState()
+      .confirm(`Change ${fileName(path)}: ${changeCount(changes)}`, preview, reveal)
+    if (!accepted) throw new ToolError(REJECTED)
+
+    let result: EditResult
+    const doc = openCanvas(path)?.doc
+    if (doc) {
+      const current = doc.getState().data
+      result = applyChanges(current, changes)
+      // One undo step; a drag of mine going on meanwhile keeps working.
+      doc.getState().change((d) => (d === current ? result.data : applyChanges(d, changes).data))
+    } else {
+      result = applyChanges(canvasFrom(await window.api.vault.readText(path)), changes)
+      await window.api.vault.writeText(path, formatCanvas(result.data))
+    }
+    const renamed = [...result.added].filter(([mine, real]) => mine !== real)
+    return {
+      text: [
+        `Changed ${path}.`,
+        ...renamed.map(([mine, real]) => `Your id ${mine} was taken; it is ${real}.`),
+        ...result.errors,
+        'Look at it with screenshot to check the layout.'
+      ].join('\n')
+    }
   },
 
   async read_summary(args) {
@@ -742,6 +850,22 @@ const TOOLS: Record<string, (args: Args) => Promise<Result>> = {
       return { text: 'The whole app window as I see it now.', image: shot.image }
     }
     const path = fileArg(args, 'any')
+    if (/\.canvas$/i.test(path)) {
+      if (!openCanvas(path)) show(path)
+      const open = await whenOpen(() => openCanvas(path))
+      if (!open) throw new ToolError(`Could not open ${path}`)
+      const restore = open.fitAll()
+      try {
+        const surface = await found(() =>
+          document.querySelector<HTMLElement>(`.canvas-surface[data-path="${CSS.escape(path)}"]`)
+        )
+        await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+        const shot = await captureArea(viewOf(surface))
+        return { text: `All of ${path}, fitted in the view, as I see it.`, image: shot.image }
+      } finally {
+        restore()
+      }
+    }
     if (/\.md$/i.test(path)) {
       await showNote(path)
       const scroller = await found(() =>

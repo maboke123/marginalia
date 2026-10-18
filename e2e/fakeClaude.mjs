@@ -47,6 +47,20 @@ export async function* agent(input) {
       markdown: 'Short version: pick the split that lowers entropy the most.'
     })
     yield { type: 'text', text: reply.ok ? 'Added it under Information gain.' : reply.text }
+  } else if (/draw the classes/i.test(question)) {
+    const canvas = match(input.text, /^Canvas: (.+?) \(/m)
+    yield { type: 'tool', name: 'edit_canvas', input: { file: canvas } }
+    const reply = await input.callTool('edit_canvas', {
+      file: canvas,
+      changes: [
+        { op: 'add_box', id: 'animal', shape: 'class', text: 'Animal\n---\n- name: String' },
+        { op: 'add_box', id: 'dog', shape: 'class', text: 'Dog\n---\n+ bark()' },
+        { op: 'add_arrow', from: 'dog', to: 'animal', relation: 'inheritance' }
+      ]
+    })
+    const read = await input.callTool('read_canvas', { file: canvas })
+    await record(sessionId, { question: 'read_canvas', text: read.text })
+    yield { type: 'text', text: reply.ok ? 'Drew the classes.' : reply.text }
   } else if (/update the bagging note/i.test(question)) {
     const file = 'Machine Learning/B3 Ensembles/Bagging.md'
     yield { type: 'tool', name: 'insert_into_summary', input: { file } }

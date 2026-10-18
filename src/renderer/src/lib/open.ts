@@ -29,6 +29,8 @@ export interface OpenCanvas {
   view(): { x: number; y: number; width: number; height: number }
   /** Moves the view so the rectangle shows, for when I click Claude's change. */
   reveal(rect: { x: number; y: number; width: number; height: number }): void
+  /** Shows all of the canvas for a screenshot; returns a function that puts my view back. */
+  fitAll(): () => void
 }
 
 const pdfs = new Map<string, OpenPdf>()

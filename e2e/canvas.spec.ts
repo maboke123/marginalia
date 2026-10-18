@@ -1,7 +1,7 @@
 import { expect, test, type ElectronApplication, type Locator, type Page } from '@playwright/test'
 import { promises as fs } from 'fs'
 import path from 'path'
-import { createEnv, launch, type TestEnv } from './helpers'
+import { createEnv, fakeLog, launch, type TestEnv } from './helpers'
 
 let env: TestEnv
 let app: ElectronApplication
@@ -275,4 +275,39 @@ test('exports the whole canvas as a PDF', async () => {
   await expect(page.getByRole('status')).toContainText('Exported to', { timeout: 20_000 })
   const pdf = await fs.readFile(target)
   expect(pdf.subarray(0, 5).toString()).toBe('%PDF-')
+})
+
+test('Claude draws classes on the open canvas after I accept, as one undo step', async () => {
+  await fs.writeFile(file('Animals.canvas'), '{"nodes":[],"edges":[]}')
+  await row('Design of Software Systems').click()
+  await row('les_1').click()
+  await row('Animals').click()
+  await expect(page.locator('.canvas-hint')).toBeVisible()
+  await page.keyboard.press('Control+L')
+  const input = page.getByRole('textbox', { name: 'Message to Claude' })
+  await expect(page.getByRole('button', { name: 'Leave out Animals' })).toBeVisible()
+  await input.fill('Draw the classes')
+  await input.press('Enter')
+
+  await expect(page.locator('.canvas-node.ghost')).toHaveCount(2)
+  await expect(page.locator('.canvas-edge.ghost')).toHaveCount(1)
+  await page.screenshot({ path: path.join('test-results', 'canvas-claude-ghost.png') })
+  await page.locator('.canvas-ghost-bar').getByRole('button', { name: 'Accept' }).click()
+  await expect(page.locator('.claude-answer').last()).toHaveText('Drew the classes.')
+  await expect.poll(async () => (await read('Animals.canvas')).nodes.length).toBe(2)
+  const saved = await read('Animals.canvas')
+  expect(saved.edges[0]).toMatchObject({
+    fromNode: 'dog',
+    toNode: 'animal',
+    relation: 'inheritance'
+  })
+  const log = JSON.parse(await fs.readFile(fakeLog(env), 'utf8'))
+  const read_ = Object.values(log)
+    .flat()
+    .find((e) => (e as { question: string }).question === 'read_canvas') as { text: string }
+  expect(read_.text).toContain('- box dog (class)')
+
+  await surface().click({ position: { x: 20, y: 20 } })
+  await page.keyboard.press('Control+Z')
+  await expect(page.locator('.canvas-node')).toHaveCount(0)
 })

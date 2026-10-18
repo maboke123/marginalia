@@ -117,6 +117,12 @@ function describeTool(name: string, input: Record<string, unknown>): string {
       return `Read the text of ${file}`
     case 'create_note':
       return `Making the note ${input.name}.md`
+    case 'create_canvas':
+      return `Making the canvas ${input.name}`
+    case 'read_canvas':
+      return `Read the canvas ${file.replace(/\.canvas$/i, '')}`
+    case 'edit_canvas':
+      return `Drawing on ${file.replace(/\.canvas$/i, '')}`
     case 'read_summary':
       return input.heading ? `Read ${file} › ${input.heading}` : `Read ${file}`
     case 'insert_into_summary':

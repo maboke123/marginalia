@@ -4,7 +4,7 @@ import { isBlankPage, slideOf } from '../../../shared/blankPages'
 import { pageOf } from '../annotations/doc'
 import { imagePath } from '../annotations/images'
 import { textAround } from '../editor/sections'
-import { openNote, openPdf } from '../lib/open'
+import { openCanvas, openNote, openPdf } from '../lib/open'
 import { renderPage } from '../pdf/snapshot'
 import { pageText } from '../pdf/text'
 import { childrenOf, findNode, isFolder } from '../lib/tree'
@@ -53,6 +53,33 @@ async function chatContext(folder: string): Promise<string[]> {
   ]
 }
 
+/** The canvas in the pane I am looking at, if it is one. */
+function shownCanvas(): string | null {
+  const { lectureMode, summaryFile, activeFile } = useApp.getState()
+  const path = lectureMode ? summaryFile : activeFile
+  return path && /\.canvas$/i.test(path) ? path : null
+}
+
+/** The open canvas: its size and what I selected on it. Claude reads the rest itself. */
+function canvasContext(path: string): string[] {
+  const doc = openCanvas(path)?.doc
+  if (!doc) return [`Canvas: ${path} (read_canvas shows what is on it).`]
+  const { data, selection } = doc.getState()
+  const lines = [
+    `Canvas: ${path} (${data.nodes.length} boxes, ${data.edges.length} arrows; read_canvas ` +
+      'shows all of it).'
+  ]
+  const chosen = data.nodes.filter((n) => selection.nodes.includes(n.id))
+  if (chosen.length) {
+    lines.push('Selected on the canvas:')
+    for (const n of chosen.slice(0, 20)) {
+      const text = n.type === 'text' ? n.text : n.type === 'group' ? (n.label ?? '') : n.type
+      lines.push(`- ${n.id}: ${short(text.replace(/\s+/g, ' '), 80)}`)
+    }
+  }
+  return lines
+}
+
 /** One removable piece of the context packet, shown above the chat input. */
 export interface Chip {
   id: string
@@ -98,6 +125,14 @@ export function currentChips(attached: string[], quoted: string | null = null): 
         title: 'Text selected in the summary'
       })
     }
+  }
+  const canvas = shownCanvas()
+  if (canvas) {
+    chips.push({
+      id: 'canvas',
+      label: fileName(canvas).replace(/\.canvas$/i, ''),
+      title: 'The canvas you have open, and what is selected on it'
+    })
   }
   if (quoted) {
     // The whole text as the title: buildPacket sends it from there.
@@ -265,6 +300,9 @@ export async function buildPacket(
   if (ids.has('summary-selection') && noteCursor?.selection.trim()) {
     lines.push(`Selected in the summary: "${noteCursor.selection.trim()}"`)
   }
+
+  const canvas = shownCanvas()
+  if (ids.has('canvas') && canvas) lines.push(...canvasContext(canvas))
 
   const quoted = chips.find((c) => c.id === 'chat-selection')
   if (quoted) lines.push(`Selected in this chat: "${quoted.title}"`)

@@ -342,6 +342,11 @@ function CanvasSurface({
         path,
         doc,
         view: () => viewRect(cameraRef.current, size.width, size.height),
+        fitAll: () => {
+          const before = cameraRef.current
+          setCamera(fitCamera(boundsOf(doc.getState().data.nodes), size.width, size.height))
+          return () => setCamera(before)
+        },
         reveal: (rect) => {
           const view = viewRect(cameraRef.current, size.width, size.height)
           if (overlaps(view, rect) && rect.width < view.width) return

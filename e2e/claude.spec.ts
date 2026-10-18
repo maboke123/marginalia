@@ -697,7 +697,7 @@ test('/summary runs a skill that writes a new note linked to the slides', async 
   const input = page.getByRole('textbox', { name: 'Message to Claude' })
   await page.keyboard.press('Control+L')
   await input.fill('/')
-  await expect(page.locator('.claude-picker li')).toHaveCount(3)
+  await expect(page.locator('.claude-picker li')).toHaveCount(4)
   await input.press('Enter')
   await expect(input).toHaveValue('/summary ')
   await input.press('Enter')

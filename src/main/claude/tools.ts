@@ -3,6 +3,7 @@ import type {
   SdkMcpToolDefinition
 } from '@anthropic-ai/claude-agent-sdk'
 import { z } from 'zod'
+import { RELATIONS, SHAPES } from '../../shared/canvas'
 import type { ToolReply } from '../../shared/claude'
 import { SERVER_NAME } from './events'
 
@@ -23,6 +24,58 @@ const annotationPage = z
     '1-based slide number, or a blank page I added, like 3.1 for the first one after slide 3'
   )
 const color = z.string().describe('Hex colour like #cf222e')
+const canvas = file.describe('Vault path of a .canvas file')
+
+const canvasChange = z.object({
+  op: z.enum(['add_box', 'change_box', 'add_arrow', 'change_arrow', 'delete']),
+  id: z
+    .string()
+    .optional()
+    .describe(
+      'add_box/add_arrow: an id of your choice (letters, digits, - and _) to refer to in later ' +
+        'changes of this call; change_*/delete: the id from read_canvas'
+    ),
+  ids: z.array(z.string()).optional().describe('delete: ids of boxes and arrows'),
+  type: z.enum(['text', 'group']).optional().describe('add_box: a text box (default) or a group'),
+  shape: z
+    .enum(SHAPES)
+    .or(z.literal(''))
+    .optional()
+    .describe(
+      'Text box shape. class: name, attributes and operations split by lines of ---, ' +
+        'stereotype like «interface» on the first line. actor and ellipse for use cases, ' +
+        'rounded for states and actions, diamond for decisions, initial and final for start ' +
+        'and end, note for remarks'
+    ),
+  text: z.string().optional().describe('Markdown of a text box; $...$ for math'),
+  label: z.string().optional().describe('Label of a group (a package or system boundary)'),
+  x: z.number().optional(),
+  y: z.number().optional(),
+  width: z.number().optional(),
+  height: z.number().optional(),
+  color: z
+    .string()
+    .optional()
+    .describe(
+      '"1" red, "2" orange, "3" yellow, "4" green, "5" teal, "6" pink, a hex colour, or "" for none'
+    ),
+  from: z.string().optional().describe('add_arrow: id of the box it starts at'),
+  to: z.string().optional().describe('add_arrow: id of the box it points to'),
+  relation: z
+    .enum(RELATIONS)
+    .or(z.literal(''))
+    .optional()
+    .describe(
+      'UML relation; "" for a plain arrow. inheritance and realization point from child to ' +
+        'parent; aggregation and composition go from the whole (diamond) to the part; ' +
+        'dependency and directed point at what is used'
+    ),
+  arrow_label: z.string().optional().describe('Name of the association, in the middle'),
+  from_label: z.string().optional().describe('Multiplicity or role at the start, like 1'),
+  to_label: z.string().optional().describe('Multiplicity or role at the end, like 0..*'),
+  from_side: z.enum(['top', 'right', 'bottom', 'left']).optional(),
+  to_side: z.enum(['top', 'right', 'bottom', 'left']).optional()
+})
 
 const READ_ONLY = { readOnlyHint: true }
 
@@ -81,6 +134,36 @@ export function appToolServer(sdk: Sdk, call: CallTool): McpSdkServerConfigWithI
         link_to_pdf: pdf.optional()
       },
       run('create_note')
+    ),
+    sdk.tool(
+      'create_canvas',
+      'Makes a new empty canvas (a .canvas file I can zoom and pan, with boxes and arrows) in ' +
+        'a folder, without opening it. Fill it with edit_canvas. Returns its vault path.',
+      {
+        folder: z
+          .string()
+          .describe('Vault path of the folder, like Design of Software Systems/les_1'),
+        name: z.string().describe('File name without .canvas')
+      },
+      run('create_canvas')
+    ),
+    sdk.tool(
+      'read_canvas',
+      'Everything on a canvas: each box with its id, shape, position, size and text, groups, ' +
+        'images, and each arrow with its relation and labels. Includes changes not saved yet.',
+      { file: canvas },
+      run('read_canvas'),
+      { annotations: READ_ONLY }
+    ),
+    sdk.tool(
+      'edit_canvas',
+      'Changes a canvas in one step I can undo at once: add, change and delete boxes and ' +
+        'arrows. Canvas units are pixels at 100%; text is 16 px. Boxes without x and y are laid ' +
+        'out for you (in layers along the arrows, next to what is there); without width and ' +
+        'height they get a size that fits their text. A class box: "Name\n---\n- attr: Type' +
+        '\n---\n+ op(): Type". Afterwards look at it with screenshot and fix overlaps.',
+      { file: canvas, changes: z.array(canvasChange).min(1) },
+      run('edit_canvas')
     ),
     sdk.tool(
       'read_summary',
@@ -199,7 +282,8 @@ export function appToolServer(sdk: Sdk, call: CallTool): McpSdkServerConfigWithI
       'A picture of how something looks in the app right now, exactly as I see it. With a ' +
         'PDF and page: that whole page with everything on it (text boxes, highlights, ink, ' +
         'images, the margin; blank pages like 3.1 too), plus how PDF points map to its pixels. ' +
-        'With a note: the part of it on screen. Without file: the whole window. Use it after ' +
+        'With a note: the part of it on screen. With a canvas: all of it, fitted in the ' +
+        'view. Without file: the whole window. Use it after ' +
         'adding or changing annotations to check they fit, are readable and do not overlap, ' +
         'and fix what looks off.',
       { file: file.optional(), page: annotationPage.optional() },
@@ -243,6 +327,9 @@ export const APP_TOOLS = [
   'read_pdf_page',
   'read_pdf_text',
   'create_note',
+  'create_canvas',
+  'read_canvas',
+  'edit_canvas',
   'read_summary',
   'insert_into_summary',
   'replace_in_summary',

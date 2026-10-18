@@ -53,6 +53,37 @@ of a lecture.
 8. End with a short list per page of what you changed, and every Check you added.`
   },
   {
+    name: 'uml',
+    label: 'Draw UML diagrams from a description of a system',
+    steps: `Model the system I describe (in my message, a note, an exercise PDF or the canvas I
+have open) as UML on a canvas, the way it is done in a software design course.
+1. Find the source: my message, else the selected boxes or text on the open canvas, else the
+   exercise I name. Read it fully (read_pdf_text, read_summary, read_canvas).
+2. Decide which diagrams the question asks for (class diagram by default; use case, state or
+   activity when asked). For a class diagram:
+   - classes from the nouns that have their own data or behaviour; attributes with types; the
+     operations the description needs; visibility (- private, + public, # protected);
+   - relations: inheritance only for a real "is a"; composition when the part cannot exist
+     without the whole, aggregation when it can; association with a name and both
+     multiplicities (1, 0..1, 0..*, 1..*); dependency for "uses";
+   - interfaces («interface») and enumerations («enumeration») where the text implies them.
+   For a use case diagram: actors outside a system boundary group, use cases as ellipses,
+   associations, and include/extend as dependency arrows labelled «include» / «extend». For
+   state diagrams: initial and final states, states as rounded boxes, transitions labelled
+   "event [guard] / action". For activity diagrams: start, actions, decisions with labelled
+   outgoing arrows, end.
+3. Draw it with edit_canvas on the canvas I have open; if none is open, create_canvas in the
+   folder of the exercise or of what I have open, named after the system. Put all boxes and
+   arrows in one edit_canvas call; leave out x and y so the layout is done for you, or give
+   positions when the diagram needs a particular shape. A sequence diagram goes in one text
+   box as a mermaid \`sequenceDiagram\` block.
+4. Look at the result with screenshot. Fix overlapping boxes, crossing arrows and text cut
+   off by a box that is too small (change_box with a bigger width or height), with one more
+   edit_canvas call.
+5. Reply briefly: the modelling choices that were not obvious (why composition and not
+   aggregation, an assumption about a multiplicity), and what the description left open.`
+  },
+  {
     name: 'exercise',
     label: 'Write the takeaways of this exercise session as a note',
     steps: `We went through an exercise session (in this chat, and in my notes and
