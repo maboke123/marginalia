@@ -221,6 +221,12 @@ function show(path: string, page?: number): void {
   app.openFile(path, page)
 }
 
+function openMade(path: string, pdf: string | null): void {
+  const app = useApp.getState()
+  if (pdf && app.lectureMode && app.slidesFile === pdf) void app.showNote(path)
+  else show(path)
+}
+
 async function showNote(path: string): Promise<OpenNote> {
   if (!openNote(path)) show(path)
   const note = await whenOpen(() => openNote(path))
@@ -281,22 +287,30 @@ function fitOnPage(open: OpenPdf & { doc: AnnotationDoc }, page: number, box: Te
   )
 }
 
-/** Applies a change to an open note as one undo step, after I accept it if I want to be asked. */
+/**
+ * Changes a note after I accept it if I want to be asked: in the editor as one undo step when
+ * the note is open, else in the file, so the view and the chat stay where I am. `text` is the
+ * note as the change was planned on.
+ */
 async function editNote(
-  { path, view: first }: OpenNote,
+  path: string,
+  text: string,
   change: { from: number; to: number; insert: string },
   label: string
 ): Promise<void> {
-  const original = first.state.sliceDoc(change.from, change.to)
+  const original = text.slice(change.from, change.to)
   // Positions may move while I type elsewhere; the preview keeps track of them.
   let range = { from: change.from, to: change.to }
   // Only after I click the change in the chat; otherwise my view stays where I am reading.
   let jump = false
   // Closing and opening the note again gives a new editor.
-  const current = (): EditorView => openNote(path)?.view ?? first
+  const current = (): EditorView | null => {
+    const view = openNote(path)?.view
+    return view?.dom.isConnected ? view : null
+  }
   const show = (decide: (accept: boolean) => void): (() => void) => {
     const view = current()
-    if (!view.dom.isConnected) return () => {}
+    if (!view || view.state.sliceDoc(range.from, range.to) !== original) return () => {}
     // Scrolling does not move my cursor, in case I am still typing.
     const preview = setPendingEdit.of({ ...range, insert: change.insert, original, decide })
     view.dispatch({
@@ -315,13 +329,16 @@ async function editNote(
   }
   const accepted = await useChat.getState().confirm(label, show, reveal)
   if (!accepted) throw new ToolError(REJECTED)
-  const view = current()
-  if (!view.dom.isConnected) throw new ToolError('The note was closed before the change was made')
-
+  const changed = new ToolError('That text changed in the meantime; read the summary again')
   const { from, to } = range
-  if (view.state.sliceDoc(from, to) !== original) {
-    throw new ToolError('That text changed in the meantime; read the summary again')
+  const view = current()
+  if (!view) {
+    const now = await window.api.vault.readText(path)
+    if (now.slice(from, to) !== original) throw changed
+    await window.api.vault.writeText(path, now.slice(0, from) + change.insert + now.slice(to))
+    return
   }
+  if (view.state.sliceDoc(from, to) !== original) throw changed
   view.dispatch({
     changes: { from, to, insert: change.insert },
     // Its own undo step, not merged with my typing before or after.
@@ -420,9 +437,12 @@ const TOOLS: Record<string, (args: Args) => Promise<Result>> = {
     await window.api.vault.writeText(path, String(args.markdown ?? '').trimEnd() + '\n')
     if (pdf) await window.api.vault.linkNote(pdf, path, 'add')
     await useApp.getState().refresh()
-    const app = useApp.getState()
-    if (pdf && app.lectureMode && app.slidesFile === pdf) await app.showNote(path)
-    else show(path)
+    // Opening it would take me away from what I am reading, and the chat with it.
+    useApp
+      .getState()
+      .showNotice(`Claude made ${fileName(path)}`, [
+        { label: 'Open', run: () => openMade(path, pdf) }
+      ])
     return { text: `Made ${path}${pdf ? `, linked to ${pdf}` : ''}.` }
   },
 
@@ -439,9 +459,8 @@ const TOOLS: Record<string, (args: Args) => Promise<Result>> = {
     const path = fileArg(args, 'markdown')
     const markdown = String(args.markdown ?? '')
     if (!markdown.trim()) throw new ToolError('Nothing to insert')
-    const note = await showNote(path)
-    const { view } = note
-    const text = view.state.doc.toString()
+    const view = openNote(path)?.view
+    const text = await noteText(path)
     let pos: number
     let where: string
     if (args.position === 'heading') {
@@ -449,7 +468,7 @@ const TOOLS: Record<string, (args: Args) => Promise<Result>> = {
       if (!section) throw new ToolError(`No heading "${args.heading}". ${headingList(text)}`)
       pos = endOfContent(text, section.from, section.to)
       where = `under ${section.heading.title}`
-    } else if (args.position === 'cursor') {
+    } else if (args.position === 'cursor' && view) {
       pos = view.state.doc.lineAt(view.state.selection.main.head).to
       where = 'at the cursor'
     } else {
@@ -457,7 +476,7 @@ const TOOLS: Record<string, (args: Args) => Promise<Result>> = {
       where = 'at the end'
     }
     const { from, insert } = blockInsert(text, pos, markdown)
-    await editNote(note, { from, to: from, insert }, `Add to ${fileName(path)} ${where}`)
+    await editNote(path, text, { from, to: from, insert }, `Add to ${fileName(path)} ${where}`)
     return { text: `Inserted into ${path} ${where}.` }
   },
 
@@ -466,16 +485,15 @@ const TOOLS: Record<string, (args: Args) => Promise<Result>> = {
     const oldText = String(args.old_text ?? '')
     const newText = String(args.new_text ?? '')
     if (!oldText) throw new ToolError('old_text is empty')
-    const note = await showNote(path)
-    const { view } = note
-    const text = view.state.doc.toString()
+    const text = await noteText(path)
     const at = text.indexOf(oldText)
     if (at === -1) throw new ToolError('old_text was not found; read the summary again')
     if (text.indexOf(oldText, at + 1) !== -1) {
       throw new ToolError('old_text appears more than once; include more surrounding text')
     }
     await editNote(
-      note,
+      path,
+      text,
       { from: at, to: at + oldText.length, insert: newText },
       `Change text in ${fileName(path)}`
     )
