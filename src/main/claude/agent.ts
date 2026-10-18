@@ -200,12 +200,19 @@ export interface HandOffInput {
 
 /**
  * Continues a chat once from another folder as a copy, which Claude Code saves with that
- * folder's conversations, where the VS Code extension looks. Returns the copy's id.
+ * folder's conversations, where the VS Code extension looks. Returns the copy's id, or the
+ * chat's own id when it is saved there already.
  */
 export type HandOff = (input: HandOffInput) => Promise<string>
 
 export const claudeHandOff: HandOff = async (input) => {
   const sdk = await import('@anthropic-ai/claude-agent-sdk')
+  // After an earlier hand-off the chat lives there already. Copying it again took a model call
+  // over the whole history (half a minute for a long chat) and piled up copies.
+  if (await sdk.getSessionInfo(input.sessionId, { dir: input.cwd })) {
+    await sdk.renameSession(input.sessionId, input.title, { dir: input.cwd })
+    return input.sessionId
+  }
   const query = sdk.query({
     prompt: input.text,
     options: {
