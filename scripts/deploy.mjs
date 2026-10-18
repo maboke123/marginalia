@@ -144,11 +144,8 @@ console.log(`Installed version ${version} (${commit}).`)
 // The release tag goes on only once it is installed, so a failed deploy uses the version again.
 if (tag !== lastTag) {
   run(`git tag -a ${tag} -m "Release ${version}"`)
-  try {
-    execFileSync('git', ['push', 'origin', tag], { cwd: root, stdio: 'inherit', env })
-  } catch {
-    console.error(`Tagged ${tag} here, but could not push it; run: git push origin ${tag}`)
-  }
+  // Pushed by hand once I have tried the build: others install from the public repo.
+  console.log(`Tagged ${tag} here. Push it with the commits when the build is good.`)
 }
 
 if (start) {
