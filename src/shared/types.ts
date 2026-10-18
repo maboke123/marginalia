@@ -1,4 +1,4 @@
-export type NodeKind = 'notebook' | 'section' | 'markdown' | 'pdf'
+export type NodeKind = 'notebook' | 'section' | 'markdown' | 'pdf' | 'canvas'
 
 import type { AnnotationFile, LoadedAnnotations } from './annotations'
 import type { AppSettings, TranscribeLanguage } from './settings'
@@ -81,6 +81,8 @@ export interface MarginaliaApi {
     tree(): Promise<VaultTree>
     createFolder(parent: string, name: string): Promise<string>
     createNote(parent: string, name: string): Promise<string>
+    /** A new empty .canvas file (JSON Canvas). */
+    createCanvas(parent: string, name: string): Promise<string>
     /** Makes the vault's Todo.md when it is missing; returns its path. */
     ensureTodo(): Promise<string>
     rename(path: string, name: string): Promise<string>
@@ -357,7 +359,7 @@ export interface ExportedPdf {
 
 export interface SearchHit {
   path: string
-  kind: 'pdf' | 'markdown'
+  kind: 'pdf' | 'markdown' | 'canvas'
   /** PDF page, 1-based. */
   page?: number
   /** Line in the note where the matching paragraph starts, 1-based. */

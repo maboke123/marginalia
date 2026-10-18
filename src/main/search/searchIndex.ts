@@ -1,5 +1,6 @@
 import { promises as fs } from 'fs'
 import path from 'path'
+import { canvasFrom, canvasText } from '../../shared/canvas'
 import { fold } from '../../shared/text'
 import { blankColorTags } from '../../shared/textColor'
 import type { PdfToIndex, SearchHit, SearchResult, VaultNode } from '../../shared/types'
@@ -92,7 +93,7 @@ export class SearchIndex {
     }
 
     // Notes first: they are my own words, usually what I am looking for.
-    for (const file of all.filter((f) => f.kind === 'markdown')) {
+    for (const file of all.filter((f) => f.kind === 'markdown' || f.kind === 'canvas')) {
       const note = await this.note(file.path, file.stamp)
       if (!note || !words.length) continue
       let count = 0
@@ -103,7 +104,8 @@ export class SearchIndex {
         const before = note.text.slice(p.from, p.from + at).split('\n').length - 1
         const text = note.text.slice(p.from, p.to)
         const hit = snippet(text, note.folded.slice(p.from, p.to), words, at)
-        if (!add({ path: file.path, kind: 'markdown', line: p.line + before, ...hit })) break
+        const kind = file.kind === 'canvas' ? 'canvas' : 'markdown'
+        if (!add({ path: file.path, kind, line: p.line + before, ...hit })) break
       }
     }
 
@@ -136,7 +138,11 @@ export class SearchIndex {
     if (cached?.stamp === stamp) return cached
     try {
       // Without the colour tags, "red" finds red things rather than every coloured word.
-      const text = blankColorTags(await fs.readFile(this.vault.resolve(rel), 'utf8'))
+      const raw = await fs.readFile(this.vault.resolve(rel), 'utf8')
+      // A canvas is searched by the text in its boxes, one box per paragraph.
+      const text = blankColorTags(
+        /\.canvas$/i.test(rel) ? canvasText(canvasFrom(raw)).join('\n\n') : raw
+      )
       const entry = { stamp, text, folded: fold(text) }
       this.notes.set(rel, entry)
       return entry

@@ -34,7 +34,7 @@ const CODE_DOC = /^(readme|changelog|contributing)\.md$/i
 export function isHidden(name: string, isDir: boolean): boolean {
   if (name.startsWith('.')) return true
   if (isDir) return name === ASSETS_DIR || TOOL_DIRS.has(name)
-  return !/\.(md|pdf)$/i.test(name)
+  return !/\.(md|pdf|canvas)$/i.test(name)
 }
 
 export const isCodeFile = (name: string): boolean => CODE_FILE.test(name)

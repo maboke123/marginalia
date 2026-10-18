@@ -27,7 +27,7 @@ const exportActions = (file: string): NoticeAction[] => [
   { label: 'Show in folder', run: () => void api.revealExport(file) }
 ]
 
-type NewItem = 'notebook' | 'section' | 'page'
+type NewItem = 'notebook' | 'section' | 'page' | 'canvas'
 
 export type Tool = 'select' | 'pen' | 'highlighter' | 'eraser' | 'text'
 
@@ -89,7 +89,8 @@ export interface PdfGoto {
 const DEFAULT_NAMES: Record<NewItem, string> = {
   notebook: 'New notebook',
   section: 'New section',
-  page: 'Untitled'
+  page: 'Untitled',
+  canvas: 'Untitled canvas'
 }
 
 interface AppState {
@@ -622,7 +623,11 @@ export const useApp = create<AppState>((set, get) => {
     async create(item, parent) {
       const name = DEFAULT_NAMES[item]
       const path = await attempt(() =>
-        item === 'page' ? api.createNote(parent, name) : api.createFolder(parent, name)
+        item === 'page'
+          ? api.createNote(parent, name)
+          : item === 'canvas'
+            ? api.createCanvas(parent, name)
+            : api.createFolder(parent, name)
       )
       if (!path) return
       if (parent) get().setExpanded(parent, true)

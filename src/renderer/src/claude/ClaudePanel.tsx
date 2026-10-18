@@ -498,7 +498,7 @@ function ChatInput({ chat, busy }: { chat: string; busy: boolean }): React.JSX.E
         .slice(0, 6)
         .map((node): Option => ({
           key: node.path,
-          icon: node.kind === 'pdf' ? 'pdf' : 'page',
+          icon: node.kind === 'pdf' ? 'pdf' : node.kind === 'canvas' ? 'canvas' : 'page',
           text: node.path,
           pick: () => pick(node.path)
         }))

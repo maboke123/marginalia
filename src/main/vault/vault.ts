@@ -11,6 +11,13 @@ import {
   type VaultNode,
   type VaultTree
 } from '../../shared/types'
+import {
+  canvasFrom,
+  EMPTY_CANVAS,
+  formatCanvas,
+  type CanvasData,
+  type FileNode
+} from '../../shared/canvas'
 import { formatAnnotations, isAnnotationFile, sha256File } from './annotations'
 import { renameWithRetry, tempPathFor, writeFileAtomic } from './atomic'
 import {
@@ -152,6 +159,9 @@ async function visibleEntries(dir: string): Promise<Entry[]> {
 
 const isPdf = (p: string): boolean => /\.pdf$/i.test(p)
 const isMarkdown = (p: string): boolean => /\.md$/i.test(p)
+const isCanvas = (p: string): boolean => /\.canvas$/i.test(p)
+const fileKind = (name: string): 'pdf' | 'markdown' | 'canvas' =>
+  isPdf(name) ? 'pdf' : isCanvas(name) ? 'canvas' : 'markdown'
 
 const IMAGE_TYPES = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'])
 
@@ -238,7 +248,7 @@ export class Vault {
       .map(({ name }): VaultNode => ({
         name,
         path: relOf(name),
-        kind: isPdf(name) ? 'pdf' : 'markdown'
+        kind: fileKind(name)
       }))
     // The notes shown under a hidden PDF go with it.
     const gone = new Set(hidden)
@@ -250,7 +260,7 @@ export class Vault {
       shown.map(async ({ name, isDir }): Promise<VaultNode> => {
         const abs = path.join(dir, name)
         const rel = toRel(this.root, abs)
-        if (!isDir) return { name, path: rel, kind: isPdf(name) ? 'pdf' : 'markdown' }
+        if (!isDir) return { name, path: rel, kind: fileKind(name) }
         return {
           name,
           path: rel,
@@ -274,6 +284,15 @@ export class Vault {
     const base = validateName(name).replace(/\.md$/i, '')
     const target = path.join(parent, await uniqueName(parent, base, '.md'))
     await fs.writeFile(target, '', { flag: 'wx' })
+    return toRel(this.root, target)
+  }
+
+  async createCanvas(parentRel: string, name: string): Promise<string> {
+    if (!parentRel) throw new VaultError('Canvases go inside a notebook or section')
+    const parent = await this.existingDir(parentRel)
+    const base = validateName(name).replace(/\.canvas$/i, '')
+    const target = path.join(parent, await uniqueName(parent, base, '.canvas'))
+    await fs.writeFile(target, formatCanvas(EMPTY_CANVAS), { flag: 'wx' })
     return toRel(this.root, target)
   }
 
@@ -350,7 +369,9 @@ export class Vault {
 
   async readText(rel: string): Promise<string> {
     const abs = this.resolveItem(rel)
-    if (!isMarkdown(abs)) throw new VaultError(`"${rel}" is not a Markdown file`)
+    if (!isMarkdown(abs) && !isCanvas(abs)) {
+      throw new VaultError(`"${rel}" is not a Markdown file or canvas`)
+    }
     return fs.readFile(abs, 'utf8').catch(() => {
       throw new VaultError(`"${rel}" does not exist`)
     })
@@ -358,7 +379,9 @@ export class Vault {
 
   async writeText(rel: string, text: string): Promise<void> {
     const abs = this.resolveItem(rel)
-    if (!isMarkdown(abs)) throw new VaultError(`"${rel}" is not a Markdown file`)
+    if (!isMarkdown(abs) && !isCanvas(abs)) {
+      throw new VaultError(`"${rel}" is not a Markdown file or canvas`)
+    }
     // Refuse to resurrect a note that was deleted or moved while it was open.
     if (!(await exists(abs))) throw new VaultError(`"${rel}" no longer exists`)
     await writeFileAtomic(abs, text)
@@ -528,6 +551,7 @@ export class Vault {
     if (note && noteTarget) {
       await this.remapState(toRel(this.root, note), toRel(this.root, noteTarget))
     }
+    await this.remapCanvasFiles(toRel(this.root, abs), toRel(this.root, target))
     return toRel(this.root, target)
   }
 
@@ -575,6 +599,7 @@ export class Vault {
       for (const [note, noteTarget] of noteMoves) {
         await this.remapState(toRel(this.root, note), toRel(this.root, noteTarget))
       }
+      await this.remapCanvasFiles(toRel(this.root, abs), toRel(this.root, target))
     }
 
     if (before !== undefined) {
@@ -640,7 +665,9 @@ export class Vault {
         ? this.copyPageImages(path.dirname(from), to)
         : isMarkdown(to)
           ? this.copyNoteImages(path.dirname(from), to)
-          : null
+          : isCanvas(to)
+            ? this.copyCanvasImages(path.dirname(from), to)
+            : null
       await copied?.catch(console.error)
     }
   }
@@ -653,7 +680,7 @@ export class Vault {
       .map((e) => ({
         name: e.name,
         path: toRel(this.root, path.join(dir, e.name)),
-        kind: isPdf(e.name) ? ('pdf' as const) : ('markdown' as const)
+        kind: fileKind(e.name)
       }))
     const state = await this.readState()
     const notes = pairNotes(files, noteLinks(state.notes)).get(toRel(this.root, pdf)) ?? []
@@ -737,6 +764,73 @@ export class Vault {
       return `](${open}${href}${close})`
     })
     await writeFileAtomic(note, next)
+  }
+
+  /** Changes the vault paths of a canvas's file nodes; a damaged canvas is left alone. */
+  private async rewriteCanvas(abs: string, change: (file: string) => string): Promise<void> {
+    let data: CanvasData
+    try {
+      data = canvasFrom(await fs.readFile(abs, 'utf8'))
+    } catch {
+      return
+    }
+    let changed = false
+    const nodes = data.nodes.map((node) => {
+      if (node.type !== 'file') return node
+      const file = change(node.file)
+      if (file === node.file) return node
+      changed = true
+      return { ...node, file }
+    })
+    if (changed) await writeFileAtomic(abs, formatCanvas({ ...data, nodes }))
+  }
+
+  /** Every canvas in a folder and the folders in it. */
+  private async canvasesIn(dir: string): Promise<string[]> {
+    const dirents = await fs.readdir(dir, { withFileTypes: true }).catch(() => [])
+    const found: string[] = []
+    for (const d of dirents) {
+      if (d.name.startsWith('.')) continue
+      const abs = path.join(dir, d.name)
+      if (d.isDirectory()) found.push(...(await this.canvasesIn(abs)))
+      else if (isCanvas(d.name)) found.push(abs)
+    }
+    return found
+  }
+
+  /**
+   * Canvases point at images and files by vault path, like Obsidian; after a rename or move
+   * those paths follow, in every canvas of the vault.
+   */
+  private async remapCanvasFiles(from: string, to: string): Promise<void> {
+    if (from === to) return
+    const change = (file: string): string =>
+      file === from ? to : file.startsWith(`${from}/`) ? to + file.slice(from.length) : file
+    for (const canvas of await this.canvasesIn(this.root)) {
+      await this.rewriteCanvas(canvas, change).catch(console.error)
+    }
+  }
+
+  /** After a canvas moved to another folder, the images in its assets folder follow it. */
+  private async copyCanvasImages(oldDir: string, canvas: string): Promise<void> {
+    const oldAssets = `${toRel(this.root, path.join(oldDir, ASSETS_DIR))}/`
+    const newDir = toRel(this.root, path.dirname(canvas))
+    let data: CanvasData
+    try {
+      data = canvasFrom(await fs.readFile(canvas, 'utf8'))
+    } catch {
+      return
+    }
+    const sources = data.nodes
+      .filter((n): n is FileNode => n.type === 'file' && n.file.startsWith(oldAssets))
+      .map((n) => `${ASSETS_DIR}/${n.file.slice(oldAssets.length)}`)
+    if (!sources.length) return
+    const renamed = await this.copyAssets(oldDir, path.dirname(canvas), sources)
+    await this.rewriteCanvas(canvas, (file) => {
+      if (!file.startsWith(oldAssets)) return file
+      const src = `${ASSETS_DIR}/${file.slice(oldAssets.length)}`
+      return `${newDir}/${renamed.get(src) ?? src}`
+    })
   }
 
   private async existingPdf(rel: string): Promise<string> {

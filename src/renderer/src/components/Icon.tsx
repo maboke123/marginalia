@@ -6,6 +6,7 @@ const PATHS = {
   folder: 'M2 4.5a1 1 0 0 1 1-1h3l1.5 1.5H13a1 1 0 0 1 1 1V12a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1z',
   page: 'M4 1.75h5.5L12.5 4.75v9.5H4zM9.5 1.75v3h3M6 8h4.5M6 10.5h4.5',
   pdf: 'M4 1.75h5.5L12.5 4.75v9.5H4zM9.5 1.75v3h3M6 9.5h1.25a1 1 0 0 0 0-2H6v4',
+  canvas: 'M2 2.5h5v3.5H2zM9 10h5v3.5H9zM4.5 6v5.75H9M7 4.25h4.5V10',
   plus: 'M8 3v10M3 8h10',
   minus: 'M3 8h10',
   import: 'M8 2.5v7.5M5 7l3 3 3-3M3 11v2.5h10V11',

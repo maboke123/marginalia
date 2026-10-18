@@ -129,6 +129,7 @@ export function Sidebar(): React.JSX.Element {
           onSelect: () => app.create('section', node.path)
         },
         { label: 'New page', onSelect: () => app.create('page', node.path) },
+        { label: 'New canvas', onSelect: () => app.create('canvas', node.path) },
         {
           label: 'Import PDF...',
           hint: app.settings.hotkeys.importPdf,
@@ -144,7 +145,7 @@ export function Sidebar(): React.JSX.Element {
       items.push({ label: 'Open', onSelect: () => app.openFile(node.path) })
       if (node.kind === 'pdf') {
         items.push({ label: 'Export annotated PDF...', onSelect: () => app.exportPdf(node.path) })
-      } else {
+      } else if (node.kind === 'markdown') {
         items.push(
           { label: 'Preview as PDF', onSelect: () => app.showPreview(node.path) },
           { label: 'Export as PDF...', onSelect: () => app.exportNote(node.path) }

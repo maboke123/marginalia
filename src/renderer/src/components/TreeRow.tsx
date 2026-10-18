@@ -9,7 +9,8 @@ const ICONS: Record<VaultNode['kind'], IconName> = {
   notebook: 'notebook',
   section: 'folder',
   markdown: 'page',
-  pdf: 'pdf'
+  pdf: 'pdf',
+  canvas: 'canvas'
 }
 
 interface Props {

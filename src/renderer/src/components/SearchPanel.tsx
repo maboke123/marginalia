@@ -79,7 +79,9 @@ export function SearchPanel(): React.JSX.Element {
           return [
             first && (
               <li key={`file-${hit.path}`} className="overlay-group search-file">
-                <Icon name={hit.kind === 'pdf' ? 'pdf' : 'page'} />
+                <Icon
+                  name={hit.kind === 'pdf' ? 'pdf' : hit.kind === 'canvas' ? 'canvas' : 'page'}
+                />
                 <span>{hit.path.split('/').pop()}</span>
                 <span className="muted">{parentOf(hit.path)}</span>
               </li>

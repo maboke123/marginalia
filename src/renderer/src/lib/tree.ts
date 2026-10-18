@@ -26,7 +26,8 @@ export function parentOf(path: string): string {
 }
 
 export function displayName(node: VaultNode): string {
-  return node.kind === 'markdown' ? node.name.replace(/\.md$/i, '') : node.name
+  if (node.kind === 'markdown') return node.name.replace(/\.md$/i, '')
+  return node.kind === 'canvas' ? node.name.replace(/\.canvas$/i, '') : node.name
 }
 
 /** True when `path` is `ancestor` itself or lies somewhere inside it. */
