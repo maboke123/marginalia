@@ -7,6 +7,7 @@ import type {
   CompleteRequest,
   ChatEvent,
   ChatHistoryItem,
+  ChatInfo,
   ChatRequest,
   ClaudeSettings,
   ClaudeSettingsUpdate,
@@ -193,6 +194,8 @@ export interface MarginaliaApi {
     complete(request: CompleteRequest): Promise<string>
     cancelComplete(id: string): Promise<void>
     history(chat: string): Promise<ChatHistoryItem[]>
+    /** Every folder of the vault that has a conversation. */
+    chats(): Promise<ChatInfo[]>
     /** Forgets the section's conversation, so the next message starts a new one. */
     newChat(chat: string): Promise<void>
     /**

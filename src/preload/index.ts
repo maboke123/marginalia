@@ -130,6 +130,7 @@ const api: MarginaliaApi = {
     complete: (request) => invoke('claude:complete', request),
     cancelComplete: (id) => invoke('claude:cancelComplete', id),
     history: (chat) => invoke('claude:history', chat),
+    chats: () => invoke('claude:chats'),
     newChat: (chat) => invoke('claude:newChat', chat),
     openInCode: (folder) => invoke('claude:openInCode', folder),
     memory: () => invoke('claude:memory'),

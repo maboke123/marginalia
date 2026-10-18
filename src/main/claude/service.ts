@@ -1,10 +1,13 @@
 import { randomUUID } from 'crypto'
+import fs from 'fs/promises'
+import path from 'path'
 import { BrowserWindow, ipcMain, safeStorage } from 'electron'
 import { pathToFileURL } from 'url'
 import type {
   CompleteRequest,
   ChatEvent,
   ChatHistoryItem,
+  ChatInfo,
   ChatRequest,
   ClaudeSettings,
   ClaudeSettingsUpdate,
@@ -27,6 +30,7 @@ import { storedApiKey } from './cli'
 import { courseOf, courseOfFile, type MemoryStore } from './memory'
 import type { Memory } from './prompt'
 import { toHistory } from './events'
+import { findSession, projectsDir } from './sessions'
 import type { CallTool } from './tools'
 
 /** UI tests load a scripted agent instead, so they never use the real Claude. */
@@ -275,6 +279,18 @@ export function registerClaude(
       console.error('[claude:history]', err)
       return []
     })
+  })
+
+  handle('claude:chats', async (): Promise<ChatInfo[]> => {
+    const sessions = await vault().chatSessions()
+    const root = projectsDir()
+    return Promise.all(
+      Object.entries(sessions).map(async ([folder, id]) => {
+        const dir = await findSession(root, id)
+        const stat = dir ? await fs.stat(path.join(dir, `${id}.jsonl`)).catch(() => null) : null
+        return { folder, updated: stat?.mtimeMs ?? null }
+      })
+    )
   })
 
   // The chat of the folder (or the lesson around it) goes along, and the app goes on with the

@@ -448,6 +448,76 @@ test('adds a blank page and changes, moves and removes annotations', async () =>
   )
 })
 
+test('the chat I ask in stays while I open its subfolders; the picker switches', async () => {
+  await fs.mkdir(path.join(env.vault, section, 'Exercises'))
+  await fs.writeFile(path.join(env.vault, section, 'Exercises/Sheet 1.md'), '# Sheet 1\n')
+  await openSlides()
+  await ask('What is entropy?')
+  await expect(answers()).toHaveText('You asked: What is entropy?')
+
+  await row('Exercises').click()
+  await row('Sheet 1').click()
+  await expect(page.locator('.md-editor')).toBeVisible()
+  await expect(page.locator('.claude-chat-name')).toHaveText('B2 Decision trees')
+  await expect(page.locator('.claude-question')).toHaveText('What is entropy?')
+
+  await page.locator('.claude-chat-name').click()
+  const menu = page.locator('.claude-chat-menu')
+  await expect(menu.locator('.menu-heading')).toHaveText(['This folder', 'Folders above'])
+  await menu.getByRole('menuitem', { name: 'Exercises' }).click()
+  await expect(page.locator('.claude-chat-name')).toHaveText('Exercises')
+  await expect(page.locator('.claude-question')).toHaveCount(0)
+
+  // Back to the lesson chat from the picker, and it stays while I stay in the lesson.
+  await page.locator('.claude-chat-name').click()
+  await menu.getByRole('menuitem', { name: /B2 Decision trees/ }).click()
+  await expect(page.locator('.claude-question')).toHaveText('What is entropy?')
+  await row('B3 Ensembles').click()
+  await row('Bagging').click()
+  await expect(page.locator('.claude-chat-name')).toHaveText('B3 Ensembles')
+})
+
+test('Claude changes a note in another folder without taking me there', async () => {
+  const bagging = path.join(env.vault, 'Machine Learning/B3 Ensembles/Bagging.md')
+  await openSlides(3)
+  await ask('Update the bagging note')
+  await expect(page.locator('.claude-proposal-label', { hasText: 'Bagging.md' })).toBeVisible()
+  await expect(page.locator('.md-editor')).toHaveCount(0)
+  await page
+    .locator('.claude-proposal')
+    .getByRole('button', { name: 'Accept', exact: true })
+    .click()
+  await expect(answers().last()).toHaveText('Updated the bagging note.')
+  await expect.poll(() => fs.readFile(bagging, 'utf8')).toContain('Bagging averages many trees.')
+  await expect(page.getByRole('textbox', { name: 'Page' })).toHaveValue('3')
+  await expect(page.locator('.claude-chat-name')).toHaveText('B2 Decision trees')
+})
+
+test('another chat and a whole folder go along with @', async () => {
+  await openSlides()
+  await row('B3 Ensembles').click()
+  await row('Bagging').click()
+  await ask('What is bagging?')
+  await expect(answers()).toHaveText('You asked: What is bagging?')
+
+  await row('slides.pdf').click()
+  const input = page.getByRole('textbox', { name: 'Message to Claude' })
+  await input.fill('@B3')
+  const picker = page.locator('.claude-picker')
+  await picker.locator('li', { hasText: 'Chat' }).click()
+  await input.fill('@Machine')
+  await picker.locator('li', { hasText: 'Everything in it' }).first().click()
+  await expect(page.getByRole('button', { name: 'Leave out @B3 Ensembles chat' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Leave out @Machine Learning/' })).toBeVisible()
+  await ask('Compare this with bagging')
+  await expect(answers().last()).toHaveText('You asked: Compare this with bagging')
+  const sent = (await readLog()).at(-1)!.text
+  expect(sent).toContain('I attached my other chat about Machine Learning/B3 Ensembles')
+  expect(sent).toContain('Me: What is bagging?')
+  expect(sent).toContain('I attached the folder Machine Learning')
+  expect(sent).toContain('- Machine Learning/B3 Ensembles/Bagging.md')
+})
+
 test('keeps one conversation per lesson across restarts', async () => {
   await openSlides()
   await ask('What is entropy?')
@@ -642,7 +712,9 @@ test('/summary runs a skill that writes a new note linked to the slides', async 
 
   const note = path.join(env.vault, section, 'slides summary.md')
   expect(await fs.readFile(note, 'utf8')).toContain('most information gain')
-  // Opened next to the slides, and linked to them.
+  // It stays closed so I keep my place; the notice opens it next to the slides.
+  await expect(page.locator('.md-editor')).toHaveCount(0)
+  await page.locator('.toast').getByRole('button', { name: 'Open' }).click()
   await expect(page.locator('.cm-content')).toContainText('most information gain')
   const state = JSON.parse(
     await fs.readFile(path.join(env.vault, '.marginalia/state.json'), 'utf8')

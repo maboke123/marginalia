@@ -438,6 +438,10 @@ export class Vault {
     )
   }
 
+  async chatSessions(): Promise<Record<string, string>> {
+    return (await this.readState()).chats ?? {}
+  }
+
   async chatSession(section: string): Promise<string | null> {
     const state = await this.readState()
     return state.chats?.[section] ?? null

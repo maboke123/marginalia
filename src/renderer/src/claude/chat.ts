@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import type { ChatEvent, ClaudeSettings, ClaudeSettingsUpdate } from '../../../shared/claude'
 import { findNode, isFolder, parentOf } from '../lib/tree'
 import { useApp } from '../store'
+import { pickPin, sendPin, shownChat, type Pin } from './chatPin'
 import { buildPacket, currentChips } from './context'
 
 export type Part =
@@ -38,6 +39,8 @@ interface ChatState {
   chats: Record<string, Chat>
   /** The chat that is waiting for an answer. */
   running: string | null
+  /** The chat the panel keeps showing instead of following the open file's folder. */
+  pin: Pin | null
   settings: ClaudeSettings | null
   /** Chips taken out of the next message. */
   removedChips: string[]
@@ -49,6 +52,8 @@ interface ChatState {
   acceptingAll: string | null
 
   setOpen(open: boolean): void
+  /** Shows another folder's chat, from the picker. */
+  pick(chat: string): void
   load(chat: string): Promise<void>
   send(chat: string, question: string): Promise<void>
   stop(): void
@@ -75,6 +80,14 @@ interface ChatState {
   reveal(id: string): Promise<void>
   /** Accepts what is waiting and every other edit until this answer is done. */
   acceptAll(): void
+}
+
+/** The chat the panel shows: the folder of what I look at, unless a chat is pinned. */
+export function useShownChat(): string {
+  const viewed = useApp(chatOf)
+  const pin = useChat((s) => s.pin)
+  const running = useChat((s) => s.running)
+  return shownChat(viewed, pin, running)
 }
 
 /** The chat for what I am looking at: one conversation per section (lesson folder). */
@@ -230,6 +243,7 @@ export const useChat = create<ChatState>((set, get) => {
     open: false,
     chats: {},
     running: null,
+    pin: null,
     settings: null,
     removedChips: [],
     attached: [],
@@ -239,6 +253,10 @@ export const useChat = create<ChatState>((set, get) => {
     setOpen(open) {
       set({ open })
       if (open && !get().settings) void get().loadSettings()
+    },
+
+    pick(chat) {
+      set({ pin: pickPin(chat, chatOf(useApp.getState())) })
     },
 
     async load(chat) {
@@ -276,7 +294,13 @@ export const useChat = create<ChatState>((set, get) => {
           { id: id(), role: 'assistant', parts: [] }
         ]
       }))
-      set({ running: chat, removedChips: [], attached: [], quoted: null })
+      set({
+        running: chat,
+        pin: sendPin(chat, get().pin),
+        removedChips: [],
+        attached: [],
+        quoted: null
+      })
       try {
         const lastImage = get().chats[chat]?.lastImage ?? null
         const packet = await buildPacket(chat, chips, question.trim(), lastImage)

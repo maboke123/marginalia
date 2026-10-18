@@ -10,9 +10,10 @@ interface Props {
   y: number
   items: MenuItem[]
   onClose: () => void
+  className?: string
 }
 
-export function ContextMenu({ x, y, items, onClose }: Props): React.JSX.Element {
+export function ContextMenu({ x, y, items, onClose, className }: Props): React.JSX.Element {
   const ref = useRef<HTMLDivElement>(null)
   const [pos, setPos] = useState({ x, y })
 
@@ -57,7 +58,7 @@ export function ContextMenu({ x, y, items, onClose }: Props): React.JSX.Element 
   return (
     <div
       ref={ref}
-      className="menu"
+      className={className ? `menu ${className}` : 'menu'}
       role="menu"
       style={{ left: pos.x, top: pos.y }}
       onKeyDown={onKeyDown}

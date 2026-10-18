@@ -47,6 +47,15 @@ export async function* agent(input) {
       markdown: 'Short version: pick the split that lowers entropy the most.'
     })
     yield { type: 'text', text: reply.ok ? 'Added it under Information gain.' : reply.text }
+  } else if (/update the bagging note/i.test(question)) {
+    const file = 'Machine Learning/B3 Ensembles/Bagging.md'
+    yield { type: 'tool', name: 'insert_into_summary', input: { file } }
+    const reply = await input.callTool('insert_into_summary', {
+      file,
+      position: 'end',
+      markdown: 'Bagging averages many trees.'
+    })
+    yield { type: 'text', text: reply.ok ? 'Updated the bagging note.' : reply.text }
   } else if (/note next to/i.test(question)) {
     yield { type: 'tool', name: 'add_text_annotation', input: { file: slides, page } }
     const reply = await input.callTool('add_text_annotation', {

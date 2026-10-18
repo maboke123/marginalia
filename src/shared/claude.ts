@@ -59,6 +59,13 @@ export type ChatEvent =
   | { type: 'tool'; name: string; input: Record<string, unknown> }
   | { type: 'done'; error?: string }
 
+/** A folder with a conversation, for the chat picker. */
+export interface ChatInfo {
+  folder: string
+  /** When it was last written to (ms), when known. */
+  updated: number | null
+}
+
 export interface ChatHistoryItem {
   role: 'user' | 'assistant'
   text: string

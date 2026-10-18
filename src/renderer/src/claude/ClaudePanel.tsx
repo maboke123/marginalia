@@ -1,14 +1,21 @@
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { EFFORTS, MODELS, type EffortChoice, type ModelChoice } from '../../../shared/claude'
+import {
+  EFFORTS,
+  MODELS,
+  type ChatInfo,
+  type EffortChoice,
+  type ModelChoice
+} from '../../../shared/claude'
 import type { VaultNode } from '../../../shared/types'
-import { ContextMenu } from '../components/ContextMenu'
+import { ContextMenu, type MenuItem } from '../components/ContextMenu'
 import { Icon, type IconName } from '../components/Icon'
 import { resolveLink } from '../editor/links'
 import { RenderedHtml } from '../components/RenderedHtml'
 import { renderChatMarkdown } from '../lib/markdown'
-import { findNode } from '../lib/tree'
+import { findNode, isFolder } from '../lib/tree'
 import { useApp } from '../store'
-import { chatOf, useChat, type Message, type Part } from './chat'
+import { chatOf, useChat, useShownChat, type Message, type Part } from './chat'
+import { chatGroups, type ChatGroup } from './chatPin'
 import { currentChips } from './context'
 import { selectedText } from './selectedText'
 import { SKILLS } from './skills'
@@ -62,8 +69,60 @@ function loadHeight(): number {
   }
 }
 
+const ago = (ms: number): string => {
+  const minutes = Math.round((Date.now() - ms) / 60_000)
+  if (minutes < 60) return `${Math.max(1, minutes)} min ago`
+  const hours = Math.round(minutes / 60)
+  if (hours < 24) return `${hours} h ago`
+  return new Date(ms).toLocaleDateString()
+}
+
+/** The chat's name, which opens the list of other chats to switch to. */
+function ChatPicker({ chat, vaultName }: { chat: string; vaultName: string }): React.JSX.Element {
+  const [menu, setMenu] = useState<{ x: number; y: number; groups: ChatGroup[] } | null>(null)
+  const name = (folder: string): string => (folder ? folder.split('/').pop()! : vaultName)
+
+  const open = async (e: React.MouseEvent): Promise<void> => {
+    const { left, bottom } = e.currentTarget.getBoundingClientRect()
+    const chats = await window.api.claude.chats().catch(() => [])
+    setMenu({ x: left, y: bottom + 4, groups: chatGroups(chatOf(useApp.getState()), chats) })
+  }
+
+  const items = (menu?.groups ?? []).flatMap((group): MenuItem[] => [
+    { custom: <p className="menu-heading">{group.label}</p> },
+    ...group.chats.map((c): MenuItem => ({
+      label: c.folder === chat ? `${name(c.folder)} (shown)` : name(c.folder),
+      hint: c.updated ? ago(c.updated) : group.label === 'This folder' ? 'new' : undefined,
+      onSelect: () => useChat.getState().pick(c.folder)
+    }))
+  ])
+
+  return (
+    <>
+      <button
+        className="text-button claude-chat-name"
+        title={`${chat || vaultName}: switch to another chat`}
+        aria-haspopup="menu"
+        onClick={(e) => void open(e)}
+      >
+        {name(chat)}
+        <Icon name="down" />
+      </button>
+      {menu && (
+        <ContextMenu
+          x={menu.x}
+          y={menu.y}
+          items={items}
+          className="claude-chat-menu"
+          onClose={() => setMenu(null)}
+        />
+      )}
+    </>
+  )
+}
+
 export function ClaudePanel(): React.JSX.Element {
-  const chat = useApp(chatOf)
+  const chat = useShownChat()
   const vaultName = useApp((s) => s.vault?.name ?? '')
   const messages = useChat((s) => s.chats[chat]?.messages ?? EMPTY)
   const running = useChat((s) => s.running)
@@ -101,8 +160,6 @@ export function ClaudePanel(): React.JSX.Element {
     handle.addEventListener('pointerup', onUp, { once: true })
   }
 
-  const title = chat ? chat.split('/').pop() : vaultName
-
   return (
     <section className="claude-panel" style={{ height }} aria-label="Claude">
       <div className="claude-resize" role="separator" onPointerDown={startResize} />
@@ -124,11 +181,7 @@ export function ClaudePanel(): React.JSX.Element {
             </button>
           ))}
         </div>
-        {tab === 'chat' && (
-          <span className="muted claude-chat-name" title={chat || vaultName}>
-            {title}
-          </span>
-        )}
+        {tab === 'chat' && <ChatPicker chat={chat} vaultName={vaultName} />}
         <span className="spacer" />
         {tab === 'chat' && (
           <button
@@ -367,8 +420,8 @@ function PartView({ part }: { part: Part }): React.JSX.Element {
 
 function flatten(nodes: VaultNode[], out: VaultNode[] = []): VaultNode[] {
   for (const node of nodes) {
+    out.push(node)
     if (node.children) flatten(node.children, out)
-    else out.push(node)
   }
   return out
 }
@@ -397,6 +450,11 @@ function ChatInput({ chat, busy }: { chat: string; busy: boolean }): React.JSX.E
   const quoted = useChat((s) => s.quoted)
   const removed = useChat((s) => s.removedChips)
   const chips = currentChips(attached, quoted).filter((c) => !removed.includes(c.id))
+  const [chats, setChats] = useState<ChatInfo[]>([])
+  const picking = picker?.kind === '@'
+  useEffect(() => {
+    if (picking) void window.api.claude.chats().then(setChats, () => setChats([]))
+  }, [picking])
 
   const matches = useMemo((): Option[] => {
     if (!picker) return []
@@ -413,17 +471,40 @@ function ChatInput({ chat, busy }: { chat: string; busy: boolean }): React.JSX.E
         }
       }))
     }
-    return flatten(nodes)
-      .filter((n) => n.path.toLowerCase().includes(q))
-      .slice(0, 8)
-      .map((node) => ({
-        key: node.path,
-        icon: node.kind === 'pdf' ? 'pdf' : 'page',
-        text: node.path,
-        pick: () => pick(node)
-      }))
+    const all = flatten(nodes).filter((n) => n.path.toLowerCase().includes(q))
+    const otherChats = chatGroups(chatOf(useApp.getState()), chats)
+      .flatMap((g) => g.chats)
+      .filter((c) => c.folder !== chat && chats.includes(c) && c.folder.toLowerCase().includes(q))
+    return [
+      ...otherChats.slice(0, 3).map((c): Option => ({
+        key: `chat:${c.folder}`,
+        icon: 'chat',
+        text: c.folder || 'Vault',
+        detail: 'Chat',
+        pick: () => pick(`chat:${c.folder}`)
+      })),
+      ...all
+        .filter(isFolder)
+        .slice(0, 3)
+        .map((node): Option => ({
+          key: node.path,
+          icon: 'folder',
+          text: node.path,
+          detail: 'Everything in it',
+          pick: () => pick(node.path)
+        })),
+      ...all
+        .filter((n) => !isFolder(n))
+        .slice(0, 6)
+        .map((node): Option => ({
+          key: node.path,
+          icon: node.kind === 'pdf' ? 'pdf' : 'page',
+          text: node.path,
+          pick: () => pick(node.path)
+        }))
+    ]
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [picker, nodes])
+  }, [picker, nodes, chats, chat])
 
   const grow = (): void => {
     const el = ref.current!
@@ -450,12 +531,12 @@ function ChatInput({ chat, busy }: { chat: string; busy: boolean }): React.JSX.E
     else setPicker(null)
   }
 
-  const pick = (node: VaultNode): void => {
+  const pick = (entry: string): void => {
     const el = ref.current!
     const before = text.slice(0, el.selectionStart).replace(/@[^\s@]*$/, '')
     setText(before + text.slice(el.selectionStart))
     setPicker(null)
-    useChat.getState().attach(node.path)
+    useChat.getState().attach(entry)
     el.focus()
   }
 

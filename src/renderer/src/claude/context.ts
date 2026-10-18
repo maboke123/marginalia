@@ -7,9 +7,51 @@ import { textAround } from '../editor/sections'
 import { openNote, openPdf } from '../lib/open'
 import { renderPage } from '../pdf/snapshot'
 import { pageText } from '../pdf/text'
-import { childrenOf } from '../lib/tree'
+import { childrenOf, findNode, isFolder } from '../lib/tree'
+import type { VaultNode } from '../../../shared/types'
 import { useApp } from '../store'
 import { skillOf } from './skills'
+
+/** An @ attachment that is another folder's chat rather than a file. */
+export const CHAT = 'chat:'
+// Enough for the gist of a long chat without filling the context.
+const CHAT_CHARS = 40_000
+const FOLDER_FILES = 300
+
+const isFolderPath = (nodes: VaultNode[], path: string): boolean => {
+  const node = findNode(nodes, path)
+  return !!node && isFolder(node)
+}
+
+/** An attached folder: the files in it, which Claude reads as the question needs. */
+function folderContext(folder: string): string[] {
+  const files: string[] = []
+  const walk = (nodes: VaultNode[]): void => {
+    for (const node of nodes) {
+      if (node.children) walk(node.children)
+      else files.push(node.path)
+    }
+  }
+  walk(childrenOf(useApp.getState().nodes, folder))
+  return [
+    `I attached the folder ${folder || '(the whole vault)'}: answer with everything in it in ` +
+      'mind. Read what the question needs (read_pdf_text for slides, Read for notes):',
+    ...files.slice(0, FOLDER_FILES).map((f) => `- ${f}`),
+    ...(files.length > FOLDER_FILES ? [`- and ${files.length - FOLDER_FILES} more (Glob)`] : [])
+  ]
+}
+
+/** An attached chat: the end of that conversation, as background for this one. */
+async function chatContext(folder: string): Promise<string[]> {
+  const history = await window.api.claude.history(folder).catch(() => [])
+  if (!history.length) return [`The chat of ${folder || 'the vault'} I attached is empty.`]
+  let text = history.map((h) => `${h.role === 'user' ? 'Me' : 'Claude'}: ${h.text}`).join('\n\n')
+  if (text.length > CHAT_CHARS) text = `(earlier part left out)\n${text.slice(-CHAT_CHARS)}`
+  return [
+    `I attached my other chat about ${folder || 'the vault'}, as background for this one:`,
+    block('other-chat', text)
+  ]
+}
 
 /** One removable piece of the context packet, shown above the chat input. */
 export interface Chip {
@@ -61,8 +103,22 @@ export function currentChips(attached: string[], quoted: string | null = null): 
     // The whole text as the title: buildPacket sends it from there.
     chips.push({ id: 'chat-selection', label: `“${short(quoted)}”`, title: quoted })
   }
-  for (const path of attached) {
-    chips.push({ id: `file:${path}`, label: `@${fileName(path)}`, title: path })
+  const { nodes, vault } = useApp.getState()
+  for (const entry of attached) {
+    const id = `file:${entry}`
+    if (entry.startsWith(CHAT)) {
+      const folder = entry.slice(CHAT.length)
+      const name = folder ? fileName(folder) : (vault?.name ?? 'vault')
+      chips.push({ id, label: `@${name} chat`, title: `The chat of ${folder || 'the vault'}` })
+      continue
+    }
+    const node = findNode(nodes, entry)
+    const folder = !!node && isFolder(node)
+    chips.push({
+      id,
+      label: `@${fileName(entry)}${folder ? '/' : ''}`,
+      title: folder ? `Everything in ${entry}` : entry
+    })
   }
   return chips
 }
@@ -213,8 +269,16 @@ export async function buildPacket(
   const quoted = chips.find((c) => c.id === 'chat-selection')
   if (quoted) lines.push(`Selected in this chat: "${quoted.title}"`)
 
-  const files = chips.filter((c) => c.id.startsWith('file:')).map((c) => c.title)
+  const entries = chips.filter((c) => c.id.startsWith('file:')).map((c) => c.id.slice(5))
+  const { nodes } = useApp.getState()
+  const files = entries.filter((e) => !e.startsWith(CHAT) && !isFolderPath(nodes, e))
   if (files.length) lines.push(`I attached these files; read them as needed: ${files.join(', ')}`)
+  for (const folder of entries.filter((e) => isFolderPath(nodes, e))) {
+    lines.push(...folderContext(folder))
+  }
+  for (const entry of entries.filter((e) => e.startsWith(CHAT))) {
+    lines.push(...(await chatContext(entry.slice(CHAT.length))))
+  }
 
   const skill = skillOf(question)
   if (skill) lines.push(`Skill /${skill.name}: follow these steps for my message.`, skill.steps)
