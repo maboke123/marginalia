@@ -291,8 +291,9 @@ test('lecture mode skips a linked transcript, and hiding transcripts hides them 
   await expect
     .poll(() => fs.readFile(path.join(env.vault, section, 'slides.md'), 'utf8').catch(() => null))
     .toBe('')
+  // Leaving lecture mode brings the sidebar back.
   await page.keyboard.press('Control+Shift+M')
-  await page.keyboard.press('Control+\\')
+  await expect(row('B2 Decision trees')).toBeVisible()
   await expect(transcriptRows).toHaveCount(0)
 
   // A transcript opened once stays out of the tree after something else is opened.
