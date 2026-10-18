@@ -161,7 +161,7 @@ function docAfterAccept(open: OpenPdf & { doc: AnnotationDoc }): AnnotationDoc {
 /** Opens the PDF at a change that waits for my answer, when I click it in the chat. */
 function revealPdf(path: string, page: number): () => Promise<void> {
   return async () => {
-    await showPdf(path, slideOf(page))
+    await showPdf(path, slideOf(page), true)
   }
 }
 
@@ -228,8 +228,16 @@ async function showNote(path: string): Promise<OpenNote> {
   return note
 }
 
-async function showPdf(path: string, page: number): Promise<OpenPdf & { doc: AnnotationDoc }> {
-  show(path, page)
+/**
+ * Opens the PDF for a change. One that is open already stays where I am reading, unless I asked
+ * to go there: jumping back to every change while I follow the lecture is annoying.
+ */
+async function showPdf(
+  path: string,
+  page: number,
+  jump = false
+): Promise<OpenPdf & { doc: AnnotationDoc }> {
+  if (jump || !openPdf(path)) show(path, page)
   const open = await whenOpen(() => openPdf(path))
   if (!open) throw new ToolError(`Could not open ${path}`)
   if (!open.doc) {
@@ -282,17 +290,17 @@ async function editNote(
   const original = first.state.sliceDoc(change.from, change.to)
   // Positions may move while I type elsewhere; the preview keeps track of them.
   let range = { from: change.from, to: change.to }
+  // Only after I click the change in the chat; otherwise my view stays where I am reading.
+  let jump = false
   // Closing and opening the note again gives a new editor.
   const current = (): EditorView => openNote(path)?.view ?? first
   const show = (decide: (accept: boolean) => void): (() => void) => {
     const view = current()
     if (!view.dom.isConnected) return () => {}
-    // Scrolls to the preview without moving my cursor, in case I am still typing.
+    // Scrolling does not move my cursor, in case I am still typing.
+    const preview = setPendingEdit.of({ ...range, insert: change.insert, original, decide })
     view.dispatch({
-      effects: [
-        setPendingEdit.of({ ...range, insert: change.insert, original, decide }),
-        EditorView.scrollIntoView(range.to, { y: 'center' })
-      ]
+      effects: jump ? [preview, EditorView.scrollIntoView(range.to, { y: 'center' })] : preview
     })
     return () => {
       const pending = view.dom.isConnected ? view.state.field(pendingEdit, false) : null
@@ -302,6 +310,7 @@ async function editNote(
     }
   }
   const reveal = async (): Promise<void> => {
+    jump = true
     await showNote(path)
   }
   const accepted = await useChat.getState().confirm(label, show, reveal)
@@ -315,7 +324,6 @@ async function editNote(
   }
   view.dispatch({
     changes: { from, to, insert: change.insert },
-    effects: EditorView.scrollIntoView(from, { y: 'center' }),
     // Its own undo step, not merged with my typing before or after.
     annotations: [isolateHistory.of('full'), Transaction.userEvent.of('input.claude')]
   })

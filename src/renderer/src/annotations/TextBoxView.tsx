@@ -140,13 +140,20 @@ function applyInEditor(
   if (at === -1) return null
   const { changes, missing } = planWrite(el.value, { from: at, to: at + original.length }, answer)
   const [start, end] = [el.selectionStart, el.selectionEnd]
-  el.focus()
+  // execCommand scrolls to the caret; I may have scrolled on to the next slides meanwhile.
+  const scroller = el.closest<HTMLElement>('.pdf-scroll')
+  const [top, left] = [scroller?.scrollTop ?? 0, scroller?.scrollLeft ?? 0]
+  el.focus({ preventScroll: true })
   // Last change first, so the positions of the earlier ones stay valid.
   for (const c of [...changes].reverse()) {
     el.setSelectionRange(c.from, c.to)
     document.execCommand(c.insert ? 'insertText' : 'delete', false, c.insert)
   }
   el.setSelectionRange(mapPosition(start, changes), mapPosition(end, changes))
+  if (scroller) {
+    scroller.scrollTop = top
+    scroller.scrollLeft = left
+  }
   return missing
 }
 
