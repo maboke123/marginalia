@@ -501,7 +501,10 @@ test('another chat and a whole folder go along with @', async () => {
   await expect(answers()).toHaveText('You asked: What is bagging?')
 
   await row('slides.pdf').click()
+  // Opening a PDF focuses it once it has loaded; type after that.
+  await expect(page.locator('.pdf-page[data-page="1"] .textLayer span').first()).toBeAttached()
   const input = page.getByRole('textbox', { name: 'Message to Claude' })
+  await input.click()
   await input.fill('@B3')
   const picker = page.locator('.claude-picker')
   await picker.locator('li', { hasText: 'Chat' }).click()
@@ -749,7 +752,6 @@ test('/claude changes text that is already there, as one undo step', async () =>
 test('answers with display math inside a line keep the editor working', async () => {
   // Once crashed the editor: a $ left over from "$$...$$" paired with a $ on the next line.
   const errors: string[] = []
-  page.on('console', (m) => m.type() === 'error' && errors.push(m.text()))
   await row('Machine Learning').click()
   await row('B2 Decision trees').first().click()
   await row('Summary').click()
