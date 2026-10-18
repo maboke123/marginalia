@@ -37,9 +37,9 @@ const absoluteUrls = (css: string, base: string): string =>
 
 /**
  * From the app's own styles: the light colour tokens (the first :root, outside the dark
- * media query), KaTeX with its fonts, and the text colours.
+ * media query), KaTeX with its fonts, the text colours, and rules matching `extra`.
  */
-function appCss(): string {
+export function appCss(extra?: RegExp): string {
   const out: string[] = []
   let root = false
   for (const sheet of document.styleSheets) {
@@ -58,7 +58,7 @@ function appCss(): string {
         if (rule.selectorText === ':root' && !root) {
           root = true
           out.push(rule.cssText)
-        } else if (/katex|\.tc-/.test(rule.selectorText)) {
+        } else if (/katex|\.tc-/.test(rule.selectorText) || extra?.test(rule.selectorText)) {
           out.push(rule.cssText)
         }
       }
@@ -67,7 +67,7 @@ function appCss(): string {
   return out.join('\n')
 }
 
-const escapeHtml = (text: string): string =>
+export const escapeHtml = (text: string): string =>
   text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 
 /** Title, author and date from the front matter, as Pandoc puts them above the text. */

@@ -3020,3 +3020,599 @@ button.claude-proposal-label:hover {
 .text-box.found.current {
   outline-color: var(--find-current-border);
 }
+
+/* Canvas. The world layer is scaled as a whole; sizes inside it are canvas units. Handles and
+   outlines divide by --canvas-zoom so they keep their size on screen. */
+
+.canvas-pane {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.canvas-toolbar {
+  flex-wrap: wrap;
+  height: auto;
+  min-height: 40px;
+  row-gap: 4px;
+}
+
+.canvas-zoom {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.canvas-zoom-value {
+  min-width: 52px;
+  font-variant-numeric: tabular-nums;
+}
+
+.canvas-surface {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--bg);
+  outline: none;
+  touch-action: none;
+}
+
+.canvas-surface.tool-hand,
+.canvas-surface.panning {
+  cursor: grab;
+}
+
+.canvas-surface.tool-pen {
+  cursor: crosshair;
+}
+
+.canvas-surface.tool-text {
+  cursor: text;
+}
+
+.canvas-world {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform-origin: 0 0;
+}
+
+.canvas-node {
+  position: absolute;
+  padding: 10px 14px;
+  border: 1.5px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 16px;
+  line-height: 1.4;
+}
+
+.canvas-node.colored {
+  border-color: var(--node-color);
+  background: color-mix(in srgb, var(--node-color) 8%, var(--bg));
+}
+
+.canvas-node.selected {
+  outline: calc(2px / var(--canvas-zoom)) solid var(--accent);
+  outline-offset: calc(3px / var(--canvas-zoom));
+}
+
+.canvas-node.ghost {
+  opacity: 0.65;
+  outline: calc(2px / var(--canvas-zoom)) dashed var(--claude-ink);
+  outline-offset: calc(3px / var(--canvas-zoom));
+}
+
+.canvas-node.removed {
+  opacity: 0.3;
+}
+
+.canvas-md {
+  height: 100%;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+
+.canvas-md > :first-child {
+  margin-top: 0;
+}
+
+.canvas-md > :last-child {
+  margin-bottom: 0;
+}
+
+.canvas-md p,
+.canvas-md ul,
+.canvas-md ol {
+  margin: 0 0 0.5em;
+}
+
+.canvas-md ul,
+.canvas-md ol {
+  padding-left: 1.3em;
+}
+
+.canvas-md h1,
+.canvas-md h2,
+.canvas-md h3 {
+  margin: 0 0 0.4em;
+  line-height: 1.25;
+}
+
+.canvas-centered {
+  display: flex;
+  position: relative;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.canvas-editor {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  padding: 10px 14px;
+  border: 0;
+  border-radius: inherit;
+  outline: none;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  resize: none;
+  user-select: text;
+}
+
+/* Shapes */
+
+.canvas-node.shape-rounded {
+  border-radius: 18px;
+}
+
+.canvas-node.shape-ellipse,
+.canvas-node.shape-circle {
+  border-radius: 50%;
+}
+
+.canvas-node.shape-note {
+  background: var(--bg-warning);
+  clip-path: polygon(0 0, calc(100% - 18px) 0, 100% 18px, 100% 100%, 0 100%);
+}
+
+.canvas-node.shape-note::after {
+  position: absolute;
+  top: -1.5px;
+  right: -1.5px;
+  width: 18px;
+  height: 18px;
+  border-bottom: 1.5px solid var(--border-strong);
+  border-left: 1.5px solid var(--border-strong);
+  background: var(--bg-sidebar);
+  content: '';
+}
+
+.canvas-node.shape-diamond {
+  padding: 10px 22px;
+  border: 0;
+  background: transparent;
+}
+
+.canvas-diamond {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.canvas-diamond polygon {
+  fill: var(--bg);
+  stroke: var(--border-strong);
+  stroke-width: 1.5px;
+}
+
+.canvas-node.colored .canvas-diamond polygon {
+  fill: color-mix(in srgb, var(--node-color) 8%, var(--bg));
+  stroke: var(--node-color);
+}
+
+.canvas-node.shape-class {
+  padding: 0;
+}
+
+.canvas-class {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+.canvas-class > * {
+  flex: none;
+  height: auto;
+  padding: 5px 12px;
+  border-top: 1.5px solid var(--border-strong);
+  font-size: 14px;
+}
+
+.canvas-class > :last-child {
+  flex: 1;
+}
+
+.canvas-class > .canvas-class-name {
+  padding: 8px 12px;
+  border-top: 0;
+  font-size: 16px;
+  font-weight: 600;
+  text-align: center;
+}
+
+.canvas-node.colored .canvas-class > * {
+  border-color: var(--node-color);
+}
+
+.canvas-node.shape-actor {
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.canvas-actor {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  height: 100%;
+}
+
+.canvas-actor svg {
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2px;
+  stroke-linecap: round;
+}
+
+.canvas-actor .canvas-actor-name {
+  flex: none;
+  height: auto;
+  text-align: center;
+}
+
+.canvas-node.shape-initial {
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--text);
+}
+
+.canvas-node.shape-final {
+  padding: 0;
+  border: 2px solid var(--text);
+  border-radius: 50%;
+}
+
+.canvas-node.shape-final::after {
+  position: absolute;
+  inset: 4px;
+  border-radius: 50%;
+  background: var(--text);
+  content: '';
+}
+
+.canvas-node.canvas-group {
+  padding: 0;
+  background: color-mix(in srgb, var(--text) 3%, transparent);
+}
+
+.canvas-node.canvas-group.colored {
+  background: color-mix(in srgb, var(--node-color) 6%, transparent);
+}
+
+.canvas-group-label {
+  position: absolute;
+  top: 6px;
+  left: 12px;
+  color: var(--text-muted);
+  font-size: 16px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+input.canvas-group-label {
+  width: calc(100% - 24px);
+  padding: 0 4px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--bg-input);
+  color: var(--text);
+  font: inherit;
+  font-weight: 600;
+}
+
+.canvas-node.canvas-file {
+  padding: 0;
+  overflow: hidden;
+}
+
+.canvas-image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  pointer-events: none;
+}
+
+.canvas-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  height: 100%;
+  padding: 10px 14px;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+
+.canvas-node.canvas-ink {
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.canvas-ink {
+  position: absolute;
+  top: 0;
+  left: 0;
+  overflow: visible;
+  pointer-events: none;
+}
+
+/* Handles: resize at the corners and sides, connect from the dots just outside */
+
+.canvas-handle {
+  position: absolute;
+  width: calc(9px / var(--canvas-zoom));
+  height: calc(9px / var(--canvas-zoom));
+  border: calc(1.5px / var(--canvas-zoom)) solid var(--accent);
+  border-radius: 2px;
+  background: var(--bg);
+  transform: translate(-50%, -50%);
+}
+
+.canvas-handle.h-n,
+.canvas-handle.h-s {
+  left: 50%;
+  cursor: ns-resize;
+}
+
+.canvas-handle.h-e,
+.canvas-handle.h-w {
+  top: 50%;
+  cursor: ew-resize;
+}
+
+.canvas-handle.h-n,
+.canvas-handle.h-ne,
+.canvas-handle.h-nw {
+  top: 0;
+}
+
+.canvas-handle.h-s,
+.canvas-handle.h-se,
+.canvas-handle.h-sw {
+  top: 100%;
+}
+
+.canvas-handle.h-w,
+.canvas-handle.h-nw,
+.canvas-handle.h-sw {
+  left: 0;
+}
+
+.canvas-handle.h-e,
+.canvas-handle.h-ne,
+.canvas-handle.h-se {
+  left: 100%;
+}
+
+.canvas-handle.h-nw,
+.canvas-handle.h-se {
+  cursor: nwse-resize;
+}
+
+.canvas-handle.h-ne,
+.canvas-handle.h-sw {
+  cursor: nesw-resize;
+}
+
+.canvas-connect {
+  position: absolute;
+  width: calc(12px / var(--canvas-zoom));
+  height: calc(12px / var(--canvas-zoom));
+  border: calc(2px / var(--canvas-zoom)) solid var(--bg);
+  border-radius: 50%;
+  background: var(--accent);
+  transform: translate(-50%, -50%);
+  cursor: crosshair;
+}
+
+.canvas-connect.c-top {
+  top: calc(-20px / var(--canvas-zoom));
+  left: 50%;
+}
+
+.canvas-connect.c-bottom {
+  top: calc(100% + 20px / var(--canvas-zoom));
+  left: 50%;
+}
+
+.canvas-connect.c-left {
+  top: 50%;
+  left: calc(-20px / var(--canvas-zoom));
+}
+
+.canvas-connect.c-right {
+  top: 50%;
+  left: calc(100% + 20px / var(--canvas-zoom));
+}
+
+/* Edges */
+
+.canvas-edges {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 1px;
+  height: 1px;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.canvas-edge {
+  color: var(--text-muted);
+}
+
+.canvas-edge.selected {
+  color: var(--accent);
+}
+
+.canvas-edge.ghost {
+  color: var(--claude-ink);
+}
+
+.canvas-edge.removed {
+  opacity: 0.3;
+}
+
+.canvas-edge-line {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2px;
+}
+
+.canvas-edge-line.draft {
+  stroke: var(--accent);
+  stroke-dasharray: 6 4;
+}
+
+.canvas-edge-hit {
+  fill: none;
+  stroke: transparent;
+  stroke-width: 16px;
+  pointer-events: stroke;
+  cursor: pointer;
+}
+
+.canvas-marker {
+  stroke: currentColor;
+  stroke-width: 2px;
+  stroke-linejoin: round;
+}
+
+.canvas-marker.fill-none {
+  fill: none;
+}
+
+.canvas-marker.fill-background {
+  fill: var(--bg);
+}
+
+.canvas-marker.fill-line {
+  fill: currentColor;
+}
+
+.canvas-edge-label {
+  position: absolute;
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 14px;
+  white-space: nowrap;
+  transform: translate(-50%, -50%);
+  cursor: pointer;
+}
+
+.canvas-edge-label.from,
+.canvas-edge-label.to {
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.canvas-guide {
+  stroke: var(--accent);
+  stroke-width: 1px;
+  vector-effect: non-scaling-stroke;
+}
+
+.canvas-marquee {
+  position: absolute;
+  border: calc(1px / var(--canvas-zoom)) solid var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+
+.canvas-hint {
+  position: absolute;
+  top: 20px;
+  left: 24px;
+  max-width: 440px;
+  margin: 0;
+  pointer-events: none;
+}
+
+.canvas-edge-panel,
+.canvas-ghost-bar {
+  position: absolute;
+  z-index: 2;
+  display: flex;
+  gap: 8px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-menu);
+  box-shadow: var(--shadow-menu);
+}
+
+.canvas-edge-panel {
+  align-items: flex-end;
+  transform: translateX(-50%);
+}
+
+.canvas-edge-panel label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 12px;
+}
+
+.canvas-edge-panel input,
+.canvas-edge-panel select {
+  width: 84px;
+  height: 26px;
+  padding: 0 6px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--bg-input);
+  color: var(--text);
+  font: inherit;
+}
+
+.canvas-edge-panel input[name='label'] {
+  width: 150px;
+}
+
+.canvas-edge-panel select {
+  width: auto;
+}
+
+.canvas-ghost-bar {
+  top: 12px;
+  left: 16px;
+  align-items: center;
+}

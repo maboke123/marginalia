@@ -4,6 +4,7 @@ import type { LinkHow, NotebookColor, Position, VaultInfo, VaultNode } from '../
 import { withLink, withoutLink, type NoteLinks } from '../../shared/pairing'
 import { ERASER_SIZES, PEN_WIDTHS, DEFAULT_TEXT_SIZE } from '../../shared/palette'
 import { flushAll } from './lib/flush'
+import { canvasFrom } from '../../shared/canvas'
 import { noteHtml } from './lib/notePdf'
 import {
   childrenOf,
@@ -173,6 +174,8 @@ interface AppState {
   exportPdf(path: string): Promise<void>
   /** Saves the note, then prints it to a PDF where I choose. */
   exportNote(path: string): Promise<void>
+  /** Saves the canvas, then prints all of it to a one-page PDF where I choose. */
+  exportCanvas(path: string): Promise<void>
   showPreview(path: string | null): void
   setPdfView(view: PdfView | null): void
   setPdfSelection(selection: PdfSelection | null): void
@@ -579,6 +582,18 @@ export const useApp = create<AppState>((set, get) => {
         `Exported to ${done.path}${notes.length ? `. Note: ${notes.join('; ')}.` : ''}`,
         exportActions(done.path)
       )
+    },
+
+    async exportCanvas(path) {
+      await flushAll()
+      get().showNotice('Making the PDF...')
+      const done = await attempt(async () => {
+        // Loaded on first use; most sessions never export a canvas.
+        const { canvasHtml } = await import('./canvas/exportHtml')
+        const data = canvasFrom(await api.readText(path))
+        return api.exportNote(path, await canvasHtml(path, data))
+      })
+      get().showNotice(done ? `Exported to ${done}` : null, done ? exportActions(done) : [])
     },
 
     async exportNote(path) {

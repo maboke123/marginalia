@@ -244,7 +244,10 @@ export function registerIpc(
     const options: Electron.SaveDialogOptions = {
       title: 'Export as PDF',
       // Not next to the note: a PDF with the note's name would take the note in as its slides.
-      defaultPath: path.join(app.getPath('downloads'), path.basename(p).replace(/\.md$/i, '.pdf')),
+      defaultPath: path.join(
+        app.getPath('downloads'),
+        path.basename(p).replace(/\.(md|canvas)$/i, '.pdf')
+      ),
       filters: [{ name: 'PDF', extensions: ['pdf'] }]
     }
     const choice = win

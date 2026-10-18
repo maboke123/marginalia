@@ -145,7 +145,9 @@ export function Sidebar(): React.JSX.Element {
       items.push({ label: 'Open', onSelect: () => app.openFile(node.path) })
       if (node.kind === 'pdf') {
         items.push({ label: 'Export annotated PDF...', onSelect: () => app.exportPdf(node.path) })
-      } else if (node.kind === 'markdown') {
+      } else if (node.kind === 'canvas') {
+        items.push({ label: 'Export as PDF...', onSelect: () => app.exportCanvas(node.path) })
+      } else {
         items.push(
           { label: 'Preview as PDF', onSelect: () => app.showPreview(node.path) },
           { label: 'Export as PDF...', onSelect: () => app.exportNote(node.path) }

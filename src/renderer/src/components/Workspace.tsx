@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import logo from '../../../../build/icon.svg'
+import { CanvasView } from '../canvas/CanvasView'
 import { MarkdownEditor } from '../editor/MarkdownEditor'
 import { SidebarButton } from './SidebarButton'
 import { draggingFiles, importDroppedFiles } from '../lib/drop'
@@ -53,6 +54,9 @@ export function Workspace(): React.JSX.Element {
     if (!node) return null
     if (node.kind === 'pdf') {
       return <PdfViewer key={node.path} path={node.path} title={displayName(node)} />
+    }
+    if (node.kind === 'canvas') {
+      return <CanvasView key={node.path} path={node.path} title={displayName(node)} />
     }
     return <MarkdownEditor key={node.path} path={node.path} title={displayName(node)} />
   }
