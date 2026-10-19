@@ -160,6 +160,16 @@ export function Sidebar(): React.JSX.Element {
             void useFiles.getState().transcribe(parentOf(node.path), undefined, node.path)
         })
       }
+      if (node.kind === 'markdown' || node.kind === 'canvas') {
+        const pdfs = childrenOf(nodes, parentOf(node.path)).filter((n) => n.kind === 'pdf')
+        for (const pdf of pdfs) {
+          const linked = links[pdf.path]?.includes(node.path) ?? false
+          items.push({
+            label: `${linked ? 'Unlink from' : 'Link to'} ${pdf.name.replace(/\.pdf$/i, '')}`,
+            onSelect: () => void app.setLinked(pdf.path, node.path, !linked)
+          })
+        }
+      }
       if (isTranscript(node.path)) {
         items.push({
           label: 'Transcribe the recording',

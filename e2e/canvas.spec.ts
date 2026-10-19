@@ -1,7 +1,7 @@
 import { expect, test, type ElectronApplication, type Locator, type Page } from '@playwright/test'
 import { promises as fs } from 'fs'
 import path from 'path'
-import { createEnv, fakeLog, launch, type TestEnv } from './helpers'
+import { createEnv, fakeLog, launch, makeSlides, type TestEnv } from './helpers'
 
 let env: TestEnv
 let app: ElectronApplication
@@ -421,4 +421,34 @@ test('panned away from everything, one button brings the boxes back', async () =
   await back.click()
   await expect(back).toBeHidden()
   await expect(page.locator('[data-node="order"]')).toBeInViewport()
+})
+
+test('a canvas linked to slides shows under them and opens next to them', async () => {
+  await makeSlides(file('Patterns.pdf'), 3)
+  await row('Design of Software Systems').click()
+  await row('les_1').click()
+  await row('Shop').click({ button: 'right' })
+  await page.getByRole('menuitem', { name: 'Link to Patterns' }).click()
+  // Under the PDF, one level deeper.
+  const pdfRow = row('Patterns')
+  const shopRow = row('Shop')
+  await expect
+    .poll(async () => {
+      const [p, s] = [await pdfRow.boundingBox(), await shopRow.boundingBox()]
+      return !!p && !!s && s.y > p.y && s.x >= p.x
+    })
+    .toBe(true)
+  await expect
+    .poll(async () => {
+      const state = JSON.parse(
+        await fs.readFile(path.join(env.vault, '.marginalia', 'state.json'), 'utf8')
+      )
+      return state.notes[`${lesson}/Patterns.pdf`]
+    })
+    .toEqual([`${lesson}/Shop.canvas`])
+
+  await pdfRow.click()
+  await page.keyboard.press('Control+Shift+M')
+  await expect(page.locator('.canvas-surface')).toBeVisible()
+  await expect(page.locator('.canvas-toolbar .note-switch')).toContainText('Shop')
 })

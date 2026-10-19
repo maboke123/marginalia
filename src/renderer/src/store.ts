@@ -163,6 +163,8 @@ interface AppState {
   /** Lecture mode: a new note in the slides' folder, linked to them and shown. */
   newNote(name: string): Promise<void>
   unlinkNote(note: string): Promise<void>
+  /** From the sidebar: links a note or canvas to slides (or unlinks it), without opening. */
+  setLinked(pdf: string, note: string, linked: boolean): Promise<void>
   setEditor(editor: EditorHandle | null): void
   /** Ctrl+Shift+S: drag a rectangle on the slides to put that part into the summary. */
   startSnapshot(): void
@@ -514,6 +516,10 @@ export const useApp = create<AppState>((set, get) => {
       if (summaryFile === note && next) set({ summaryFile: next })
     },
 
+    async setLinked(pdf, note, linked) {
+      await link(pdf, note, linked ? 'add' : 'remove')
+    },
+
     async toggleLecture() {
       if (get().lectureMode) {
         set({ lectureMode: false })
@@ -523,7 +529,7 @@ export const useApp = create<AppState>((set, get) => {
       let slidesFile: string | null = null
       let summaryFile: string | null = null
       // Start from what is on screen: slides bring their own note, a note finds its slides.
-      if (activeFile?.toLowerCase().endsWith('.md')) {
+      if (activeFile && /\.(md|canvas)$/i.test(activeFile)) {
         summaryFile = activeFile
         slidesFile =
           (await attempt(() => api.linkedPdf(activeFile))) ?? firstIn(parentOf(activeFile), 'pdf')

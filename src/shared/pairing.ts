@@ -50,7 +50,8 @@ export function pairNotes<N extends Pick<VaultNode, 'name' | 'path' | 'kind'>>(
 ): Map<string, N[]> {
   const owner = new Map<string, string>()
   const pdfs = children.filter((n) => n.kind === 'pdf')
-  const notes = children.filter((n) => n.kind === 'markdown')
+  // A canvas pairs only when linked: it never has the PDF's own name.
+  const notes = children.filter((n) => n.kind === 'markdown' || n.kind === 'canvas')
   // Links first, so a same-named note cannot take a note I linked on purpose.
   for (const pdf of pdfs) {
     for (const linked of links[pdf.path] ?? []) {

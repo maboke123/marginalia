@@ -26,7 +26,7 @@ export function NoteSwitcher({ path, title }: { path: string; title: string }): 
       .filter((n) => n !== null)
     const mine = [...paired, ...elsewhere]
     const others = folder.filter(
-      (n) => n.kind === 'markdown' && !mine.some((m) => m.path === n.path)
+      (n) => (n.kind === 'markdown' || n.kind === 'canvas') && !mine.some((m) => m.path === n.path)
     )
     const out: MenuItem[] = mine.map((n) => ({
       label: displayName(n),
@@ -36,7 +36,7 @@ export function NoteSwitcher({ path, title }: { path: string; title: string }): 
     if (others.length) {
       out.push(
         { separator: true },
-        { custom: <p className="menu-heading">Link a note from this folder</p> }
+        { custom: <p className="menu-heading">Link a note or canvas from this folder</p> }
       )
       for (const n of others) {
         out.push({ label: displayName(n), onSelect: () => void showNote(n.path) })

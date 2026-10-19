@@ -20,6 +20,7 @@ import {
 } from '../../../shared/canvas'
 import { CloseButton } from '../components/CloseButton'
 import { ContextMenu, type MenuItem } from '../components/ContextMenu'
+import { NoteSwitcher } from '../components/NoteSwitcher'
 import { Icon, type IconName } from '../components/Icon'
 import { SidebarButton } from '../components/SidebarButton'
 import { snapAxis, type Anchor } from '../annotations/snap'
@@ -313,6 +314,7 @@ function CanvasSurface({
   const ink = useApp((s) => s.ink)
   const penColors = useApp((s) => s.settings.penColors)
   const snapping = useApp((s) => s.settings.snapping)
+  const slidesFile = useApp((s) => s.slidesFile)
   const gridId = `canvas-grid-${useId().replace(/[^a-z0-9]/gi, '')}`
 
   const [size, setSize] = useState({ width: 0, height: 0 })
@@ -1166,7 +1168,11 @@ function CanvasSurface({
     <>
       <div className="pane-toolbar canvas-toolbar">
         <SidebarButton />
-        <span className="pane-title">{title}</span>
+        {lectureMode && slidesFile ? (
+          <NoteSwitcher path={path} title={title} />
+        ) : (
+          <span className="pane-title">{title}</span>
+        )}
         <div className="annotation-toolbar" role="toolbar" aria-label="Canvas tools">
           {TOOLS.map((t) => (
             <button
