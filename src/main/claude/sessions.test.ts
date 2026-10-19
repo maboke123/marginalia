@@ -65,3 +65,19 @@ describe('moveSession', () => {
     expect(await moveSession(root, ID, 'C:\\Notes')).toBe(false)
   })
 })
+
+describe('a chat handed to VS Code', () => {
+  it('is no longer marked as made through the SDK, so the Claude panel lists it', async () => {
+    await fs.mkdir(path.join(root, 'C--Notes'), { recursive: true })
+    const file = path.join(root, 'C--Notes', `${ID}.jsonl`)
+    await fs.writeFile(
+      file,
+      '{"type":"user","entrypoint":"sdk-ts","cwd":"C:\\Notes"}\n{"type":"assistant","entrypoint":"sdk-ts"}\n'
+    )
+    expect(await moveSession(root, ID, 'C:\\Notes\\les 1')).toBe(true)
+    const moved = await fs.readFile(path.join(root, 'C--Notes-les-1', `${ID}.jsonl`), 'utf8')
+    expect(moved).toBe(
+      '{"type":"user","entrypoint":"cli","cwd":"C:\\Notes"}\n{"type":"assistant","entrypoint":"cli"}\n'
+    )
+  })
+})

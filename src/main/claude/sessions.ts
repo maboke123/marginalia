@@ -2,6 +2,7 @@ import { existsSync } from 'fs'
 import fs from 'fs/promises'
 import os from 'os'
 import path from 'path'
+import { writeFileAtomic } from '../vault/atomic'
 
 /** Claude Code keeps conversations in one folder per working directory under this. */
 export function projectsDir(env: NodeJS.ProcessEnv = process.env): string {
@@ -40,16 +41,32 @@ export async function moveSession(root: string, sessionId: string, cwd: string):
   const from = await findSession(root, sessionId)
   if (!from) return false
   const to = path.join(root, key)
-  // NTFS ignores case, and the CLI and VS Code differ in the case of the drive letter.
-  if (from.toLowerCase() === to.toLowerCase()) return true
-  await fs.mkdir(to, { recursive: true })
   const file = `${sessionId}.jsonl`
-  if (existsSync(path.join(to, file))) return false
-  await fs.rename(path.join(from, file), path.join(to, file))
-  // Subagent transcripts and large tool results of the conversation live next to it.
-  const extra = path.join(from, sessionId)
-  if (existsSync(extra) && !existsSync(path.join(to, sessionId))) {
-    await fs.rename(extra, path.join(to, sessionId))
+  // NTFS ignores case, and the CLI and VS Code differ in the case of the drive letter.
+  if (from.toLowerCase() !== to.toLowerCase()) {
+    await fs.mkdir(to, { recursive: true })
+    if (existsSync(path.join(to, file))) return false
+    await fs.rename(path.join(from, file), path.join(to, file))
+    // Subagent transcripts and large tool results of the conversation live next to it.
+    const extra = path.join(from, sessionId)
+    if (existsSync(extra) && !existsSync(path.join(to, sessionId))) {
+      await fs.rename(extra, path.join(to, sessionId))
+    }
   }
+  await unhide(path.join(to, file))
   return true
 }
+
+/**
+ * The SDK marks the chat's messages with entrypoint sdk-ts, and VS Code's Claude panel leaves
+ * such "programmatic" sessions out of its list: the link to the chat then opened an empty one.
+ * As a CLI conversation it is listed. Only that field changes.
+ */
+async function unhide(file: string): Promise<void> {
+  const text = await fs.readFile(file, 'utf8')
+  const shown = text.replace(PROGRAMMATIC, '"entrypoint":"cli"')
+  if (shown === text) return
+  await writeFileAtomic(file, shown)
+}
+
+const PROGRAMMATIC = /"entrypoint":"sdk-(?:ts|py|cli)"/g
