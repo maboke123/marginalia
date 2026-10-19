@@ -323,6 +323,9 @@ function CanvasSurface({
     fromSide: Side
     to: { x: number; y: number }
   } | null>(null)
+  // What the last press was on: a double-click's own target is the surface, which holds the
+  // pointer capture from that press.
+  const downOn = useRef<{ node?: string; edge?: string }>({})
   const [liveInk, setLiveInk] = useState<[number, number, number][] | null>(null)
   const [panning, setPanning] = useState(false)
   const [menu, setMenu] = useState<{ x: number; y: number; items: MenuItem[] } | null>(null)
@@ -617,6 +620,10 @@ function CanvasSurface({
     el.focus({ preventScroll: true })
     const at = worldOf(e)
     const s = doc.getState()
+    downOn.current = {
+      node: target.closest<HTMLElement>('[data-node]')?.dataset.node,
+      edge: target.closest<HTMLElement>('[data-edge]')?.dataset.edge
+    }
     if (e.button === 1 || tool === 'hand' || space.current || ghost) {
       e.preventDefault()
       drag.current = { kind: 'pan', x: e.clientX, y: e.clientY, camera: cameraRef.current }
@@ -817,8 +824,8 @@ function CanvasSurface({
     const target = e.target as HTMLElement
     if (target.closest('.canvas-edge-panel, .canvas-ghost-bar, .canvas-editor')) return
     const s = doc.getState()
-    const nodeId = target.closest<HTMLElement>('[data-node]')?.dataset.node
-    const edgeId = target.closest<HTMLElement>('[data-edge]')?.dataset.edge
+    const nodeId = target.closest<HTMLElement>('[data-node]')?.dataset.node ?? downOn.current.node
+    const edgeId = target.closest<HTMLElement>('[data-edge]')?.dataset.edge ?? downOn.current.edge
     if (nodeId) {
       const node = nodeById(s.data, nodeId)
       if (!node) return

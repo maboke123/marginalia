@@ -357,3 +357,10 @@ test('selected notes show as selected, also among others', async () => {
   await expect(note).toHaveCSS('outline-style', 'solid')
   await expect(note).toHaveCSS('clip-path', 'none')
 })
+
+test('double-clicking a class edits its text instead of adding a box', async () => {
+  await openShop()
+  await page.locator('[data-node="order"] .canvas-class-name').dblclick()
+  await expect(page.locator('[data-node="order"] .canvas-editor')).toBeFocused()
+  await expect(page.locator('.canvas-node')).toHaveCount(7)
+})
