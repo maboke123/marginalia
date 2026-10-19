@@ -311,3 +311,40 @@ test('Claude draws classes on the open canvas after I accept, as one undo step',
   await page.keyboard.press('Control+Z')
   await expect(page.locator('.canvas-node')).toHaveCount(0)
 })
+
+test('shapes come from the panel by click or drag, and the right-click menu changes them', async () => {
+  await openShop()
+  const palette = page.getByRole('complementary', { name: 'Shapes' })
+  await expect(palette).toBeVisible()
+  await page.screenshot({ path: path.join('test-results', 'canvas-palette.png') })
+
+  // Click: a class in the middle, its placeholder name selected to type over.
+  await palette.getByRole('button', { name: 'Class', exact: true }).click()
+  await expect(page.locator('.canvas-edit-hint')).toContainText('A line with --- starts')
+  await page.keyboard.type('Payment')
+  await page.keyboard.press('Escape')
+  await expect
+    .poll(async () => (await read('Shop.canvas')).nodes.at(-1)!.text)
+    .toMatch(/^Payment\n---\n/)
+
+  // Drag: an actor where it is dropped.
+  const view = (await surface().boundingBox())!
+  await palette
+    .getByRole('button', { name: 'Actor' })
+    .dragTo(surface(), { targetPosition: { x: view.width - 80, y: view.height - 100 } })
+  await page.keyboard.type('Clerk')
+  await page.keyboard.press('Escape')
+  await expect.poll(async () => (await read('Shop.canvas')).nodes.at(-1)!.text).toBe('Clerk')
+
+  // Right-click a box: turn it into another shape.
+  await page.locator('[data-node="n1"]').click({ button: 'right' })
+  await page.getByRole('menuitem', { name: 'Ellipse (use case)' }).click()
+  await expect
+    .poll(async () => (await read('Shop.canvas')).nodes.find((n) => n.id === 'n1'))
+    .toMatchObject({ shape: 'ellipse' })
+
+  // A selected box has an Edit text button.
+  await page.locator('[data-node="line"]').click()
+  await page.getByRole('button', { name: 'Edit text' }).click()
+  await expect(page.locator('[data-node="line"] .canvas-editor')).toBeFocused()
+})

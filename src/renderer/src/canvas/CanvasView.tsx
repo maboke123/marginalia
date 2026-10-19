@@ -15,6 +15,7 @@ import {
   type InkNode,
   type Rect,
   type Relation,
+  type Shape,
   type Side
 } from '../../../shared/canvas'
 import { CloseButton } from '../components/CloseButton'
@@ -69,7 +70,8 @@ import {
   type Handle,
   type Selection
 } from './ops'
-import { TEMPLATES } from './shapes'
+import { TEMPLATES, templateByName, type Template } from './shapes'
+import { SHAPE_DRAG, ShapePalette } from './ShapePalette'
 
 type Tool = 'select' | 'hand' | 'text' | 'pen'
 
@@ -99,6 +101,38 @@ const IMAGE_TYPES: Record<string, string> = {
   'image/webp': 'webp'
 }
 const NOOP = (): void => {}
+
+const PALETTE_KEY = 'canvas-palette'
+
+function loadPalette(): boolean {
+  try {
+    return localStorage.getItem(PALETTE_KEY) !== 'closed'
+  } catch {
+    return true
+  }
+}
+
+function savePalette(open: boolean): void {
+  try {
+    localStorage.setItem(PALETTE_KEY, open ? 'open' : 'closed')
+  } catch {
+    // Only a convenience.
+  }
+}
+
+// Start and end dots have no text to type.
+const isMarker = (shape: Shape | undefined): boolean => shape === 'initial' || shape === 'final'
+
+const SHAPE_CHOICES: { shape: Shape; label: string }[] = [
+  { shape: 'rectangle', label: 'Box' },
+  { shape: 'rounded', label: 'Rounded box (state, action)' },
+  { shape: 'ellipse', label: 'Ellipse (use case)' },
+  { shape: 'class', label: 'Class' },
+  { shape: 'diamond', label: 'Diamond (decision)' },
+  { shape: 'note', label: 'Note' },
+  { shape: 'actor', label: 'Actor' },
+  { shape: 'circle', label: 'Circle' }
+]
 // Pen strokes this close in time and place go into one drawing.
 const INK_JOIN_MS = 4000
 
@@ -297,6 +331,8 @@ function CanvasSurface({
   const space = useRef(false)
   const lastInk = useRef<{ id: string; at: number } | null>(null)
   const newBox = useRef<string | null>(null)
+  const [fresh, setFresh] = useState<string | null>(null)
+  const [palette, setPalette] = useState(loadPalette)
 
   const setCamera = useCallback((next: Camera | ((c: Camera) => Camera)) => {
     const value = typeof next === 'function' ? next(cameraRef.current) : next
@@ -437,6 +473,9 @@ function CanvasSurface({
   const groups = ordered.filter((n) => n.type === 'group')
   const boxes = ordered.filter((n) => n.type !== 'group')
   const single = selection.nodes.length === 1 && !selection.edges.length ? selection.nodes[0] : null
+  const singleNode = single ? data.nodes.find((n) => n.id === single) : undefined
+  const editable =
+    !editing && (singleNode?.type === 'text' || singleNode?.type === 'group') ? single : null
 
   // Editing text: the new box and its text are one undo step; an empty new box goes away.
   const startEdit = (id: string): void => {
@@ -469,6 +508,7 @@ function CanvasSurface({
       s.end()
     }
     newBox.current = null
+    setFresh(null)
     surfaceRef.current?.focus({ preventScroll: true })
   }, [doc])
 
@@ -484,6 +524,22 @@ function CanvasSurface({
       s.change((d) => addNodes(d, [node]))
       s.select({ nodes: [node.id], edges: [] })
     }
+  }
+
+  /** A shape from the palette or the menu, at a point; ready to type its name in. */
+  const addTemplate = (t: Template, at: { x: number; y: number }): void => {
+    const node = t.make(at.x, at.y)
+    const typed = node.type === 'group' || (node.type === 'text' && !isMarker(node.shape))
+    addBox(node, typed)
+    if (typed) setFresh(node.id)
+    setTool('select')
+  }
+
+  const togglePalette = (): void => {
+    setPalette((open) => {
+      savePalette(!open)
+      return !open
+    })
   }
 
   const textBoxAt = (x: number, y: number, width = 240, height = 80): CanvasNode => ({
@@ -904,6 +960,13 @@ function CanvasSurface({
   }
 
   const onDrop = (e: React.DragEvent): void => {
+    const shape = templateByName(e.dataTransfer.getData(SHAPE_DRAG))
+    if (shape) {
+      e.preventDefault()
+      addTemplate(shape, worldOf(e))
+      surfaceRef.current?.focus({ preventScroll: true })
+      return
+    }
     if (!draggingFiles(e)) return
     const images = [...e.dataTransfer.files].filter((f) => IMAGE_TYPES[f.type])
     if (!images.length) return
@@ -920,22 +983,65 @@ function CanvasSurface({
     })
   }
 
-  const shapesMenu = (e: React.MouseEvent): void => {
-    const r = e.currentTarget.getBoundingClientRect()
-    const items: MenuItem[] = TEMPLATES.flatMap((section, i): MenuItem[] => [
-      ...(i ? [{ separator: true } as MenuItem] : []),
-      { custom: <p className="menu-heading">{section.section}</p> },
-      ...section.items.map((t): MenuItem => ({
-        label: t.name,
-        hint: t.hint,
-        onSelect: () => {
-          const c = viewCenter()
-          const node = t.make(c.x, c.y)
-          addBox(node, false)
-        }
-      }))
-    ])
-    setMenu({ x: r.left, y: r.bottom + 4, items })
+  /** Right-click: shapes to add on empty space, and what can be done with a box or arrow. */
+  const onContextMenu = (e: React.MouseEvent): void => {
+    const target = e.target as HTMLElement
+    if (target.closest('input, textarea, .canvas-edge-panel, .canvas-ghost-bar')) return
+    e.preventDefault()
+    if (ghost) return
+    const s = doc.getState()
+    const at = worldOf(e)
+    const nodeId = target.closest<HTMLElement>('[data-node]')?.dataset.node
+    const edgeId = target.closest<HTMLElement>('[data-edge]')?.dataset.edge
+    let items: MenuItem[]
+    if (nodeId) {
+      const node = nodeById(s.data, nodeId)
+      if (!node) return
+      if (!s.selection.nodes.includes(nodeId)) s.select({ nodes: [nodeId], edges: [] })
+      const many = doc.getState().selection.nodes.length > 1
+      items = [
+        ...(!many && (node.type === 'text' || node.type === 'group')
+          ? [{ label: 'Edit text', hint: 'Enter', onSelect: () => startEdit(nodeId) }]
+          : []),
+        ...(!many && node.type === 'text'
+          ? [
+              { custom: <p className="menu-heading">Change into</p> },
+              ...SHAPE_CHOICES.filter((c) => c.shape !== (node.shape ?? 'rectangle')).map(
+                (c): MenuItem => ({
+                  label: c.label,
+                  onSelect: () =>
+                    s.change((d) =>
+                      updateNode(d, nodeId, {
+                        shape: c.shape === 'rectangle' ? undefined : c.shape
+                      } as Partial<CanvasNode>)
+                    )
+                })
+              ),
+              { separator: true } as MenuItem
+            ]
+          : []),
+        ...(many ? [{ label: 'Group', hint: 'Ctrl+G', onSelect: makeGroup }] : []),
+        { label: 'Duplicate', hint: 'Ctrl+D', onSelect: duplicate },
+        { label: 'Delete', hint: 'Delete', danger: true, onSelect: deleteSelection }
+      ]
+    } else if (edgeId) {
+      s.select({ nodes: [], edges: [edgeId] })
+      items = [{ label: 'Delete arrow', hint: 'Delete', danger: true, onSelect: deleteSelection }]
+    } else {
+      items = [
+        {
+          label: 'Text box',
+          onSelect: () => addBox(textBoxAt(at.x, at.y), true)
+        },
+        ...TEMPLATES.flatMap((section): MenuItem[] => [
+          { custom: <p className="menu-heading">{section.section}</p> },
+          ...section.items
+            .filter((t) => t.name !== 'Text box')
+            .map((t): MenuItem => ({ label: t.name, onSelect: () => addTemplate(t, at) }))
+        ])
+      ]
+    }
+    setMenu({ x: e.clientX, y: e.clientY, items })
   }
 
   const edge =
@@ -952,6 +1058,7 @@ function CanvasSurface({
       selected={chosen.has(n.id)}
       handles={single === n.id && !ghost}
       editing={editing === n.id}
+      fresh={fresh === n.id}
       proposal={proposals.get(n.id)}
       onText={editing === n.id ? onText : NOOP}
       onDone={editing === n.id ? onDone : NOOP}
@@ -978,15 +1085,25 @@ function CanvasSurface({
             </button>
           ))}
           <button
-            className="icon-button"
-            title="Add a shape"
+            className={palette ? 'icon-button pressed' : 'icon-button'}
+            title="Shapes: class, actor, use case, state and more"
             aria-label="Shapes"
-            aria-haspopup="menu"
+            aria-pressed={palette}
             onPointerDown={(e) => e.preventDefault()}
-            onClick={shapesMenu}
+            onClick={togglePalette}
           >
             <Icon name="shapes" />
           </button>
+          {editable && (
+            <button
+              className="text-button"
+              title="Edit the text of this box (Enter, or double-click it)"
+              onPointerDown={(e) => e.preventDefault()}
+              onClick={() => startEdit(editable)}
+            >
+              Edit text
+            </button>
+          )}
           {tool === 'pen' && (
             <div className="ink-swatches">
               {penColors.map((c) => (
@@ -1114,96 +1231,105 @@ function CanvasSurface({
         </button>
         <CloseButton path={path} />
       </div>
-      <div
-        ref={surfaceRef}
-        className={`canvas-surface tool-${tool}${panning ? ' panning' : ''}`}
-        tabIndex={0}
-        data-path={path}
-        aria-label={`Canvas ${title}`}
-        onPointerDown={onPointerDown}
-        onPointerMove={onPointerMove}
-        onPointerUp={onPointerUp}
-        onPointerCancel={onPointerUp}
-        onDoubleClick={onDoubleClick}
-        onKeyDown={onKeyDown}
-        onKeyUp={(e) => {
-          if (e.key === ' ') space.current = false
-        }}
-        onPaste={onPaste}
-        onDragOver={(e) => {
-          if (draggingFiles(e)) e.preventDefault()
-        }}
-        onDrop={onDrop}
-        style={{ '--canvas-zoom': camera.zoom } as React.CSSProperties}
-      >
-        <div className="canvas-world" style={{ transform }}>
-          {groups.map(nodeView)}
-          <CanvasEdges
-            edges={allEdges.filter((e) => geometries.has(e.id))}
-            geometries={geometries}
-            selected={chosenEdges}
-            proposals={proposals}
-            draft={draft}
-            guides={{ ...guides, view }}
-          />
-          {boxes.map(nodeView)}
-          <EdgeLabels edges={allEdges} geometries={geometries} />
-          {liveInk && (
-            <svg className="canvas-edges" aria-hidden>
-              <path
-                d={strokeOutline(
-                  {
-                    id: '',
-                    tool: 'pen',
-                    author: 'me',
-                    color: ink.penColor,
-                    width: ink.penWidth,
-                    points: liveInk
-                  },
-                  true
-                )}
-                fill={ink.penColor}
+      <div className="canvas-body">
+        {palette && <ShapePalette onAdd={(t) => addTemplate(t, viewCenter())} />}
+        <div
+          ref={surfaceRef}
+          className={`canvas-surface tool-${tool}${panning ? ' panning' : ''}`}
+          tabIndex={0}
+          data-path={path}
+          aria-label={`Canvas ${title}`}
+          onPointerDown={onPointerDown}
+          onPointerMove={onPointerMove}
+          onPointerUp={onPointerUp}
+          onPointerCancel={onPointerUp}
+          onDoubleClick={onDoubleClick}
+          onContextMenu={onContextMenu}
+          onKeyDown={onKeyDown}
+          onKeyUp={(e) => {
+            if (e.key === ' ') space.current = false
+          }}
+          onPaste={onPaste}
+          onDragOver={(e) => {
+            if (draggingFiles(e) || e.dataTransfer.types.includes(SHAPE_DRAG)) e.preventDefault()
+          }}
+          onDrop={onDrop}
+          style={{ '--canvas-zoom': camera.zoom } as React.CSSProperties}
+        >
+          <div className="canvas-world" style={{ transform }}>
+            {groups.map(nodeView)}
+            <CanvasEdges
+              edges={allEdges.filter((e) => geometries.has(e.id))}
+              geometries={geometries}
+              selected={chosenEdges}
+              proposals={proposals}
+              draft={draft}
+              guides={{ ...guides, view }}
+            />
+            {boxes.map(nodeView)}
+            <EdgeLabels edges={allEdges} geometries={geometries} />
+            {liveInk && (
+              <svg className="canvas-edges" aria-hidden>
+                <path
+                  d={strokeOutline(
+                    {
+                      id: '',
+                      tool: 'pen',
+                      author: 'me',
+                      color: ink.penColor,
+                      width: ink.penWidth,
+                      points: liveInk
+                    },
+                    true
+                  )}
+                  fill={ink.penColor}
+                />
+              </svg>
+            )}
+            {marquee && (
+              <div
+                className="canvas-marquee"
+                style={{
+                  left: marquee.x,
+                  top: marquee.y,
+                  width: marquee.width,
+                  height: marquee.height
+                }}
               />
-            </svg>
+            )}
+          </div>
+          {!shown.nodes.length && (
+            <p className="canvas-hint muted">
+              Drag a shape from the left onto the canvas, or right-click to add one where you click.
+              Double-click a box (or press Enter) to edit its text. Select a box and drag one of the
+              dots on its edges to another box to connect them. Space or the middle mouse button
+              drags the view, Ctrl+wheel zooms.
+            </p>
           )}
-          {marquee && (
-            <div
-              className="canvas-marquee"
-              style={{
-                left: marquee.x,
-                top: marquee.y,
-                width: marquee.width,
-                height: marquee.height
+          {edge && edgeAt && !ghost && (
+            <EdgePanel
+              key={edge.id}
+              edge={edge}
+              at={{
+                x: (edgeAt.x - camera.x) * camera.zoom,
+                y: (edgeAt.y - camera.y) * camera.zoom
               }}
+              doc={doc}
             />
           )}
+          {ghost && (
+            <div className="canvas-ghost-bar">
+              <span>Claude&apos;s change</span>
+              <button className="button primary" onClick={() => ghost.decide(true)}>
+                Accept
+              </button>
+              <button className="button" onClick={() => ghost.decide(false)}>
+                Reject
+              </button>
+            </div>
+          )}{' '}
         </div>
-        {!shown.nodes.length && (
-          <p className="canvas-hint muted">
-            Double-click to add a text box, or add a shape from the toolbar. Drag a dot on a
-            box&apos;s edge to another box to connect them. Space or the middle mouse button drags
-            the view, Ctrl+wheel zooms.
-          </p>
-        )}
-        {edge && edgeAt && !ghost && (
-          <EdgePanel
-            key={edge.id}
-            edge={edge}
-            at={{ x: (edgeAt.x - camera.x) * camera.zoom, y: (edgeAt.y - camera.y) * camera.zoom }}
-            doc={doc}
-          />
-        )}
-        {ghost && (
-          <div className="canvas-ghost-bar">
-            <span>Claude&apos;s change</span>
-            <button className="button primary" onClick={() => ghost.decide(true)}>
-              Accept
-            </button>
-            <button className="button" onClick={() => ghost.decide(false)}>
-              Reject
-            </button>
-          </div>
-        )}
+
         {menu && (
           <ContextMenu x={menu.x} y={menu.y} items={menu.items} onClose={() => setMenu(null)} />
         )}

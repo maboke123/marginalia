@@ -80,3 +80,24 @@ export const TEMPLATES: { section: string; items: Template[] }[] = [
     ]
   }
 ]
+
+/** How a template looks in the palette: its shape, or "group". */
+export function templateKind(t: Template): string {
+  const node = t.make(0, 0)
+  return node.type === 'group'
+    ? 'group'
+    : node.type === 'text'
+      ? (node.shape ?? 'rectangle')
+      : node.type
+}
+
+export const templateByName = (name: string): Template | undefined =>
+  TEMPLATES.flatMap((s) => s.items).find((t) => t.name === name)
+
+/** What typing in a box means, shown above it while I edit. */
+export function editHint(shape: string | undefined): string {
+  if (shape === 'class') {
+    return 'First line: the name («interface» above it if needed). A line with --- starts the attributes, the next --- the operations. Esc when done.'
+  }
+  return 'Markdown and $math$ work. Esc or Ctrl+Enter when done.'
+}

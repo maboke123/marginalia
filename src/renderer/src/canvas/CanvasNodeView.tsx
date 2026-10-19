@@ -12,6 +12,7 @@ import { Icon } from '../components/Icon'
 import { vaultUrl } from '../editor/links'
 import { renderMarkdown } from '../lib/markdown'
 import type { Handle } from './ops'
+import { editHint } from './shapes'
 
 const HANDLES: Handle[] = ['n', 'ne', 'e', 'se', 's', 'sw', 'w', 'nw']
 const SIDES = ['top', 'right', 'bottom', 'left'] as const
@@ -23,6 +24,8 @@ interface Props {
   /** Only one box shows its handles: with several chosen, they move together. */
   handles: boolean
   editing: boolean
+  /** Just added from the shapes: typing replaces its placeholder name. */
+  fresh?: boolean
   /** 'ghost': proposed by Claude; 'removed': Claude proposes to remove it. */
   proposal?: 'ghost' | 'removed'
   onText(text: string): void
@@ -127,10 +130,15 @@ function FileContent({ file }: { file: string }): React.JSX.Element {
 /** The text of a box being typed, in a textarea that fills the box. */
 function Editor({
   value,
+  shape,
+  fresh,
   onText,
   onDone
 }: {
   value: string
+  shape: string | undefined
+  /** A shape just added: its first line (the placeholder name) is selected, to type over. */
+  fresh: boolean
   onText(text: string): void
   onDone(): void
 }): React.JSX.Element {
@@ -138,22 +146,29 @@ function Editor({
   useEffect(() => {
     const el = ref.current!
     el.focus()
-    el.setSelectionRange(el.value.length, el.value.length)
+    const firstLine = el.value.split('\n')[0].length
+    if (fresh && firstLine) el.setSelectionRange(0, firstLine)
+    else el.setSelectionRange(el.value.length, el.value.length)
+    // Only when the editor opens.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
   return (
-    <textarea
-      ref={ref}
-      className="canvas-editor"
-      value={value}
-      spellCheck
-      onChange={(e) => onText(e.target.value)}
-      onBlur={onDone}
-      onPointerDown={(e) => e.stopPropagation()}
-      onKeyDown={(e) => {
-        e.stopPropagation()
-        if (e.key === 'Escape' || (e.key === 'Enter' && e.ctrlKey)) e.currentTarget.blur()
-      }}
-    />
+    <>
+      <span className="canvas-edit-hint">{editHint(shape)}</span>
+      <textarea
+        ref={ref}
+        className="canvas-editor"
+        value={value}
+        spellCheck
+        onChange={(e) => onText(e.target.value)}
+        onBlur={onDone}
+        onPointerDown={(e) => e.stopPropagation()}
+        onKeyDown={(e) => {
+          e.stopPropagation()
+          if (e.key === 'Escape' || (e.key === 'Enter' && e.ctrlKey)) e.currentTarget.blur()
+        }}
+      />
+    </>
   )
 }
 
@@ -163,6 +178,7 @@ export const CanvasNodeView = memo(function CanvasNodeView({
   selected,
   handles,
   editing,
+  fresh = false,
   proposal,
   onText,
   onDone
@@ -190,7 +206,7 @@ export const CanvasNodeView = memo(function CanvasNodeView({
   let content: React.ReactNode
   if (node.type === 'text') {
     content = editing ? (
-      <Editor value={node.text} onText={onText} onDone={onDone} />
+      <Editor value={node.text} shape={node.shape} fresh={fresh} onText={onText} onDone={onDone} />
     ) : (
       <TextContent node={node} />
     )
