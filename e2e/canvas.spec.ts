@@ -312,14 +312,23 @@ test('Claude draws classes on the open canvas after I accept, as one undo step',
   await expect(page.locator('.canvas-node')).toHaveCount(0)
 })
 
-test('shapes come from the panel by click or drag, and the right-click menu changes them', async () => {
+test('shapes come from the Shapes menu by click or drag, and the right-click menu changes them', async () => {
   await openShop()
-  const palette = page.getByRole('complementary', { name: 'Shapes' })
-  await expect(palette).toBeVisible()
-  await page.screenshot({ path: path.join('test-results', 'canvas-palette.png') })
+  const view = (await surface().boundingBox())!
+  const pick = async (name: string): Promise<void> => {
+    await page.getByRole('button', { name: 'Shapes' }).click()
+    const menu = page.getByRole('group', { name: 'Shapes' })
+    await expect(menu).toBeVisible()
+    await page.screenshot({ path: path.join('test-results', 'canvas-shapes-menu.png') })
+    await menu.getByRole('button', { name, exact: true }).click()
+    await expect(menu).toBeHidden()
+    await expect(page.locator('.canvas-place-bar')).toContainText(name.toLowerCase())
+  }
 
-  // Click: a class in the middle, its placeholder name selected to type over.
-  await palette.getByRole('button', { name: 'Class', exact: true }).click()
+  // Click: a class where I click, its placeholder name selected to type over.
+  await pick('Class')
+  await page.mouse.click(view.x + view.width - 160, view.y + 120)
+  await expect(page.locator('.canvas-place-bar')).toBeHidden()
   await expect(page.locator('.canvas-edit-hint')).toContainText('A line with --- starts')
   await page.keyboard.type('Payment')
   await page.keyboard.press('Escape')
@@ -327,14 +336,24 @@ test('shapes come from the panel by click or drag, and the right-click menu chan
     .poll(async () => (await read('Shop.canvas')).nodes.at(-1)!.text)
     .toMatch(/^Payment\n---\n/)
 
-  // Drag: an actor where it is dropped.
-  const view = (await surface().boundingBox())!
-  await palette
-    .getByRole('button', { name: 'Actor' })
-    .dragTo(surface(), { targetPosition: { x: view.width - 80, y: view.height - 100 } })
+  // Drag: an actor drawn at the size I drag.
+  await pick('Actor')
+  const zoom =
+    Number((await page.locator('.canvas-zoom-value').textContent())!.replace('%', '')) / 100
+  await page.mouse.move(view.x + view.width - 200, view.y + view.height - 220)
+  await page.mouse.down()
+  await page.mouse.move(view.x + view.width - 100, view.y + view.height - 60, { steps: 6 })
+  await page.mouse.up()
   await page.keyboard.type('Clerk')
   await page.keyboard.press('Escape')
   await expect.poll(async () => (await read('Shop.canvas')).nodes.at(-1)!.text).toBe('Clerk')
+  const actor = (await read('Shop.canvas')).nodes.at(-1) as unknown as { width: number }
+  expect(actor.width).toBeCloseTo(100 / zoom, -1)
+
+  // Esc puts a picked shape back.
+  await pick('Note')
+  await surface().press('Escape')
+  await expect(page.locator('.canvas-place-bar')).toBeHidden()
 
   // Right-click a box: turn it into another shape.
   await page.locator('[data-node="n1"]').click({ button: 'right' })

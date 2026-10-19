@@ -1,8 +1,5 @@
 import { TEMPLATES, templateKind, type Template } from './shapes'
 
-/** Shapes are dragged onto the canvas under this type, with the template's name. */
-export const SHAPE_DRAG = 'application/x-marginalia-shape'
-
 function Preview({ kind }: { kind: string }): React.JSX.Element {
   if (kind === 'actor') {
     return (
@@ -24,11 +21,19 @@ function Preview({ kind }: { kind: string }): React.JSX.Element {
   return <span className={`palette-shape p-${kind}`} aria-hidden />
 }
 
-/** The shapes to add, next to the canvas: click puts one in the middle, drag puts it where I drop. */
-export function ShapePalette({ onAdd }: { onAdd(template: Template): void }): React.JSX.Element {
+/**
+ * The shapes in the toolbar's dropdown. Picking one arms it: the next click on the canvas puts
+ * it there, a drag draws it at that size.
+ */
+export function ShapeMenu({
+  active,
+  onPick
+}: {
+  active: string | null
+  onPick(template: Template): void
+}): React.JSX.Element {
   return (
-    <aside className="canvas-palette" aria-label="Shapes">
-      <p className="muted canvas-palette-hint">Click to add, or drag onto the canvas</p>
+    <div className="canvas-shape-menu" role="group" aria-label="Shapes">
       {TEMPLATES.map((section) => (
         <section key={section.section}>
           <h3 className="menu-heading">{section.section}</h3>
@@ -36,14 +41,12 @@ export function ShapePalette({ onAdd }: { onAdd(template: Template): void }): Re
             {section.items.map((t) => (
               <button
                 key={t.name}
-                className="canvas-palette-item"
+                className={
+                  t.name === active ? 'canvas-palette-item pressed' : 'canvas-palette-item'
+                }
+                aria-pressed={t.name === active}
                 title={t.hint ?? t.name}
-                draggable
-                onDragStart={(e) => {
-                  e.dataTransfer.setData(SHAPE_DRAG, t.name)
-                  e.dataTransfer.effectAllowed = 'copy'
-                }}
-                onClick={() => onAdd(t)}
+                onClick={() => onPick(t)}
               >
                 <Preview kind={templateKind(t)} />
                 <span>{t.name}</span>
@@ -52,6 +55,6 @@ export function ShapePalette({ onAdd }: { onAdd(template: Template): void }): Re
           </div>
         </section>
       ))}
-    </aside>
+    </div>
   )
 }

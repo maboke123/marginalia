@@ -70,8 +70,8 @@ import {
   type Handle,
   type Selection
 } from './ops'
-import { TEMPLATES, templateByName, type Template } from './shapes'
-import { SHAPE_DRAG, ShapePalette } from './ShapePalette'
+import { TEMPLATES, type Template } from './shapes'
+import { ShapeMenu } from './ShapeMenu'
 
 type Tool = 'select' | 'hand' | 'text' | 'pen'
 
@@ -101,24 +101,6 @@ const IMAGE_TYPES: Record<string, string> = {
   'image/webp': 'webp'
 }
 const NOOP = (): void => {}
-
-const PALETTE_KEY = 'canvas-palette'
-
-function loadPalette(): boolean {
-  try {
-    return localStorage.getItem(PALETTE_KEY) !== 'closed'
-  } catch {
-    return true
-  }
-}
-
-function savePalette(open: boolean): void {
-  try {
-    localStorage.setItem(PALETTE_KEY, open ? 'open' : 'closed')
-  } catch {
-    // Only a convenience.
-  }
-}
 
 // Start and end dots have no text to type.
 const isMarker = (shape: Shape | undefined): boolean => shape === 'initial' || shape === 'final'
@@ -155,6 +137,14 @@ function saveCamera(path: string, camera: Camera): void {
   }
 }
 
+/** The rectangle between two corners. */
+const placedRect = (a: { x: number; y: number }, b: { x: number; y: number }): Rect => ({
+  x: Math.round(Math.min(a.x, b.x)),
+  y: Math.round(Math.min(a.y, b.y)),
+  width: Math.round(Math.abs(b.x - a.x)),
+  height: Math.round(Math.abs(b.y - a.y))
+})
+
 /** The image's own size, scaled down to at most 480 wide, for a new image box. */
 function imageSize(src: string): Promise<{ width: number; height: number }> {
   return new Promise((resolve) => {
@@ -186,6 +176,7 @@ const HOVER_PX = 28
 
 type Drag =
   | { kind: 'pan'; x: number; y: number; camera: Camera }
+  | { kind: 'place'; from: { x: number; y: number }; template: Template }
   | { kind: 'marquee'; from: { x: number; y: number }; add: Selection }
   | {
       kind: 'move'
@@ -333,6 +324,8 @@ function CanvasSurface({
   const [marquee, setMarquee] = useState<Rect | null>(null)
   const [guides, setGuides] = useState<{ x: number | null; y: number | null }>({ x: null, y: null })
   const [draft, setDraft] = useState<Draft | null>(null)
+  // A shape picked in the Shapes menu, put down by the next click or drag on the canvas.
+  const [placing, setPlacing] = useState<Template | null>(null)
   const [hover, setHover] = useState<string | null>(null)
   // What the last press was on: a double-click's own target is the surface, which holds the
   // pointer capture from that press.
@@ -346,7 +339,6 @@ function CanvasSurface({
   const lastInk = useRef<{ id: string; at: number } | null>(null)
   const newBox = useRef<string | null>(null)
   const [fresh, setFresh] = useState<string | null>(null)
-  const [palette, setPalette] = useState(loadPalette)
 
   const setCamera = useCallback((next: Camera | ((c: Camera) => Camera)) => {
     const value = typeof next === 'function' ? next(cameraRef.current) : next
@@ -541,19 +533,39 @@ function CanvasSurface({
     }
   }
 
-  /** A shape from the palette or the menu, at a point; ready to type its name in. */
-  const addTemplate = (t: Template, at: { x: number; y: number }): void => {
-    const node = t.make(at.x, at.y)
-    const typed = node.type === 'group' || (node.type === 'text' && !isMarker(node.shape))
+  /**
+   * A shape from the Shapes or right-click menu, centred on a point or drawn as `rect`; ready to type
+   * its name in.
+   */
+  const addTemplate = (t: Template, at: { x: number; y: number }, rect?: Rect): void => {
+    const made = t.make(at.x, at.y)
+    const marker = made.type === 'text' && isMarker(made.shape)
+    const node = rect && !marker ? ({ ...made, ...rect } as CanvasNode) : made
+    const typed = node.type === 'group' || (node.type === 'text' && !marker)
     addBox(node, typed)
     if (typed) setFresh(node.id)
     setTool('select')
+    setPlacing(null)
   }
 
-  const togglePalette = (): void => {
-    setPalette((open) => {
-      savePalette(!open)
-      return !open
+  const chooseTool = (next: Tool): void => {
+    setTool(next)
+    setPlacing(null)
+  }
+
+  const pickShape = (t: Template | null): void => {
+    setPlacing(t)
+    setTool('select')
+    setMenu(null)
+    surfaceRef.current?.focus({ preventScroll: true })
+  }
+
+  const shapesMenu = (e: React.MouseEvent): void => {
+    const r = e.currentTarget.getBoundingClientRect()
+    setMenu({
+      x: r.left,
+      y: r.bottom + 4,
+      items: [{ custom: <ShapeMenu active={placing?.name ?? null} onPick={pickShape} /> }]
     })
   }
 
@@ -657,6 +669,9 @@ function CanvasSurface({
       e.preventDefault()
       drag.current = { kind: 'pan', x: e.clientX, y: e.clientY, camera: cameraRef.current }
       setPanning(true)
+    } else if (placing) {
+      drag.current = { kind: 'place', from: at, template: placing }
+      setMarquee({ ...at, width: 0, height: 0 })
     } else if (tool === 'pen') {
       drag.current = { kind: 'ink', points: [[at.x, at.y, e.pressure || 0.5]] }
       setLiveInk(drag.current.points)
@@ -731,7 +746,7 @@ function CanvasSurface({
     if (!d) {
       // The box near the pointer shows its dots, so an arrow can start without selecting it.
       const near =
-        tool === 'select' && !ghost && !s.editing
+        tool === 'select' && !placing && !ghost && !s.editing
           ? (connectTarget(s.data, at.x, at.y, HOVER_PX / zoom)?.id ?? null)
           : null
       if (near !== hover) setHover(near)
@@ -744,6 +759,9 @@ function CanvasSurface({
       case 'ink':
         d.points.push([at.x, at.y, e.pressure || 0.5])
         setLiveInk([...d.points])
+        return
+      case 'place':
+        setMarquee(placedRect(d.from, at))
         return
       case 'connect': {
         const land = connectTarget(s.data, at.x, at.y, LAND_PX / zoom, d.id)
@@ -812,6 +830,18 @@ function CanvasSurface({
     if (d.kind === 'ink') {
       finishInk(d.points, e.timeStamp)
       setLiveInk(null)
+    } else if (d.kind === 'place') {
+      setMarquee(null)
+      const at = worldOf(e)
+      const rect = placedRect(d.from, at)
+      const dragged = Math.max(rect.width, rect.height) * cameraRef.current.zoom > 8
+      addTemplate(
+        d.template,
+        dragged ? { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 } : d.from,
+        dragged
+          ? { ...rect, width: Math.max(rect.width, 40), height: Math.max(rect.height, 30) }
+          : undefined
+      )
     } else if (d.kind === 'connect') {
       setDraft(null)
       const at = worldOf(e)
@@ -966,8 +996,8 @@ function CanvasSurface({
     else if (e.shiftKey && e.code === 'Digit1') fit()
     else if (key === 'delete' || key === 'backspace') deleteSelection()
     else if (key === 'escape') {
-      s.select(NOTHING)
-      setTool('select')
+      if (!placing) s.select(NOTHING)
+      chooseTool('select')
     } else if (key === 'enter' && single) startEdit(single)
     else if (key.startsWith('arrow') && s.selection.nodes.length) {
       const step = e.shiftKey ? 10 : 1
@@ -977,7 +1007,7 @@ function CanvasSurface({
     } else if (!ctrl && !e.altKey) {
       const found = TOOLS.find((t) => t.key.toLowerCase() === key)
       if (!found) return
-      setTool(found.tool)
+      chooseTool(found.tool)
     } else return
     e.preventDefault()
   }
@@ -1011,13 +1041,6 @@ function CanvasSurface({
   }
 
   const onDrop = (e: React.DragEvent): void => {
-    const shape = templateByName(e.dataTransfer.getData(SHAPE_DRAG))
-    if (shape) {
-      e.preventDefault()
-      addTemplate(shape, worldOf(e))
-      surfaceRef.current?.focus({ preventScroll: true })
-      return
-    }
     if (!draggingFiles(e)) return
     const images = [...e.dataTransfer.files].filter((f) => IMAGE_TYPES[f.type])
     if (!images.length) return
@@ -1144,20 +1167,22 @@ function CanvasSurface({
               aria-label={t.label}
               aria-pressed={tool === t.tool}
               onPointerDown={(e) => e.preventDefault()}
-              onClick={() => setTool(t.tool)}
+              onClick={() => chooseTool(t.tool)}
             >
               <Icon name={t.icon} />
             </button>
           ))}
           <button
-            className={palette ? 'icon-button pressed' : 'icon-button'}
-            title="Shapes: class, actor, use case, state and more"
+            className={placing ? 'text-button canvas-shapes pressed' : 'text-button canvas-shapes'}
+            title="Add a shape: class, actor, use case, state and more"
             aria-label="Shapes"
-            aria-pressed={palette}
+            aria-haspopup="menu"
             onPointerDown={(e) => e.preventDefault()}
-            onClick={togglePalette}
+            onClick={shapesMenu}
           >
             <Icon name="shapes" />
+            <span>{placing?.name ?? 'Shapes'}</span>
+            <Icon name="down" />
           </button>
           {editingNode?.type === 'text' && (
             <>
@@ -1320,10 +1345,9 @@ function CanvasSurface({
         <CloseButton path={path} />
       </div>
       <div className="canvas-body">
-        {palette && <ShapePalette onAdd={(t) => addTemplate(t, viewCenter())} />}
         <div
           ref={surfaceRef}
-          className={`canvas-surface tool-${tool}${panning ? ' panning' : ''}`}
+          className={`canvas-surface tool-${tool}${panning ? ' panning' : ''}${placing ? ' placing' : ''}`}
           tabIndex={0}
           data-path={path}
           aria-label={`Canvas ${title}`}
@@ -1339,7 +1363,7 @@ function CanvasSurface({
           }}
           onPaste={onPaste}
           onDragOver={(e) => {
-            if (draggingFiles(e) || e.dataTransfer.types.includes(SHAPE_DRAG)) e.preventDefault()
+            if (draggingFiles(e)) e.preventDefault()
           }}
           onDrop={onDrop}
           style={{ '--canvas-zoom': camera.zoom } as React.CSSProperties}
@@ -1394,7 +1418,7 @@ function CanvasSurface({
             )}
             {marquee && (
               <div
-                className="canvas-marquee"
+                className={placing ? 'canvas-marquee placing' : 'canvas-marquee'}
                 style={{
                   left: marquee.x,
                   top: marquee.y,
@@ -1406,10 +1430,10 @@ function CanvasSurface({
           </div>
           {!shown.nodes.length && (
             <p className="canvas-hint muted">
-              Drag a shape from the left onto the canvas, or right-click to add one where you click.
-              Double-click a box (or press Enter) to edit its text. Select a box and drag one of the
-              dots on its edges to another box to connect them. Space or the middle mouse button
-              drags the view, Ctrl+wheel zooms.
+              Pick a shape under Shapes and click on the canvas, or right-click to add one where you
+              click. Double-click a box (or press Enter) to edit its text. Point at a box and drag
+              one of the dots by its edges to another box to connect them. Space or the middle mouse
+              button drags the view, Ctrl+wheel zooms, Home shows everything.
             </p>
           )}
           {lost && (
@@ -1427,6 +1451,16 @@ function CanvasSurface({
               }}
               doc={doc}
             />
+          )}
+          {placing && !ghost && (
+            <div className="canvas-ghost-bar canvas-place-bar">
+              <span>
+                Click on the canvas to add a {placing.name.toLowerCase()}, or drag to draw it
+              </span>
+              <button className="button" onClick={() => pickShape(null)}>
+                Cancel
+              </button>
+            </div>
           )}
           {ghost && (
             <div className="canvas-ghost-bar">

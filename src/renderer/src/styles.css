@@ -3651,23 +3651,21 @@ input.canvas-group-label {
   min-height: 0;
 }
 
-.canvas-palette {
-  flex: none;
-  width: 196px;
-  padding: 10px 8px 16px;
-  overflow-y: auto;
-  border-right: 1px solid var(--border);
-  background: var(--bg-sidebar);
+/* The Shapes dropdown: previews in a grid */
+.canvas-shape-menu {
+  width: 232px;
+  padding: 0 4px 4px;
 }
 
-.canvas-palette-hint {
-  margin: 0 4px 6px;
-  font-size: 12px;
-}
-
-.canvas-palette .menu-heading {
-  margin-top: 8px;
+.canvas-shape-menu .menu-heading {
+  margin-top: 6px;
   padding: 4px 4px 2px;
+}
+
+.canvas-shapes {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .canvas-palette-grid {
@@ -3688,12 +3686,26 @@ input.canvas-group-label {
   font-size: 12px;
   line-height: 1.2;
   text-align: center;
-  cursor: grab;
+  cursor: pointer;
 }
 
 .canvas-palette-item:hover {
   border-color: var(--border);
   background: var(--bg-hover);
+}
+
+.canvas-palette-item.pressed {
+  border-color: var(--accent);
+  background: var(--bg-selected);
+}
+
+.canvas-surface.placing {
+  cursor: crosshair;
+}
+
+.canvas-marquee.placing {
+  border-style: dashed;
+  background: transparent;
 }
 
 /* A faint dot grid that moves with the view, and a cross at the canvas's middle (0, 0) */
