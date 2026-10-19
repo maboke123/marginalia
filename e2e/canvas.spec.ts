@@ -236,6 +236,7 @@ test('a new canvas from the folder menu, and a damaged one stays untouched', asy
   await row('Design of Software Systems').click()
   await row('les_1').click({ button: 'right' })
   await page.getByRole('menuitem', { name: 'New canvas' }).click()
+  await expect(page.locator('.rename-input')).toBeFocused()
   await page.keyboard.press('Enter')
   await row('Untitled canvas').click()
   await expect(page.locator('.canvas-hint')).toBeVisible()
