@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useRef } from 'react'
+import { memo, useEffect, useLayoutEffect, useMemo, useRef } from 'react'
 import {
   compartments,
   cssColor,
@@ -36,6 +36,8 @@ interface Props {
   proposal?: 'ghost' | 'removed'
   onText(text: string): void
   onDone(): void
+  /** The text needs this much height (canvas units) to show all of it. */
+  onGrow?(height: number): void
 }
 
 function Markdown({ text, className }: { text: string; className: string }): React.JSX.Element {
@@ -155,7 +157,8 @@ function Editor({
   shape,
   fresh,
   onText,
-  onDone
+  onDone,
+  onGrow
 }: {
   value: string
   shape: string | undefined
@@ -163,8 +166,17 @@ function Editor({
   fresh: boolean
   onText(text: string): void
   onDone(): void
+  onGrow?(height: number): void
 }): React.JSX.Element {
   const ref = useRef<HTMLTextAreaElement>(null)
+  // Typing past the bottom makes the box taller, so no text hides below it.
+  useLayoutEffect(() => {
+    const el = ref.current!
+    const box = el.parentElement!
+    if (el.scrollHeight > el.clientHeight + 1) {
+      onGrow?.(Math.ceil(el.scrollHeight + box.offsetHeight - box.clientHeight))
+    }
+  }, [value, onGrow])
   useEffect(() => {
     const el = ref.current!
     el.focus()
@@ -211,7 +223,8 @@ export const CanvasNodeView = memo(function CanvasNodeView({
   fresh = false,
   proposal,
   onText,
-  onDone
+  onDone,
+  onGrow
 }: Props): React.JSX.Element {
   const color = cssColor(node.color)
   const shape = node.type === 'text' ? (node.shape ?? 'rectangle') : node.type
@@ -236,7 +249,14 @@ export const CanvasNodeView = memo(function CanvasNodeView({
   let content: React.ReactNode
   if (node.type === 'text') {
     content = editing ? (
-      <Editor value={node.text} shape={node.shape} fresh={fresh} onText={onText} onDone={onDone} />
+      <Editor
+        value={node.text}
+        shape={node.shape}
+        fresh={fresh}
+        onText={onText}
+        onDone={onDone}
+        onGrow={onGrow}
+      />
     ) : (
       <TextContent node={node} />
     )

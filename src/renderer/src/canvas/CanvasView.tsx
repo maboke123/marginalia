@@ -556,6 +556,17 @@ function CanvasSurface({
     })
   }
 
+  // Typing in a box past its bottom: it grows, in the same undo step as the typing.
+  const onGrow = useCallback(
+    (height: number) => {
+      const s = doc.getState()
+      const id = s.editing
+      const node = id ? nodeById(s.data, id) : undefined
+      if (node && height > node.height) s.update((d) => updateNode(d, node.id, { height }))
+    },
+    [doc]
+  )
+
   /** Bold or italic on what is selected in the box being typed in. */
   const format = (mark: Mark): void => {
     const el = surfaceRef.current?.querySelector<HTMLTextAreaElement>('textarea.canvas-editor')
@@ -1100,6 +1111,7 @@ function CanvasSurface({
       proposal={proposals.get(n.id)}
       onText={editing === n.id ? onText : NOOP}
       onDone={editing === n.id ? onDone : NOOP}
+      onGrow={editing === n.id ? onGrow : undefined}
     />
   )
   const editingNode = editing ? data.nodes.find((n) => n.id === editing) : undefined
