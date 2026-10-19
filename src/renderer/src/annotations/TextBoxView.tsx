@@ -5,6 +5,7 @@ import { Cancelled, cancelWrite, findRequest, newRequestId, writeWithClaude } fr
 import { mapPosition, planWrite, type WriteAnswer } from '../claude/writePlan'
 import { RenderedHtml } from '../components/RenderedHtml'
 import { renderMarkdown } from '../lib/markdown'
+import { markInTextarea, markOfKey } from '../lib/emphasis'
 import { useApp } from '../store'
 import { widestAt, type FitPage } from './fit'
 
@@ -302,6 +303,12 @@ function Editor({
       onPointerDown={(e) => e.stopPropagation()}
       onKeyDown={(e) => {
         e.stopPropagation()
+        const mark = markOfKey(e)
+        if (mark) {
+          e.preventDefault()
+          markInTextarea(e.currentTarget, mark)
+          return
+        }
         if (e.key === 'Escape' && writing.length) {
           e.preventDefault()
           cancelWrite(writing[writing.length - 1])

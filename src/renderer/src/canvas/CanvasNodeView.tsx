@@ -10,6 +10,7 @@ import { strokeOutline } from '../../../shared/ink'
 import { RenderedHtml } from '../components/RenderedHtml'
 import { Icon } from '../components/Icon'
 import { vaultUrl } from '../editor/links'
+import { markInTextarea, markOfKey } from '../lib/emphasis'
 import { renderMarkdown } from '../lib/markdown'
 import type { Handle } from './ops'
 import { editHint } from './shapes'
@@ -181,7 +182,13 @@ function Editor({
         onPointerDown={(e) => e.stopPropagation()}
         onKeyDown={(e) => {
           e.stopPropagation()
-          if (e.key === 'Escape' || (e.key === 'Enter' && e.ctrlKey)) e.currentTarget.blur()
+          const mark = markOfKey(e)
+          if (mark) {
+            e.preventDefault()
+            markInTextarea(e.currentTarget, mark)
+          } else if (e.key === 'Escape' || (e.key === 'Enter' && e.ctrlKey)) {
+            e.currentTarget.blur()
+          }
         }}
       />
     </>

@@ -3688,6 +3688,11 @@ input.canvas-group-label {
   background: var(--bg-hover);
 }
 
+.canvas-format {
+  min-width: 28px;
+  font-family: Georgia, serif;
+}
+
 .palette-shape {
   display: block;
   width: 38px;

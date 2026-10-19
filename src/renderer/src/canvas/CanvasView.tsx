@@ -26,6 +26,7 @@ import { snapAxis, type Anchor } from '../annotations/snap'
 import { strokeOutline } from '../../../shared/ink'
 import { vaultUrl } from '../editor/links'
 import { draggingFiles } from '../lib/drop'
+import { markInTextarea, type Mark } from '../lib/emphasis'
 import { registerFlush } from '../lib/flush'
 import { registerCanvas } from '../lib/open'
 import { parentOf } from '../lib/tree'
@@ -543,6 +544,12 @@ function CanvasSurface({
       savePalette(!open)
       return !open
     })
+  }
+
+  /** Bold or italic on what is selected in the box being typed in. */
+  const format = (mark: Mark): void => {
+    const el = surfaceRef.current?.querySelector<HTMLTextAreaElement>('textarea.canvas-editor')
+    if (el) markInTextarea(el, mark)
   }
 
   const textBoxAt = (x: number, y: number, width = 240, height = 80): CanvasNode => ({
@@ -1071,6 +1078,7 @@ function CanvasSurface({
       onDone={editing === n.id ? onDone : NOOP}
     />
   )
+  const editingNode = editing ? data.nodes.find((n) => n.id === editing) : undefined
 
   return (
     <>
@@ -1101,6 +1109,29 @@ function CanvasSurface({
           >
             <Icon name="shapes" />
           </button>
+          {editingNode?.type === 'text' && (
+            <>
+              <span className="toolbar-divider" />
+              <button
+                className="icon-button canvas-format"
+                title="Bold (Ctrl+B)"
+                aria-label="Bold"
+                onPointerDown={(e) => e.preventDefault()}
+                onClick={() => format('**')}
+              >
+                <b>B</b>
+              </button>
+              <button
+                className="icon-button canvas-format"
+                title="Italic (Ctrl+I)"
+                aria-label="Italic"
+                onPointerDown={(e) => e.preventDefault()}
+                onClick={() => format('*')}
+              >
+                <i>I</i>
+              </button>
+            </>
+          )}
           {editable && (
             <button
               className="text-button"

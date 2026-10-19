@@ -363,4 +363,12 @@ test('double-clicking a class edits its text instead of adding a box', async () 
   await page.locator('[data-node="order"] .canvas-class-name').dblclick()
   await expect(page.locator('[data-node="order"] .canvas-editor')).toBeFocused()
   await expect(page.locator('.canvas-node')).toHaveCount(7)
+  // Ctrl+B makes the selected word bold.
+  await page.keyboard.press('Control+Home')
+  await page.keyboard.press('Shift+End')
+  await page.keyboard.press('Control+B')
+  await page.keyboard.press('Escape')
+  await expect
+    .poll(async () => (await read('Shop.canvas')).nodes.find((n) => n.id === 'order')!.text)
+    .toMatch(/^\*\*Order\*\*\n---/)
 })
