@@ -92,7 +92,7 @@ function ChatPicker({ chat, vaultName }: { chat: string; vaultName: string }): R
     { custom: <p className="menu-heading">{group.label}</p> },
     ...group.chats.map((c): MenuItem => ({
       label: c.folder === chat ? `${name(c.folder)} (shown)` : name(c.folder),
-      hint: c.updated ? ago(c.updated) : group.label === 'This folder' ? 'new' : undefined,
+      hint: c.updated ? ago(c.updated) : 'new',
       onSelect: () => useChat.getState().pick(c.folder)
     }))
   ])

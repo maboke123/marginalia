@@ -59,9 +59,12 @@ const notebookOf = (folder: string): string => folder.split('/')[0]
 export function chatGroups(viewed: string, chats: ChatInfo[]): ChatGroup[] {
   const here = chats.find((c) => c.folder === viewed) ?? { folder: viewed, updated: null }
   const others = chats.filter((c) => c.folder !== viewed)
-  const above = others
-    .filter((c) => within(viewed, c.folder))
-    .sort((a, b) => b.folder.length - a.folder.length)
+  // Every folder above, also those without a chat yet, nearest first.
+  const parts = viewed ? viewed.split('/') : []
+  const above = parts.map((_, i) => {
+    const folder = parts.slice(0, parts.length - 1 - i).join('/')
+    return others.find((c) => c.folder === folder) ?? { folder, updated: null }
+  })
   const below = others.filter((c) => c.folder !== '' && within(c.folder, viewed)).sort(newest)
   const near = new Set([...above, ...below])
   const rest = others.filter((c) => !near.has(c))

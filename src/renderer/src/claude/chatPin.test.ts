@@ -76,10 +76,15 @@ describe('chatGroups', () => {
     ])
     expect(groups.map((g) => [g.label, g.chats.map((c) => c.folder)])).toEqual([
       ['This folder', [`${OPDRACHTEN}/Randomized algoritmen`]],
-      ['Folders above', [OPDRACHTEN, 'Ontwerp van Algoritmen']],
+      ['Folders above', [OPDRACHTEN, 'Ontwerp van Algoritmen', '']],
       ['Folders below', [REPORTS]],
       ['This course', ['Ontwerp van Algoritmen/les_2']],
       ['Other courses', ['Machine Learning/les_1']]
     ])
+  })
+
+  it('lists every folder above, also those without a chat', () => {
+    const groups = chatGroups('Design/les_2', [chat('', 4)])
+    expect(groups[1]).toEqual({ label: 'Folders above', chats: [chat('Design'), chat('', 4)] })
   })
 })
