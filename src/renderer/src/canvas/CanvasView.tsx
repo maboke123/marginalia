@@ -984,8 +984,9 @@ function CanvasSurface({
     }
     if (ctrl && key === 'z') e.shiftKey ? s.redo() : s.undo()
     else if (ctrl && key === 'y') s.redo()
-    else if (ctrl && key === 'a') s.select({ nodes: s.data.nodes.map((n) => n.id), edges: [] })
-    else if (key === 'home') fit()
+    else if (ctrl && key === 'a') {
+      s.select({ nodes: s.data.nodes.map((n) => n.id), edges: s.data.edges.map((x) => x.id) })
+    } else if (key === 'home') fit()
     else if (ctrl && key === 'd') duplicate()
     else if (ctrl && key === 'c') void copy(false)
     else if (ctrl && key === 'x') void copy(true)
@@ -1095,6 +1096,14 @@ function CanvasSurface({
             ]
           : []),
         ...(many ? [{ label: 'Group', hint: 'Ctrl+G', onSelect: makeGroup }] : []),
+        ...(node.type === 'group'
+          ? [{ label: 'Ungroup', hint: 'Ctrl+Shift+G', onSelect: ungroup }]
+          : [
+              {
+                label: 'Bring to front',
+                onSelect: () => s.change((d) => bringToFront(d, doc.getState().selection.nodes))
+              }
+            ]),
         { label: 'Duplicate', hint: 'Ctrl+D', onSelect: duplicate },
         { label: 'Delete', hint: 'Delete', danger: true, onSelect: deleteSelection }
       ]
@@ -1575,6 +1584,17 @@ function EdgePanel({
         }
       >
         Swap
+      </button>
+      <button
+        className="text-button"
+        title="Delete this arrow (Delete)"
+        onClick={() => {
+          const s = doc.getState()
+          s.change((d) => removeItems(d, { nodes: [], edges: [edge.id] }))
+          s.select(NOTHING)
+        }}
+      >
+        Delete
       </button>
     </div>
   )
