@@ -391,3 +391,15 @@ test('an arrow dragged near a box snaps to its side; dots show without selecting
     .poll(async () => (await read('Shop.canvas')).edges.at(-1))
     .toMatchObject({ fromNode: 'line', toNode: 'vip', toSide: 'right' })
 })
+
+test('panned away from everything, one button brings the boxes back', async () => {
+  await openShop()
+  const box = (await surface().boundingBox())!
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+  for (let i = 0; i < 4; i++) await page.mouse.wheel(0, 3000)
+  const back = page.getByRole('button', { name: /Back to the boxes/ })
+  await expect(back).toBeVisible()
+  await back.click()
+  await expect(back).toBeHidden()
+  await expect(page.locator('[data-node="order"]')).toBeInViewport()
+})

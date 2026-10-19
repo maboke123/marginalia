@@ -3696,6 +3696,56 @@ input.canvas-group-label {
   background: var(--bg-hover);
 }
 
+/* A faint dot grid that moves with the view, and a cross at the canvas's middle (0, 0) */
+.canvas-grid {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.canvas-grid circle {
+  fill: var(--border-strong);
+}
+
+.canvas-origin {
+  position: absolute;
+  width: calc(24px / var(--canvas-zoom));
+  height: calc(24px / var(--canvas-zoom));
+  transform: translate(-50%, -50%);
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.canvas-origin::before,
+.canvas-origin::after {
+  position: absolute;
+  background: var(--text-muted);
+  content: '';
+}
+
+.canvas-origin::before {
+  top: 50%;
+  left: 0;
+  width: 100%;
+  height: calc(1.5px / var(--canvas-zoom));
+}
+
+.canvas-origin::after {
+  top: 0;
+  left: 50%;
+  width: calc(1.5px / var(--canvas-zoom));
+  height: 100%;
+}
+
+.canvas-back {
+  position: absolute;
+  bottom: 16px;
+  left: 16px;
+  z-index: 2;
+}
+
 .canvas-format {
   min-width: 28px;
   font-family: Georgia, serif;

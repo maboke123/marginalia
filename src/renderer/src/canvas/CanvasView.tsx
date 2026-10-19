@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useStore } from 'zustand'
 import {
   boundsOf,
@@ -322,6 +322,7 @@ function CanvasSurface({
   const ink = useApp((s) => s.ink)
   const penColors = useApp((s) => s.settings.penColors)
   const snapping = useApp((s) => s.settings.snapping)
+  const gridId = `canvas-grid-${useId().replace(/[^a-z0-9]/gi, '')}`
 
   const [size, setSize] = useState({ width: 0, height: 0 })
   const [camera, setCameraState] = useState<Camera>(
@@ -644,7 +645,7 @@ function CanvasSurface({
     if (e.button !== 0 && e.button !== 1) return
     const el = surfaceRef.current!
     const target = e.target as HTMLElement
-    if (target.closest('.canvas-edge-panel, .canvas-ghost-bar')) return
+    if (target.closest('.canvas-edge-panel, .canvas-ghost-bar, .canvas-back')) return
     el.focus({ preventScroll: true })
     const at = worldOf(e)
     const s = doc.getState()
@@ -862,7 +863,9 @@ function CanvasSurface({
   const onDoubleClick = (e: React.MouseEvent): void => {
     if (tool !== 'select' || ghost) return
     const target = e.target as HTMLElement
-    if (target.closest('.canvas-edge-panel, .canvas-ghost-bar, .canvas-editor')) return
+    if (target.closest('.canvas-edge-panel, .canvas-ghost-bar, .canvas-editor, .canvas-back')) {
+      return
+    }
     const s = doc.getState()
     const nodeId = target.closest<HTMLElement>('[data-node]')?.dataset.node ?? downOn.current.node
     const edgeId = target.closest<HTMLElement>('[data-edge]')?.dataset.edge ?? downOn.current.edge
@@ -952,6 +955,7 @@ function CanvasSurface({
     if (ctrl && key === 'z') e.shiftKey ? s.redo() : s.undo()
     else if (ctrl && key === 'y') s.redo()
     else if (ctrl && key === 'a') s.select({ nodes: s.data.nodes.map((n) => n.id), edges: [] })
+    else if (key === 'home') fit()
     else if (ctrl && key === 'd') duplicate()
     else if (ctrl && key === 'c') void copy(false)
     else if (ctrl && key === 'x') void copy(true)
@@ -1115,6 +1119,16 @@ function CanvasSurface({
     />
   )
   const editingNode = editing ? data.nodes.find((n) => n.id === editing) : undefined
+  // Lost: boxes exist but none is in view.
+  const lost =
+    !ghost &&
+    size.width > 0 &&
+    shown.nodes.length > 0 &&
+    !shown.nodes.some((n) => overlaps(view, n))
+  // A dot every 24 units, or every 120 when zoomed out far.
+  const gridStep = (camera.zoom < 0.4 ? 120 : 24) * camera.zoom
+  const gridAt = (world: number): number =>
+    (((-world * camera.zoom) % gridStep) + gridStep) % gridStep
 
   return (
     <>
@@ -1330,7 +1344,25 @@ function CanvasSurface({
           onDrop={onDrop}
           style={{ '--canvas-zoom': camera.zoom } as React.CSSProperties}
         >
+          {gridStep >= 8 && (
+            <svg className="canvas-grid" aria-hidden>
+              <defs>
+                <pattern
+                  id={gridId}
+                  width={gridStep}
+                  height={gridStep}
+                  x={gridAt(camera.x)}
+                  y={gridAt(camera.y)}
+                  patternUnits="userSpaceOnUse"
+                >
+                  <circle cx={1} cy={1} r={1} />
+                </pattern>
+              </defs>
+              <rect width="100%" height="100%" fill={`url(#${gridId})`} />
+            </svg>
+          )}
           <div className="canvas-world" style={{ transform }}>
+            <div className="canvas-origin" style={{ left: 0, top: 0 }} />
             {groups.map(nodeView)}
             <CanvasEdges
               edges={allEdges.filter((e) => geometries.has(e.id))}
@@ -1379,6 +1411,11 @@ function CanvasSurface({
               dots on its edges to another box to connect them. Space or the middle mouse button
               drags the view, Ctrl+wheel zooms.
             </p>
+          )}
+          {lost && (
+            <button className="button canvas-back" onClick={fit}>
+              Back to the boxes (Home)
+            </button>
           )}
           {edge && edgeAt && !ghost && (
             <EdgePanel
