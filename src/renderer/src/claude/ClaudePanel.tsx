@@ -769,6 +769,14 @@ function SettingsView({ onDone }: { onDone(): void }): React.JSX.Element {
       <label className="check">
         <input
           type="checkbox"
+          checked={settings.openEditedFiles}
+          onChange={(e) => void save({ openEditedFiles: e.target.checked })}
+        />
+        Open files Claude changes (off: click the change in the chat to see it)
+      </label>
+      <label className="check">
+        <input
+          type="checkbox"
           checked={settings.webSearch}
           onChange={(e) => void save({ webSearch: e.target.checked })}
         />

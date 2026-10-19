@@ -11,6 +11,11 @@ export interface ClaudeSettings {
   effort: EffortChoice
   /** Edits show as a preview with Accept / Reject before they are applied. */
   askBeforeEditing: boolean
+  /**
+   * Claude opens a file it changes or looks at when it is not open yet. Off: my view stays,
+   * and clicking the change in the chat opens it.
+   */
+  openEditedFiles: boolean
   webSearch: boolean
   /** My own words added to every Claude prompt (chat, /claude and the terminal). */
   instructions: string
@@ -27,6 +32,7 @@ export const DEFAULT_CLAUDE_SETTINGS: ClaudeSettings = {
   model: 'default',
   effort: 'default',
   askBeforeEditing: true,
+  openEditedFiles: false,
   webSearch: false,
   instructions: '',
   hasApiKey: false

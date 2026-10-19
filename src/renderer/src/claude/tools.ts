@@ -20,6 +20,7 @@ import type { ToolCall, ToolReply } from '../../../shared/claude'
 import { DEFAULT_TEXT_SIZE, pageUnit } from '../../../shared/palette'
 import {
   addItem,
+  createAnnotationDoc,
   findItem,
   moveToPage,
   newId,
@@ -45,7 +46,7 @@ import {
 } from '../canvas/claudeEdits'
 import { openCanvas, openNote, openPdf, whenOpen, type OpenNote, type OpenPdf } from '../lib/open'
 import { findNode, isFolder } from '../lib/tree'
-import { loadPdf } from '../pdf/pdfjs'
+import { loadPdf, pageSizes } from '../pdf/pdfjs'
 import { renderPage } from '../pdf/snapshot'
 import { pageRuns, pageText } from '../pdf/text'
 import { useApp } from '../store'
@@ -153,7 +154,7 @@ async function changeAnnotations(
 ): Promise<void> {
   const accepted = await useChat.getState().confirm(label, preview, revealPdf(open.path, page))
   if (!accepted) throw new ToolError(REJECTED)
-  docAfterAccept(open).getState().change(fn)
+  await applyChange(open, fn)
 }
 
 /** The PDF's annotations as open now: closing and opening the PDF again makes a new doc. */
@@ -161,10 +162,56 @@ function liveDoc(open: OpenPdf & { doc: AnnotationDoc }): AnnotationDoc {
   return openPdf(open.path)?.doc ?? open.doc
 }
 
-function docAfterAccept(open: OpenPdf & { doc: AnnotationDoc }): AnnotationDoc {
-  const doc = openPdf(open.path)?.doc
-  if (!doc) throw new ToolError('The PDF was closed before the change was made')
-  return doc
+/**
+ * Applies a change after I accept it: in the viewer when the PDF is open (also when I opened
+ * it meanwhile by clicking the change), else in the annotation file.
+ */
+async function applyChange(
+  open: OpenPdf & { doc: AnnotationDoc },
+  fn: (pages: AnnotationPages) => AnnotationPages
+): Promise<void> {
+  const live = openPdf(open.path)?.doc
+  if (live) {
+    live.getState().change(fn)
+    return
+  }
+  const save = closedSaves.get(open.doc)
+  if (!save) throw new ToolError('The PDF was closed before the change was made')
+  open.doc.getState().change(fn)
+  await save()
+}
+
+// PDFs Claude changes without opening them: their doc writes back to the annotation file.
+const closedSaves = new WeakMap<AnnotationDoc, () => Promise<void>>()
+let closedTasks: { destroy(): Promise<void> }[] = []
+
+/** Claude may open files it works on only when I said so in its settings. */
+const opensFiles = (): boolean => useChat.getState().settings?.openEditedFiles === true
+
+/** A PDF that is not open, loaded for one tool call; its changes go to the annotation file. */
+async function closedPdf(path: string): Promise<OpenPdf & { doc: AnnotationDoc }> {
+  const loaded = await window.api.vault.readAnnotations(path).catch((err: Error) => {
+    throw new ToolError(`Annotations are off for ${fileName(path)}: ${err.message}`)
+  })
+  const file = loaded.file
+  if (file?.pdfSha256 && file.pdfSha256 !== loaded.pdfSha256) {
+    throw new ToolError(`Annotations are off for ${fileName(path)} (the PDF changed)`)
+  }
+  const task = loadPdf(await window.api.vault.readFile(path))
+  closedTasks.push(task)
+  const pdf = await task.promise
+  const margin = file?.marginWidth ?? useApp.getState().settings.marginWidth
+  const doc = createAnnotationDoc(file?.pages ?? {})
+  closedSaves.set(doc, () =>
+    window.api.vault.writeAnnotations(path, {
+      version: 1,
+      pdf: fileName(path),
+      pdfSha256: loaded.pdfSha256,
+      marginWidth: margin,
+      pages: doc.getState().pages
+    })
+  )
+  return { path, pdf, doc, sizes: await pageSizes(pdf), margin }
 }
 
 /** Opens the PDF at a change that waits for my answer, when I click it in the chat. */
@@ -281,14 +328,16 @@ async function showNote(path: string): Promise<OpenNote> {
 }
 
 /**
- * Opens the PDF for a change. One that is open already stays where I am reading, unless I asked
- * to go there: jumping back to every change while I follow the lecture is annoying.
+ * The PDF for a change. One that is open already stays where I am reading, unless I asked to go
+ * there: jumping back to every change while I follow the lecture is annoying. One that is not
+ * open is opened only when the setting says so; otherwise the change goes to its file.
  */
 async function showPdf(
   path: string,
   page: number,
   jump = false
 ): Promise<OpenPdf & { doc: AnnotationDoc }> {
+  if (!jump && !openPdf(path) && !opensFiles()) return closedPdf(path)
   if (jump || !openPdf(path)) show(path, page)
   const open = await whenOpen(() => openPdf(path))
   if (!open) throw new ToolError(`Could not open ${path}`)
@@ -403,13 +452,11 @@ async function annotate(
     .getState()
     .confirm(label, ghostOf(open, { page, ...item }), revealPdf(open.path, page))
   if (!accepted) throw new ToolError(REJECTED)
-  docAfterAccept(open)
-    .getState()
-    .change((pages) =>
-      'textBox' in item
-        ? addItem(pages, page, 'textBoxes', item.textBox)
-        : addItem(pages, page, 'highlights', item.highlight)
-    )
+  await applyChange(open, (pages) =>
+    'textBox' in item
+      ? addItem(pages, page, 'textBoxes', item.textBox)
+      : addItem(pages, page, 'highlights', item.highlight)
+  )
 }
 
 function noteText(path: string): Promise<string> {
@@ -918,5 +965,9 @@ export async function runTool(call: ToolCall): Promise<ToolReply> {
   } catch (err) {
     if (!(err instanceof ToolError)) console.error(`[tool ${call.name}]`, err)
     return { id: call.id, ok: false, text: (err as Error).message }
+  } finally {
+    const tasks = closedTasks
+    closedTasks = []
+    tasks.forEach((t) => void t.destroy())
   }
 }
