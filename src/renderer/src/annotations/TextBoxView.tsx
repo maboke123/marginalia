@@ -249,9 +249,18 @@ function Editor({
     return true
   }
 
+  // Measuring collapses the box for a moment: a scrollbar then rewrapped the text and the view
+  // scrolled to the caret, so the box jumped while I typed. Scrollbar only when it is full.
   const grow = (el: HTMLTextAreaElement): void => {
+    const scroller = el.closest<HTMLElement>('.pdf-scroll')
+    const top = scroller?.scrollTop
+    el.style.overflowY = 'hidden'
     el.style.height = 'auto'
+    const full = el.scrollHeight > maxHeight
     el.style.height = `${Math.min(el.scrollHeight, maxHeight)}px`
+    el.style.overflowY = full ? 'auto' : 'hidden'
+    if (!full) el.scrollTop = 0
+    if (scroller && top !== undefined) scroller.scrollTop = top
   }
 
   useEffect(() => {
