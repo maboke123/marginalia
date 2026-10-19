@@ -6,6 +6,7 @@ import { edgeGeometry, edgePorts, freeEndSide, sideAt } from './edges'
 import {
   bringToFront,
   connect,
+  connectTarget,
   copyItems,
   drawOrder,
   groupAround,
@@ -126,6 +127,15 @@ describe('ops', () => {
     })
     expect(connect(CANVAS, 'order', 'order')).toBeNull()
     expect(nearestSide({ x: 0, y: 0, width: 200, height: 100 }, 190, 50)).toBe('right')
+  })
+
+  it('finds where a dragged arrow lands: the box under it, else a side near it', () => {
+    expect(connectTarget(CANVAS, 250, 50, 40, 'customer')).toBeNull()
+    // Just left of order's left side: snaps to it.
+    expect(connectTarget(CANVAS, 280, 50, 40, 'customer')).toEqual({ id: 'order', side: 'left' })
+    expect(connectTarget(CANVAS, 480, 90, 40)).toEqual({ id: 'order', side: 'bottom' })
+    // Too far from any side, and the group never counts.
+    expect(connectTarget(CANVAS, 700, 200, 40)).toBeNull()
   })
 
   it('finds the box under a point before the group around it', () => {

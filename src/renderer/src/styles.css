@@ -3461,6 +3461,14 @@ input.canvas-group-label {
   cursor: crosshair;
 }
 
+/* Where a dragged arrow will land */
+.canvas-connect.landing {
+  width: calc(16px / var(--canvas-zoom));
+  height: calc(16px / var(--canvas-zoom));
+  background: var(--accent);
+  outline: calc(3px / var(--canvas-zoom)) solid color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
 .canvas-connect.c-top {
   top: calc(-20px / var(--canvas-zoom));
   left: 50%;

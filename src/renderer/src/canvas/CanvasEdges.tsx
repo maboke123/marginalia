@@ -86,20 +86,25 @@ export function CanvasEdges({
   geometries: Map<string, EdgeGeometry>
   selected: Set<string>
   proposals: Map<string, 'ghost' | 'removed'>
-  /** An arrow being dragged out of a box. */
-  draft: { from: Rect; fromSide: Side; to: { x: number; y: number } } | null
+  /** An arrow being dragged out of a box; it snaps to the side it would land on. */
+  draft: {
+    from: Rect
+    fromSide: Side
+    to: { x: number; y: number }
+    land: { rect: Rect; side: Side } | null
+  } | null
   guides: { x: number | null; y: number | null; view: Rect }
 }): React.JSX.Element {
   let draftPath: string | null = null
   if (draft) {
-    const end = { ...draft.to, width: 0, height: 0 }
+    const end = draft.land?.rect ?? { ...draft.to, width: 0, height: 0 }
     draftPath = edgeGeometry(
       draft.from,
       draft.fromSide,
       end,
-      freeEndSide(sidePoint(draft.from, draft.fromSide), draft.to),
+      draft.land?.side ?? freeEndSide(sidePoint(draft.from, draft.fromSide), draft.to),
       'none',
-      'none'
+      'arrow'
     ).path
   }
   const { view } = guides

@@ -5,6 +5,7 @@ import {
   inGroup,
   newCanvasId,
   overlaps,
+  sidePoint,
   type CanvasData,
   type CanvasEdge,
   type CanvasNode,
@@ -265,6 +266,40 @@ export function nodeAt(
       (n) => !skip?.has(n.id) && x >= n.x && x <= n.x + n.width && y >= n.y && y <= n.y + n.height
     ) ?? null
   )
+}
+
+const SIDES: Side[] = ['top', 'right', 'bottom', 'left']
+
+/**
+ * The box an arrow dragged to (x, y) connects to, and on which side: the box under the point
+ * (its nearest edge), else the box with a side's middle within `reach` (that side). Groups and
+ * `skip` never count.
+ */
+export function connectTarget(
+  data: CanvasData,
+  x: number,
+  y: number,
+  reach: number,
+  skip?: string
+): { id: string; side: Side } | null {
+  const boxes = data.nodes.filter((n) => n.type !== 'group' && n.id !== skip)
+  const under = drawOrder(boxes)
+    .reverse()
+    .find((n) => x >= n.x && x <= n.x + n.width && y >= n.y && y <= n.y + n.height)
+  if (under) return { id: under.id, side: nearestSide(under, x, y) }
+  let best: { id: string; side: Side } | null = null
+  let distance = reach
+  for (const n of boxes) {
+    for (const side of SIDES) {
+      const p = sidePoint(n, side)
+      const d = Math.hypot(p.x - x, p.y - y)
+      if (d <= distance) {
+        distance = d
+        best = { id: n.id, side }
+      }
+    }
+  }
+  return best
 }
 
 /** Moves the chosen nodes to the end of the list, so they are drawn on top. */

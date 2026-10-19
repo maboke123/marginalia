@@ -4,6 +4,7 @@ import {
   cssColor,
   type CanvasNode,
   type InkNode,
+  type Side,
   type TextNode
 } from '../../../shared/canvas'
 import { strokeOutline } from '../../../shared/ink'
@@ -25,6 +26,10 @@ interface Props {
   /** Only one box shows its handles: with several chosen, they move together. */
   handles: boolean
   editing: boolean
+  /** The pointer is near: its dots to drag an arrow from show. */
+  connectable?: boolean
+  /** An arrow being dragged would land on this side of the box. */
+  landing?: Side | null
   /** Just added from the shapes: typing replaces its placeholder name. */
   fresh?: boolean
   /** 'ghost': proposed by Claude; 'removed': Claude proposes to remove it. */
@@ -201,6 +206,8 @@ export const CanvasNodeView = memo(function CanvasNodeView({
   selected,
   handles,
   editing,
+  connectable = false,
+  landing = null,
   fresh = false,
   proposal,
   onText,
@@ -269,22 +276,20 @@ export const CanvasNodeView = memo(function CanvasNodeView({
         <NoteBody width={node.width} height={node.height} />
       )}
       {content}
-      {handles && !editing && (
-        <>
-          {HANDLES.map((h) => (
-            <span key={h} className={`canvas-handle h-${h}`} data-handle={h} />
-          ))}
-          {node.type !== 'group' &&
-            SIDES.map((side) => (
-              <span
-                key={side}
-                className={`canvas-connect c-${side}`}
-                data-connect={side}
-                title="Drag to another box to connect them"
-              />
-            ))}
-        </>
-      )}
+      {handles &&
+        !editing &&
+        HANDLES.map((h) => <span key={h} className={`canvas-handle h-${h}`} data-handle={h} />)}
+      {(handles || connectable || landing) &&
+        !editing &&
+        node.type !== 'group' &&
+        SIDES.map((side) => (
+          <span
+            key={side}
+            className={`canvas-connect c-${side}${landing === side ? ' landing' : ''}`}
+            data-connect={side}
+            title="Drag to another box to connect them"
+          />
+        ))}
     </div>
   )
 })

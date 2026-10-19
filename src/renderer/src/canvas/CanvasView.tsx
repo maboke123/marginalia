@@ -50,14 +50,13 @@ import {
   addNodes,
   bringToFront,
   connect,
+  connectTarget,
   copyItems,
   drawOrder,
   groupAround,
   isEmpty,
   moveNodes,
   movingSet,
-  nearestSide,
-  nodeAt,
   nodeById,
   nodesIn,
   NOTHING,
@@ -171,6 +170,19 @@ function imageSize(src: string): Promise<{ width: number; height: number }> {
     img.src = src
   })
 }
+
+/** An arrow being dragged out of a box, and where it would land if let go now. */
+export interface Draft {
+  from: Rect
+  fromSide: Side
+  to: { x: number; y: number }
+  land: { id: string; rect: Rect; side: Side } | null
+}
+
+// How near (on screen) a box side must be for a dragged arrow to snap to it.
+const LAND_PX = 36
+// How near the pointer must be for a box to show the dots to drag an arrow from.
+const HOVER_PX = 28
 
 type Drag =
   | { kind: 'pan'; x: number; y: number; camera: Camera }
@@ -319,11 +331,8 @@ function CanvasSurface({
   const [tool, setTool] = useState<Tool>('select')
   const [marquee, setMarquee] = useState<Rect | null>(null)
   const [guides, setGuides] = useState<{ x: number | null; y: number | null }>({ x: null, y: null })
-  const [draft, setDraft] = useState<{
-    from: Rect
-    fromSide: Side
-    to: { x: number; y: number }
-  } | null>(null)
+  const [draft, setDraft] = useState<Draft | null>(null)
+  const [hover, setHover] = useState<string | null>(null)
   // What the last press was on: a double-click's own target is the surface, which holds the
   // pointer capture from that press.
   const downOn = useRef<{ node?: string; edge?: string }>({})
@@ -652,7 +661,8 @@ function CanvasSurface({
         drag.current = { kind: 'resize', id: nodeId, handle, from: at, rect: node }
       } else if (side && nodeId) {
         drag.current = { kind: 'connect', id: nodeId, side }
-        setDraft({ from: nodeById(s.data, nodeId)!, fromSide: side, to: at })
+        setDraft({ from: nodeById(s.data, nodeId)!, fromSide: side, to: at, land: null })
+        setHover(null)
       } else if (nodeId) {
         if (s.editing === nodeId) return
         const already = s.selection.nodes.includes(nodeId)
@@ -704,8 +714,17 @@ function CanvasSurface({
     const at = worldOf(e)
     pointer.current = at
     const d = drag.current
-    if (!d) return
     const s = doc.getState()
+    const zoom = cameraRef.current.zoom
+    if (!d) {
+      // The box near the pointer shows its dots, so an arrow can start without selecting it.
+      const near =
+        tool === 'select' && !ghost && !s.editing
+          ? (connectTarget(s.data, at.x, at.y, HOVER_PX / zoom)?.id ?? null)
+          : null
+      if (near !== hover) setHover(near)
+      return
+    }
     switch (d.kind) {
       case 'pan':
         setCamera({ ...d.camera, ...panBy(d.camera, d.x - e.clientX, d.y - e.clientY) })
@@ -714,9 +733,14 @@ function CanvasSurface({
         d.points.push([at.x, at.y, e.pressure || 0.5])
         setLiveInk([...d.points])
         return
-      case 'connect':
-        setDraft((dr) => (dr ? { ...dr, to: at } : dr))
+      case 'connect': {
+        const land = connectTarget(s.data, at.x, at.y, LAND_PX / zoom, d.id)
+        const rect = land ? nodeById(s.data, land.id) : undefined
+        setDraft((dr) =>
+          dr ? { ...dr, to: at, land: land && rect ? { ...land, rect } : null } : dr
+        )
         return
+      }
       case 'marquee': {
         const rect = {
           x: Math.min(d.from.x, at.x),
@@ -781,12 +805,9 @@ function CanvasSurface({
       const at = worldOf(e)
       const from = nodeById(s.data, d.id)
       if (!from) return
-      const target = nodeAt(s.data, at.x, at.y, new Set([d.id]))
-      if (target) {
-        const edge = connect(s.data, d.id, target.id, {
-          fromSide: d.side,
-          toSide: nearestSide(target, at.x, at.y)
-        })
+      const land = connectTarget(s.data, at.x, at.y, LAND_PX / cameraRef.current.zoom, d.id)
+      if (land) {
+        const edge = connect(s.data, d.id, land.id, { fromSide: d.side, toSide: land.side })
         if (edge) {
           s.change((data) => ({ ...data, edges: [...data.edges, edge] }))
           s.select({ nodes: [], edges: [edge.id] })
@@ -1073,6 +1094,8 @@ function CanvasSurface({
       selected={chosen.has(n.id)}
       handles={single === n.id && !ghost}
       editing={editing === n.id}
+      connectable={hover === n.id && !draft}
+      landing={draft?.land?.id === n.id ? draft.land.side : null}
       fresh={fresh === n.id}
       proposal={proposals.get(n.id)}
       onText={editing === n.id ? onText : NOOP}

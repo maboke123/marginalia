@@ -372,3 +372,22 @@ test('double-clicking a class edits its text instead of adding a box', async () 
     .poll(async () => (await read('Shop.canvas')).nodes.find((n) => n.id === 'order')!.text)
     .toMatch(/^\*\*Order\*\*\n---/)
 })
+
+test('an arrow dragged near a box snaps to its side; dots show without selecting', async () => {
+  await openShop()
+  const line = (await page.locator('[data-node="line"]').boundingBox())!
+  await page.mouse.move(line.x + line.width / 2, line.y + line.height / 2)
+  const dot = page.locator('[data-node="line"] .canvas-connect.c-left')
+  await expect(dot).toBeVisible()
+  const from = (await dot.boundingBox())!
+  const vip = (await page.locator('[data-node="vip"]').boundingBox())!
+  await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2)
+  await page.mouse.down()
+  // Beside the box, not on it.
+  await page.mouse.move(vip.x + vip.width + 12, vip.y + vip.height / 2, { steps: 8 })
+  await expect(page.locator('[data-node="vip"] .canvas-connect.c-right.landing')).toBeVisible()
+  await page.mouse.up()
+  await expect
+    .poll(async () => (await read('Shop.canvas')).edges.at(-1))
+    .toMatchObject({ fromNode: 'line', toNode: 'vip', toSide: 'right' })
+})
