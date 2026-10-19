@@ -182,6 +182,14 @@ export function Sidebar(): React.JSX.Element {
     items.push({ label: 'Show in Explorer', onSelect: () => window.api.vault.reveal(node.path) })
     if (isFolder(node)) {
       items.push({
+        label: 'Open the chat of this folder',
+        onSelect: () => {
+          const chat = useChat.getState()
+          chat.pick(node.path)
+          chat.setOpen(true)
+        }
+      })
+      items.push({
         label: 'Open in VS Code',
         onSelect: () => void useChat.getState().openInCode(node.path)
       })
