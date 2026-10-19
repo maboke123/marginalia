@@ -1,7 +1,7 @@
 import type { CanvasData, Rect } from '../../../shared/canvas'
 import { CanvasEdges, EdgeLabels } from './CanvasEdges'
 import { CanvasNodeView } from './CanvasNodeView'
-import { geometryOf, type EdgeGeometry } from './edges'
+import { edgePorts, geometryOf, type EdgeGeometry } from './edges'
 import { drawOrder } from './ops'
 
 const NOOP = (): void => {}
@@ -20,8 +20,9 @@ export function CanvasPrint({
 }): React.JSX.Element {
   const byId = new Map(data.nodes.map((n) => [n.id, n]))
   const geometries = new Map<string, EdgeGeometry>()
+  const ports = edgePorts(data.edges, byId)
   for (const edge of data.edges) {
-    const g = geometryOf(edge, byId)
+    const g = geometryOf(edge, byId, ports)
     if (g) geometries.set(edge.id, g)
   }
   const ordered = drawOrder(data.nodes)

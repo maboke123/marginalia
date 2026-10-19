@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { CanvasData, CanvasNode, InkStroke } from '../../../shared/canvas'
 import { fitCamera, toScreen, toWorld, zoomAt, zoomStep } from './camera'
 import { createCanvasDoc } from './doc'
-import { edgeGeometry, freeEndSide } from './edges'
+import { edgeGeometry, edgePorts, freeEndSide, sideAt } from './edges'
 import {
   bringToFront,
   connect,
@@ -163,6 +163,29 @@ describe('edges', () => {
   it('points a free end back at its start', () => {
     expect(freeEndSide({ x: 0, y: 0 }, { x: 100, y: 10 })).toBe('left')
     expect(freeEndSide({ x: 0, y: 0 }, { x: 10, y: -100 })).toBe('bottom')
+  })
+
+  it('spreads arrows that meet one side, in the order of their other box', () => {
+    const nodes = [text('parent', 200, 0), text('left', 0, 300), text('right', 400, 300)]
+    const edges = [
+      { id: 'r', fromNode: 'right', toNode: 'parent', toSide: 'bottom' as const },
+      { id: 'l', fromNode: 'left', toNode: 'parent', toSide: 'bottom' as const }
+    ]
+    const ports = edgePorts(edges, new Map(nodes.map((n) => [n.id, n])))
+    expect(ports.get('l')!.to).toBeCloseTo(1 / 3)
+    expect(ports.get('r')!.to).toBeCloseTo(2 / 3)
+    // Their own sides are not shared, so they stay in the middle.
+    expect(ports.get('l')!.from).toBe(0.5)
+  })
+
+  it('puts a spread end on the outline of an ellipse or diamond', () => {
+    const box = { x: 0, y: 0, width: 200, height: 100 }
+    expect(sideAt(box, 'top', 0.25)).toEqual({ x: 50, y: 0 })
+    expect(sideAt(box, 'top', 0.5, 'ellipse')).toEqual({ x: 100, y: 0 })
+    const off = sideAt(box, 'top', 0, 'diamond')
+    expect(off.x).toBeCloseTo(40)
+    // On the diamond's edge: as far down as it is from the middle across.
+    expect(off.y).toBeCloseTo(30)
   })
 })
 

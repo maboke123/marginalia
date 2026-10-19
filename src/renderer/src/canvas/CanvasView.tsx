@@ -45,7 +45,7 @@ import {
 import { CanvasEdges, EdgeLabels } from './CanvasEdges'
 import { CanvasNodeView } from './CanvasNodeView'
 import { createCanvasDoc, type CanvasDoc } from './doc'
-import { geometryOf, type EdgeGeometry } from './edges'
+import { edgePorts, geometryOf, type EdgeGeometry } from './edges'
 import {
   addNodes,
   bringToFront,
@@ -460,8 +460,9 @@ function CanvasSurface({
   )
   const geometries = useMemo(() => {
     const map = new Map<string, EdgeGeometry>()
+    const ports = edgePorts(allEdges, byId)
     for (const edge of allEdges) {
-      const g = geometryOf(edge, byId)
+      const g = geometryOf(edge, byId, ports)
       if (g) map.set(edge.id, g)
     }
     return map

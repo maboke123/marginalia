@@ -1,7 +1,6 @@
 import {
   edgeStyle,
   facingSides,
-  sidePoint,
   type CanvasEdge,
   type CanvasNode,
   type Marker,
@@ -85,6 +84,37 @@ function markerShape(marker: Marker, tip: Point, dir: Point): MarkerShape | null
   }
 }
 
+/** How an end meets its box: where along the side (0 to 1) and the box's shape. */
+export interface EndAt {
+  at?: number
+  shape?: string
+}
+
+const CURVED = new Set(['ellipse', 'circle', 'diamond'])
+
+/**
+ * The point at `t` along a box's side (0 is its left or top end). On an ellipse or diamond it
+ * lies on the outline and stays near the middle, where the outline still faces outward.
+ */
+export function sideAt(rect: Rect, side: Side, t = 0.5, shape?: string): Point {
+  const curved = !!shape && CURVED.has(shape)
+  const along = curved ? 0.5 + (t - 0.5) * 0.6 : t
+  const u = Math.abs(along * 2 - 1)
+  const depth = !curved ? 0 : shape === 'diamond' ? u : 1 - Math.sqrt(1 - u * u)
+  if (side === 'top' || side === 'bottom') {
+    const inset = (rect.height / 2) * depth
+    return {
+      x: rect.x + rect.width * along,
+      y: side === 'top' ? rect.y + inset : rect.y + rect.height - inset
+    }
+  }
+  const inset = (rect.width / 2) * depth
+  return {
+    x: side === 'left' ? rect.x + inset : rect.x + rect.width - inset,
+    y: rect.y + rect.height * along
+  }
+}
+
 /**
  * The curve of an edge from one box side to another, like Obsidian draws it: it leaves and
  * enters each box at right angles. Markers sit on the box edge and the line stops at them.
@@ -95,10 +125,12 @@ export function edgeGeometry(
   to: Rect,
   toSide: Side,
   fromMarker: Marker,
-  toMarker: Marker
+  toMarker: Marker,
+  fromEnd: EndAt = {},
+  toEnd: EndAt = {}
 ): EdgeGeometry {
-  const start = sidePoint(from, fromSide)
-  const end = sidePoint(to, toSide)
+  const start = sideAt(from, fromSide, fromEnd.at, fromEnd.shape)
+  const end = sideAt(to, toSide, toEnd.at, toEnd.shape)
   const outA = NORMALS[fromSide]
   const outB = NORMALS[toSide]
   const distance = Math.hypot(end.x - start.x, end.y - start.y)
@@ -131,19 +163,66 @@ export function freeEndSide(start: Point, end: Point): Side {
   return dy >= 0 ? 'top' : 'bottom'
 }
 
+const shapeOf = (node: CanvasNode): string | undefined =>
+  node.type === 'text' ? node.shape : undefined
+
+/** Where along their sides an edge's two ends sit (0 to 1), by edge id. */
+export type Ports = Map<string, { from: number; to: number }>
+
+/**
+ * Edges that meet the same side of a box spread along it, in the order of where their other
+ * box lies, so arrows and their markers do not hide behind each other.
+ */
+export function edgePorts(edges: CanvasEdge[], byId: Map<string, CanvasNode>): Ports {
+  const sides = new Map<string, { edge: string; end: 'from' | 'to'; along: number }[]>()
+  for (const edge of edges) {
+    const from = byId.get(edge.fromNode)
+    const to = byId.get(edge.toNode)
+    if (!from || !to) continue
+    const [fromSide, toSide] = facingSides(from, to)
+    const ends = [
+      ['from', from, edge.fromSide ?? fromSide, to],
+      ['to', to, edge.toSide ?? toSide, from]
+    ] as const
+    for (const [end, node, side, other] of ends) {
+      const along =
+        side === 'top' || side === 'bottom' ? other.x + other.width / 2 : other.y + other.height / 2
+      const key = `${node.id}:${side}`
+      sides.set(key, [...(sides.get(key) ?? []), { edge: edge.id, end, along }])
+    }
+  }
+  const ports: Ports = new Map()
+  for (const list of sides.values()) {
+    if (list.length < 2) continue
+    list.sort((a, b) => a.along - b.along)
+    list.forEach(({ edge, end }, i) => {
+      const port = ports.get(edge) ?? { from: 0.5, to: 0.5 }
+      ports.set(edge, { ...port, [end]: (i + 1) / (list.length + 1) })
+    })
+  }
+  return ports
+}
+
 /** An edge's curve between its two boxes, or null when a box is missing. */
-export function geometryOf(edge: CanvasEdge, byId: Map<string, CanvasNode>): EdgeGeometry | null {
+export function geometryOf(
+  edge: CanvasEdge,
+  byId: Map<string, CanvasNode>,
+  ports?: Ports
+): EdgeGeometry | null {
   const from = byId.get(edge.fromNode)
   const to = byId.get(edge.toNode)
   if (!from || !to) return null
   const [fromSide, toSide] = facingSides(from, to)
   const style = edgeStyle(edge)
+  const port = ports?.get(edge.id)
   return edgeGeometry(
     from,
     edge.fromSide ?? fromSide,
     to,
     edge.toSide ?? toSide,
     style.fromMarker,
-    style.toMarker
+    style.toMarker,
+    { at: port?.from, shape: shapeOf(from) },
+    { at: port?.to, shape: shapeOf(to) }
   )
 }
