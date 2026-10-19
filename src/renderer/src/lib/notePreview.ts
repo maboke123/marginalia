@@ -11,14 +11,19 @@ export async function printNote(path: string): Promise<Uint8Array> {
   return window.api.vault.printNote(html)
 }
 
-/** Every page of a PDF drawn `width` pixels wide. */
-export async function drawPages(data: Uint8Array, width: number): Promise<HTMLCanvasElement[]> {
+/** Pages of a PDF drawn `width` pixels wide: all of them, or only the numbers in `only`. */
+export async function drawPages(
+  data: Uint8Array,
+  width: number,
+  only?: number[]
+): Promise<HTMLCanvasElement[]> {
   const task = loadPdf(data)
   try {
     const pdf = await task.promise
     const canvases: HTMLCanvasElement[] = []
-    for (let i = 1; i <= pdf.numPages; i++) {
-      const page = await pdf.getPage(i)
+    const numbers = only ?? Array.from({ length: pdf.numPages }, (_, i) => i + 1)
+    for (const n of numbers.filter((n) => n >= 1 && n <= pdf.numPages)) {
+      const page = await pdf.getPage(n)
       const viewport = page.getViewport({ scale: width / page.getViewport({ scale: 1 }).width })
       const canvas = document.createElement('canvas')
       canvas.width = Math.round(viewport.width)

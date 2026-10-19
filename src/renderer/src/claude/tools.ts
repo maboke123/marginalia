@@ -14,7 +14,8 @@ import {
   insertBlankPage,
   isBlankPage,
   MAX_BLANKS_PER_SLIDE,
-  slideOf
+  slideOf,
+  viewPages
 } from '../../../shared/blankPages'
 import type { ToolCall, ToolReply } from '../../../shared/claude'
 import { DEFAULT_TEXT_SIZE, pageUnit } from '../../../shared/palette'
@@ -45,6 +46,7 @@ import {
   type EditResult
 } from '../canvas/claudeEdits'
 import { openCanvas, openNote, openPdf, whenOpen, type OpenNote, type OpenPdf } from '../lib/open'
+import { flushAll } from '../lib/flush'
 import { findNode, isFolder } from '../lib/tree'
 import { loadPdf, pageSizes } from '../pdf/pdfjs'
 import { renderPage } from '../pdf/snapshot'
@@ -457,6 +459,51 @@ async function annotate(
       ? addItem(pages, page, 'textBoxes', item.textBox)
       : addItem(pages, page, 'highlights', item.highlight)
   )
+}
+
+const OFF_SCREEN = 'It is drawn off screen the way Export as PDF draws it, so my view stays put'
+
+/**
+ * A screenshot of a file without showing it on screen: drawn from what Export as PDF makes.
+ * Text boxes on slides then show their text plainly (formulas as Unicode).
+ */
+async function offScreenShot(path: string, args: Args): Promise<Result> {
+  await flushAll()
+  if (/\.canvas$/i.test(path)) {
+    const { canvasHtml } = await import('../canvas/exportHtml')
+    const pdf = await window.api.vault.printNote(await canvasHtml(path, await canvasData(path)))
+    const [page] = await drawPages(pdf, 1568)
+    return { text: `All of ${path}. ${OFF_SCREEN}.`, image: await pageImage(page) }
+  }
+  if (/\.md$/i.test(path)) {
+    const pages = await drawPages(await printNote(path), 1000)
+    const n = Math.min(Math.max(1, Math.round(Number(args.page) || 1)), pages.length)
+    return {
+      text:
+        `Page ${n} of ${pages.length} of ${path} as A4 (ask for another with page). ` +
+        `${OFF_SCREEN}.`,
+      image: await pageImage(pages[n - 1])
+    }
+  }
+  const page = Number(args.page) || 1
+  const loaded = await window.api.vault.readAnnotations(path).catch(() => null)
+  const pages = loaded?.file?.pages ?? {}
+  if (isBlankPage(page) && !pages[String(page)]) {
+    throw new ToolError(`There is no blank page ${args.page}; add_blank_page makes one`)
+  }
+  const [drawn] = await drawPages(
+    await window.api.vault.annotatedPdf(path),
+    1400,
+    // The export puts blank pages right after their slide, like the viewer.
+    [viewPages(slideOf(page), pages).findIndex((v) => v.id === page) + 1]
+  )
+  if (!drawn) throw new ToolError(`${path} has no page ${args.page}`)
+  return {
+    text:
+      `Page ${page} of ${path} with its annotations (${drawn.width}x${drawn.height} px, ` +
+      `margin included). ${OFF_SCREEN}: text boxes show plain text and formulas as Unicode.`,
+    image: await pageImage(drawn)
+  }
 }
 
 function noteText(path: string): Promise<string> {
@@ -897,6 +944,16 @@ const TOOLS: Record<string, (args: Args) => Promise<Result>> = {
       return { text: 'The whole app window as I see it now.', image: shot.image }
     }
     const path = fileArg(args, 'any')
+    if (!opensFiles()) {
+      const isOpen = !!(openCanvas(path) ?? openNote(path) ?? openPdf(path))
+      // A page of an open PDF is captured live only when it is on screen; going to another
+      // page would move my view.
+      const view = useApp.getState().pdfView
+      const onScreen =
+        !/\.pdf$/i.test(path) ||
+        (view?.path === path && (args.page === undefined || Number(args.page) === view.page))
+      if (!isOpen || !onScreen) return offScreenShot(path, args)
+    }
     if (/\.canvas$/i.test(path)) {
       if (!openCanvas(path)) show(path)
       const open = await whenOpen(() => openCanvas(path))
@@ -921,13 +978,16 @@ const TOOLS: Record<string, (args: Args) => Promise<Result>> = {
       const shot = await captureArea(viewOf(scroller))
       return { text: `The part of ${path} on screen, as I see it.`, image: shot.image }
     }
-    const slide = slideOf(Number(args.page) || 1)
-    show(path, slide)
+    // Without a page: the one on screen.
+    const view = useApp.getState().pdfView
+    const pageArgs = args.page === undefined && view?.path === path ? { page: view.page } : args
+    const slide = slideOf(Number(pageArgs.page) || 1)
+    if (opensFiles() || !openPdf(path)) show(path, slide)
     const open = await whenOpen(() => openPdf(path))
     if (!open) throw new ToolError(`Could not open ${path}`)
     const page = open.doc
-      ? annotationPage(args, open as OpenPdf & { doc: AnnotationDoc })
-      : pageArg(args, open.pdf)
+      ? annotationPage(pageArgs, open as OpenPdf & { doc: AnnotationDoc })
+      : pageArg(pageArgs, open.pdf)
     const selector = `.pdf-viewer[data-path="${CSS.escape(path)}"] .pdf-page[data-page="${page}"]`
     const el = await found(() => document.querySelector<HTMLElement>(selector))
     const shot = await captureElement(el, el.closest<HTMLElement>('.pdf-scroll')!, () => {

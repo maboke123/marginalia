@@ -477,6 +477,15 @@ test('the chat I ask in stays while I open its subfolders; the picker switches',
   await expect(page.locator('.claude-chat-name')).toHaveText('B3 Ensembles')
 })
 
+test('Claude looks at a closed note and another slide without taking me there', async () => {
+  await openSlides(3)
+  await ask('Look at the other files')
+  await expect(answers().last()).toContainText('Looked.', { timeout: 20_000 })
+  await expect(answers().last()).toContainText('Page 1 of Machine Learning/B2 Decision trees')
+  await expect(page.locator('.md-editor')).toHaveCount(0)
+  await expect(page.getByRole('textbox', { name: 'Page' })).toHaveValue('3')
+})
+
 test('Claude changes a note in another folder without taking me there', async () => {
   const bagging = path.join(env.vault, 'Machine Learning/B3 Ensembles/Bagging.md')
   await openSlides(3)

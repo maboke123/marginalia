@@ -202,6 +202,24 @@ export function registerIpc(
     current().writeAnnotations(p, file)
   )
 
+  const annotated = (
+    p: string,
+    file: AnnotationFile | null
+  ): ReturnType<typeof exportAnnotated> => {
+    const v = current()
+    const folder = p.slice(0, p.lastIndexOf('/') + 1)
+    return v
+      .readFile(p)
+      .then((source) =>
+        exportAnnotated(source, file, (src) => v.readFile(folder + src).catch(() => null))
+      )
+  }
+  // The copy Export would write, for Claude to look at a PDF that is not open; nothing is saved.
+  handle('vault:annotatedPdf', async (p: string) => {
+    const result = await annotated(p, (await current().readAnnotations(p)).file)
+    return result.bytes
+  })
+
   const exported = new Set<string>()
   handle('vault:exportPdf', async (p: string) => {
     const v = current()
@@ -220,10 +238,7 @@ export function registerIpc(
     if (path.resolve(choice.filePath).toLowerCase() === source.toLowerCase()) {
       throw new VaultError('Choose another name: the original PDF is never overwritten')
     }
-    const folder = p.slice(0, p.lastIndexOf('/') + 1)
-    const result = await exportAnnotated(await v.readFile(p), loaded.file, (src) =>
-      v.readFile(folder + src).catch(() => null)
-    )
+    const result = await annotated(p, loaded.file)
     await writeFileAtomic(choice.filePath, result.bytes)
     exported.add(choice.filePath)
     return {

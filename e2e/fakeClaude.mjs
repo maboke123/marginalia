@@ -61,6 +61,17 @@ export async function* agent(input) {
     const read = await input.callTool('read_canvas', { file: canvas })
     await record(sessionId, { question: 'read_canvas', text: read.text })
     yield { type: 'text', text: reply.ok ? 'Drew the classes.' : reply.text }
+  } else if (/look at the other files/i.test(question)) {
+    // A closed note, and a slide that is not on screen: neither may move my view.
+    const note = await input.callTool('screenshot', {
+      file: 'Machine Learning/B3 Ensembles/Bagging.md'
+    })
+    const slide = await input.callTool('screenshot', { file: slides, page: 1 })
+    const ok = [note, slide].every((r) => r.ok && r.image)
+    yield {
+      type: 'text',
+      text: ok ? `Looked. ${note.text} ${slide.text}` : `${note.text} ${slide.text}`
+    }
   } else if (/update the bagging note/i.test(question)) {
     const file = 'Machine Learning/B3 Ensembles/Bagging.md'
     yield { type: 'tool', name: 'insert_into_summary', input: { file } }
