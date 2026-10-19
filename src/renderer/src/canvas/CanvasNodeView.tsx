@@ -99,6 +99,22 @@ function TextContent({ node }: { node: TextNode }): React.JSX.Element | null {
   }
 }
 
+const FOLD = 18
+
+/**
+ * A note's paper with a folded corner, drawn instead of cut out: a clip-path also cut away
+ * the outline that shows a note is selected.
+ */
+function NoteBody({ width, height }: { width: number; height: number }): React.JSX.Element {
+  const w = Math.max(width, FOLD)
+  return (
+    <svg className="canvas-note-body" width={width} height={height} aria-hidden>
+      <path d={`M0.75,0.75 H${w - FOLD} L${w - 0.75},${FOLD} V${height - 0.75} H0.75 Z`} />
+      <path className="fold" d={`M${w - FOLD},0.75 V${FOLD} H${w - 0.75}`} />
+    </svg>
+  )
+}
+
 function Ink({ node }: { node: InkNode }): React.JSX.Element {
   return (
     <svg className="canvas-ink" width={node.width} height={node.height} aria-hidden>
@@ -242,6 +258,9 @@ export const CanvasNodeView = memo(function CanvasNodeView({
 
   return (
     <div className={className} style={style} data-node={node.id}>
+      {node.type === 'text' && node.shape === 'note' && (
+        <NoteBody width={node.width} height={node.height} />
+      )}
       {content}
       {handles && !editing && (
         <>

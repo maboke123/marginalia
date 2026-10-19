@@ -348,3 +348,12 @@ test('shapes come from the panel by click or drag, and the right-click menu chan
   await page.getByRole('button', { name: 'Edit text' }).click()
   await expect(page.locator('[data-node="line"] .canvas-editor')).toBeFocused()
 })
+
+test('selected notes show as selected, also among others', async () => {
+  await openShop()
+  await surface().press('Control+A')
+  const note = page.locator('[data-node="n1"]')
+  await expect(note).toHaveClass(/selected/)
+  await expect(note).toHaveCSS('outline-style', 'solid')
+  await expect(note).toHaveCSS('clip-path', 'none')
+})

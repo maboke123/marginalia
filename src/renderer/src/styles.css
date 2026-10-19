@@ -3180,20 +3180,40 @@ button.claude-proposal-label:hover {
 }
 
 .canvas-node.shape-note {
-  background: var(--bg-warning);
-  clip-path: polygon(0 0, calc(100% - 18px) 0, 100% 18px, 100% 100%, 0 100%);
+  border: 0;
+  background: transparent;
 }
 
-.canvas-node.shape-note::after {
+.canvas-note-body {
   position: absolute;
-  top: -1.5px;
-  right: -1.5px;
-  width: 18px;
-  height: 18px;
-  border-bottom: 1.5px solid var(--border-strong);
-  border-left: 1.5px solid var(--border-strong);
-  background: var(--bg-sidebar);
-  content: '';
+  top: 0;
+  left: 0;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.canvas-note-body path {
+  fill: var(--bg-warning);
+  stroke: var(--border-strong);
+  stroke-width: 1.5px;
+  stroke-linejoin: round;
+}
+
+.canvas-note-body path.fold {
+  fill: var(--bg-sidebar);
+}
+
+.canvas-node.colored .canvas-note-body path {
+  fill: color-mix(in srgb, var(--node-color) 12%, var(--bg));
+  stroke: var(--node-color);
+}
+
+.canvas-node.shape-note > .canvas-md {
+  position: relative;
+}
+
+.canvas-node.shape-note .canvas-editor {
+  background: transparent;
 }
 
 .canvas-node.shape-diamond {
