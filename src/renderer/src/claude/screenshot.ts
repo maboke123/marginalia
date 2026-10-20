@@ -84,10 +84,21 @@ export async function captureArea(rect: CaptureRect | null): Promise<Shot> {
   return toShot(canvas, bitmap.width / (rect?.width ?? window.innerWidth))
 }
 
+export function fullyInView(el: HTMLElement, scroller: HTMLElement): boolean {
+  const view = viewOf(scroller)
+  const r = el.getBoundingClientRect()
+  return (
+    r.top >= view.y - 1 &&
+    r.left >= view.x - 1 &&
+    r.bottom <= view.y + view.height + 1 &&
+    r.right <= view.x + view.width + 1
+  )
+}
+
 /**
- * An element as it is drawn in the app, all of it: when it is bigger than the view of
+ * An element as it is drawn in the app, all of it: when it is not wholly in the view of
  * `scroller`, that scrolls over it and the pieces are put together. `ready` says when what
- * just scrolled into view is drawn. Ends with the element's top in view.
+ * just scrolled into view is drawn. The view ends where it was.
  */
 export async function captureElement(
   el: HTMLElement,
@@ -96,6 +107,11 @@ export async function captureElement(
 ): Promise<Shot> {
   const view = viewOf(scroller)
   const start = el.getBoundingClientRect()
+  if (fullyInView(el, scroller)) {
+    await until(ready)
+    return captureArea({ x: start.left, y: start.top, width: start.width, height: start.height })
+  }
+  const before = { top: scroller.scrollTop, left: scroller.scrollLeft }
   const top = start.top - view.y + scroller.scrollTop
   const left = start.left - view.x + scroller.scrollLeft
   let canvas: HTMLCanvasElement | null = null
@@ -127,8 +143,8 @@ export async function captureElement(
         )
     }
   }
-  scroller.scrollTop = top - 8
-  scroller.scrollLeft = left
+  scroller.scrollTop = before.top
+  scroller.scrollLeft = before.left
   if (!canvas) throw new Error('It is not on screen')
   return toShot(canvas, scale)
 }

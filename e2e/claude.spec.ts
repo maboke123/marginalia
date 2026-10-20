@@ -374,7 +374,72 @@ test('puts a note in the margin of the slide; Reject leaves nothing', async () =
   await expect(note).toHaveCount(0)
 })
 
+const scrollTop = (): Promise<number> =>
+  page.locator('.pdf-scroll').evaluate((el) => Math.round(el.scrollTop))
+
+test('Claude looks at a page in view live and at a bigger one off screen, without scrolling', async () => {
+  const sidecar = path.join(env.vault, `${pdfRel}.annotations.json`)
+  const stroke = { id: 's1', tool: 'pen', color: '#1f6feb', width: 2, author: 'claude' }
+  await fs.writeFile(
+    sidecar,
+    JSON.stringify({
+      version: 1,
+      pdf: 'slides.pdf',
+      marginWidth: 0.3,
+      pages: {
+        '1.1': {
+          blank: true,
+          strokes: [
+            {
+              ...stroke,
+              points: [
+                [100, 100, 0.5],
+                [400, 300, 0.5]
+              ]
+            }
+          ],
+          highlights: [],
+          textBoxes: []
+        }
+      }
+    })
+  )
+  await openSlides()
+  const scroller = page.locator('.pdf-scroll')
+  await scroller.focus()
+  for (let i = 0; i < 3; i++) await page.keyboard.press('Control+-')
+  const blank = page.locator('.pdf-page[data-page="1.1"]')
+  await expect(blank.locator('svg.ink path')).toHaveCount(1)
+  const view = (await scroller.boundingBox())!
+  const sheet = (await blank.boundingBox())!
+  expect(sheet.y + sheet.height).toBeLessThan(view.y + view.height)
+
+  // The blank page under the slide is all in view, so Claude sees it as drawn.
+  const before = await scrollTop()
+  await ask('Look at page 1.1')
+  await expect(answers().last()).toContainText('Page 1.1 of')
+  await expect(answers().last()).toContainText('as I see it')
+  expect(await scrollTop()).toBe(before)
+
+  // Zoomed in, the slide does not fit, so it is drawn off screen and the view stays.
+  await scroller.focus()
+  for (let i = 0; i < 9; i++) await page.keyboard.press('Control+=')
+  await expect
+    .poll(async () => (await page.locator('.pdf-page[data-page="1"]').boundingBox())!.height)
+    .toBeGreaterThan(view.height)
+  const zoomed = await scrollTop()
+  await ask('Look at this page')
+  await expect(answers().last()).toContainText('drawn off screen')
+  expect(await scrollTop()).toBe(zoomed)
+})
+
 test('Claude can look at a whole page as it is drawn, also when it is bigger than the view', async () => {
+  // Allowed to open files, a page bigger than the view is scrolled over in pieces.
+  await app.close()
+  const config = path.join(env.userData, 'config.json')
+  const current = JSON.parse(await fs.readFile(config, 'utf8'))
+  await fs.writeFile(config, JSON.stringify({ ...current, claude: { openEditedFiles: true } }))
+  ;({ app, page } = await launch(env))
   await openSlides()
   await ask('Put a note next to this slide')
   await page.locator('.ghost-actions').getByRole('button', { name: 'Accept', exact: true }).click()
@@ -386,8 +451,10 @@ test('Claude can look at a whole page as it is drawn, also when it is bigger tha
   const sheet = (await page.locator('.pdf-page[data-page="1"]').boundingBox())!
   expect(sheet.height).toBeGreaterThan(view.height)
 
+  const before = await scrollTop()
   await ask('Look at this page')
   await expect(answers().last()).toContainText('Page 1 of')
+  expect(await scrollTop()).toBe(before)
   const text = await answers().last().innerText()
   const perPoint = Number(/1 PDF point is ([\d.]+) px/.exec(text)![1])
   // Width and height of the PNG, from its header.

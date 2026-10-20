@@ -55,7 +55,7 @@ import { useApp } from '../store'
 import { useChat } from './chat'
 import { buildPacket, currentChips } from './context'
 import { contactSheet, drawPages, pageImage, printNote } from '../lib/notePreview'
-import { captureArea, captureElement, until, viewOf } from './screenshot'
+import { captureArea, captureElement, fullyInView, until, viewOf } from './screenshot'
 
 type Args = Record<string, unknown>
 type Result = Omit<ToolReply, 'id' | 'ok'>
@@ -506,6 +506,18 @@ async function offScreenShot(path: string, args: Args): Promise<Result> {
   }
 }
 
+/** Whether a page (a blank one too; without one, the slide on screen) is wholly in view. */
+function pageInView(path: string, page: unknown): boolean {
+  const view = useApp.getState().pdfView
+  if (view?.path !== path) return false
+  const key = page === undefined ? view.page : Number(page)
+  const el = document.querySelector<HTMLElement>(
+    `.pdf-viewer[data-path="${CSS.escape(path)}"] .pdf-page[data-page="${key}"]`
+  )
+  const scroller = el?.closest<HTMLElement>('.pdf-scroll')
+  return !!el && !!scroller && fullyInView(el, scroller)
+}
+
 function noteText(path: string): Promise<string> {
   const open = openNote(path)
   return open ? Promise.resolve(open.view.state.doc.toString()) : window.api.vault.readText(path)
@@ -945,14 +957,12 @@ const TOOLS: Record<string, (args: Args) => Promise<Result>> = {
     }
     const path = fileArg(args, 'any')
     if (!opensFiles()) {
-      const isOpen = !!(openCanvas(path) ?? openNote(path) ?? openPdf(path))
-      // A page of an open PDF is captured live only when it is on screen; going to another
-      // page would move my view.
-      const view = useApp.getState().pdfView
-      const onScreen =
-        !/\.pdf$/i.test(path) ||
-        (view?.path === path && (args.page === undefined || Number(args.page) === view.page))
-      if (!isOpen || !onScreen) return offScreenShot(path, args)
+      // A page of an open PDF is captured live only when all of it is on screen; scrolling
+      // to it, even for a moment, would move my view.
+      const live = /\.pdf$/i.test(path)
+        ? pageInView(path, args.page)
+        : !!(openCanvas(path) ?? openNote(path))
+      if (!live) return offScreenShot(path, args)
     }
     if (/\.canvas$/i.test(path)) {
       if (!openCanvas(path)) show(path)
