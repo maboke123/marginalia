@@ -21,7 +21,12 @@ import { selectedText } from './selectedText'
 import { SKILLS } from './skills'
 import { TerminalView } from './TerminalView'
 
-const HEIGHT_KEY = 'claude-height'
+type Dock = 'bottom' | 'right'
+
+// Height at the bottom, width on the right; each remembered on its own.
+const SIZE_KEY: Record<Dock, string> = { bottom: 'claude-height', right: 'claude-width' }
+const MIN_SIZE: Record<Dock, number> = { bottom: 160, right: 320 }
+const DEFAULT_SIZE: Record<Dock, number> = { bottom: 300, right: 420 }
 const EMPTY: Message[] = []
 
 const QUICK_ACTIONS = [
@@ -60,12 +65,12 @@ const EFFORT_LABELS: Record<EffortChoice, string> = {
   max: 'Max'
 }
 
-function loadHeight(): number {
+function loadSize(dock: Dock): number {
   try {
-    const value = Number(localStorage.getItem(HEIGHT_KEY))
-    return value >= 160 ? value : 300
+    const value = Number(localStorage.getItem(SIZE_KEY[dock]))
+    return value >= MIN_SIZE[dock] ? value : DEFAULT_SIZE[dock]
   } catch {
-    return 300
+    return DEFAULT_SIZE[dock]
   }
 }
 
@@ -121,13 +126,13 @@ function ChatPicker({ chat, vaultName }: { chat: string; vaultName: string }): R
   )
 }
 
-export function ClaudePanel(): React.JSX.Element {
+export function ClaudePanel({ dock }: { dock: Dock }): React.JSX.Element {
   const chat = useShownChat()
   const vaultName = useApp((s) => s.vault?.name ?? '')
   const messages = useChat((s) => s.chats[chat]?.messages ?? EMPTY)
   const running = useChat((s) => s.running)
   const [settingsOpen, setSettingsOpen] = useState(false)
-  const [height, setHeight] = useState(loadHeight)
+  const [size, setSize] = useState(() => loadSize(dock))
   const [tab, setTab] = useState<'chat' | 'terminal'>('chat')
   // Mounted on first use and then kept, so switching tabs does not clear its screen.
   const [terminalUsed, setTerminalUsed] = useState(false)
@@ -139,19 +144,20 @@ export function ClaudePanel(): React.JSX.Element {
   const startResize = (e: React.PointerEvent): void => {
     const handle = e.currentTarget as HTMLElement
     handle.setPointerCapture(e.pointerId)
-    const startY = e.clientY
-    const startHeight = height
-    let latest = height
+    const right = dock === 'right'
+    const start = right ? e.clientX : e.clientY
+    const startSize = size
+    const max = (right ? window.innerWidth : window.innerHeight) * 0.75
+    let latest = size
     const onMove = (ev: PointerEvent): void => {
-      latest = Math.round(
-        Math.min(window.innerHeight * 0.75, Math.max(160, startHeight + startY - ev.clientY))
-      )
-      setHeight(latest)
+      const moved = start - (right ? ev.clientX : ev.clientY)
+      latest = Math.round(Math.min(max, Math.max(MIN_SIZE[dock], startSize + moved)))
+      setSize(latest)
     }
     const onUp = (): void => {
       handle.removeEventListener('pointermove', onMove)
       try {
-        localStorage.setItem(HEIGHT_KEY, String(latest))
+        localStorage.setItem(SIZE_KEY[dock], String(latest))
       } catch {
         // ignore
       }
@@ -161,7 +167,11 @@ export function ClaudePanel(): React.JSX.Element {
   }
 
   return (
-    <section className="claude-panel" style={{ height }} aria-label="Claude">
+    <section
+      className={`claude-panel ${dock}`}
+      style={dock === 'right' ? { width: size } : { height: size }}
+      aria-label="Claude"
+    >
       <div className="claude-resize" role="separator" onPointerDown={startResize} />
       <header className="claude-header">
         <span className="claude-title">Claude</span>

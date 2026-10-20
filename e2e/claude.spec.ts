@@ -121,6 +121,35 @@ test('answers about the slide on screen, with that slide sent along', async () =
   await page.screenshot({ path: path.join('test-results', 'claude-panel.png') })
 })
 
+test('the panel moves to the right of the panes from the settings', async () => {
+  await openSlides(3)
+  await ask('Explain this formula')
+  await expect(answers()).toHaveCount(1)
+  const panel = page.locator('.claude-panel')
+  await expect(panel).not.toHaveClass(/right/)
+
+  await page.keyboard.press('Control+,')
+  const settings = page.getByRole('dialog', { name: 'Settings' })
+  await settings.getByRole('radio', { name: 'On the right' }).check()
+  await settings.getByRole('button', { name: 'Close', exact: true }).click()
+  await expect(panel).toHaveClass(/right/)
+  // The conversation stays, next to the slides at the full height of the window.
+  await expect(answers()).toHaveCount(1)
+  const box = (await panel.boundingBox())!
+  const slides = (await page.locator('.pdf-viewer').boundingBox())!
+  expect(box.x).toBeGreaterThanOrEqual(slides.x + slides.width - 1)
+  expect(box.height).toBeGreaterThan(slides.height - 1)
+
+  // Dragging its left edge makes it wider.
+  const handle = (await panel.locator('.claude-resize').boundingBox())!
+  await page.mouse.move(handle.x + 3, handle.y + 200)
+  await page.mouse.down()
+  await page.mouse.move(handle.x - 97, handle.y + 200)
+  await page.mouse.up()
+  await expect.poll(async () => (await panel.boundingBox())!.width).toBeCloseTo(box.width + 100, 0)
+  await page.screenshot({ path: path.join('test-results', 'claude-panel-right.png') })
+})
+
 test('Claude previews how a note comes out as a PDF', async () => {
   await openSlides(1)
   await page.keyboard.press('Control+Shift+M')

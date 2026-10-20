@@ -22,4 +22,9 @@ describe('settingsFrom', () => {
     expect(settings.highlightColors).toEqual(DEFAULT_SETTINGS.highlightColors)
     expect(settings.hotkeys).toEqual({ ...DEFAULT_HOTKEYS, pen: 'B' })
   })
+
+  it('puts the Claude panel at the bottom unless it was set to the right', () => {
+    expect(settingsFrom({ claudeDock: 'right' }).claudeDock).toBe('right')
+    expect(settingsFrom({ claudeDock: 'left' }).claudeDock).toBe('bottom')
+  })
 })

@@ -72,6 +72,7 @@ export function App(): React.JSX.Element | null {
   const previewNote = useApp((s) => s.previewNote)
   const showError = useApp((s) => s.showError)
   const claudeOpen = useChat((s) => s.open)
+  const dock = useApp((s) => s.settings.claudeDock)
 
   useEffect(() => {
     useApp.getState().init()
@@ -143,8 +144,9 @@ export function App(): React.JSX.Element | null {
           <div className="layout">
             {!lectureMode && !sidebarHidden && <Sidebar />}
             <Workspace />
+            {claudeOpen && dock === 'right' && <ClaudePanel dock="right" />}
           </div>
-          {claudeOpen && <ClaudePanel />}
+          {claudeOpen && dock === 'bottom' && <ClaudePanel dock="bottom" />}
           {overlay === 'switcher' && <QuickSwitcher />}
           {overlay === 'search' && <SearchPanel />}
           {overlay === 'settings' && <SettingsDialog />}

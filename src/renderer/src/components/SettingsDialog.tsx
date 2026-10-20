@@ -26,6 +26,11 @@ const THEMES: { value: Theme; label: string }[] = [
   { value: 'dark', label: 'Dark' }
 ]
 
+const DOCKS: { value: AppSettings['claudeDock']; label: string }[] = [
+  { value: 'bottom', label: 'At the bottom' },
+  { value: 'right', label: 'On the right' }
+]
+
 function Colors({
   label,
   colors,
@@ -175,6 +180,22 @@ export function SettingsDialog(): React.JSX.Element {
                       onChange={() => void save({ theme: t.value })}
                     />
                     {t.label}
+                  </label>
+                ))}
+              </div>
+            </div>
+            <div className="settings-row" role="radiogroup" aria-label="Claude panel">
+              <span className="settings-label">Claude panel</span>
+              <div className="settings-choices">
+                {DOCKS.map((d) => (
+                  <label key={d.value} className="check">
+                    <input
+                      type="radio"
+                      name="claudeDock"
+                      checked={settings.claudeDock === d.value}
+                      onChange={() => void save({ claudeDock: d.value })}
+                    />
+                    {d.label}
                   </label>
                 ))}
               </div>
