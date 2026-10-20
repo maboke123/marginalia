@@ -97,6 +97,23 @@ test('math and tables render while typing, and the file stays plain Markdown', a
     )
 })
 
+test('a PDF opened from a slide link later reopens on the page I left it', async () => {
+  await fs.writeFile(summaryFile(), 'See [slide 3](slides.pdf#page=3).\n')
+  await openSection()
+  await row('Summary').click()
+  await page.locator('.cm-link-text', { hasText: 'slide 3' }).click()
+  const pageInput = page.getByRole('textbox', { name: 'Page' })
+  await expect(pageInput).toHaveValue('3')
+
+  await pageInput.fill('6')
+  await pageInput.press('Enter')
+  await expect(pageInput).toHaveValue('6')
+  await row('Summary').click()
+  await expect(editor()).toBeVisible()
+  await row('slides.pdf').click()
+  await expect(pageInput).toHaveValue('6')
+})
+
 test('lecture mode, slide links and snapshots', async () => {
   const notes = path.join(env.vault, section, 'slides.md')
   const readSummary = (): Promise<string> => fs.readFile(notes, 'utf8')

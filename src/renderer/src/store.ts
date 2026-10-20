@@ -456,8 +456,10 @@ export const useApp = create<AppState>((set, get) => {
         selected: path,
         recentFiles: recent,
         ...(pdf ? { slidesFile: path } : { summaryFile: path }),
-        ...(pdf && page ? { pdfGoto: { path, page, nonce: ++gotoNonce } } : {}),
-        ...(!pdf && line ? { noteGoto: { path, line, nonce: ++gotoNonce } } : {})
+        // Cleared on a plain open, else reopening the file later jumps back to the old target.
+        ...(pdf
+          ? { pdfGoto: page ? { path, page, nonce: ++gotoNonce } : null }
+          : { noteGoto: line ? { path, line, nonce: ++gotoNonce } : null })
       })
       expandAncestors(path)
     },
