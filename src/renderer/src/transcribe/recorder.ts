@@ -1,3 +1,4 @@
+import type { RecordSource } from '../../../shared/settings'
 import { Chunker, RATE, type Chunk } from './chunker'
 import { SilenceWatch } from './silence'
 
@@ -20,20 +21,38 @@ export interface MicrophoneHandlers {
 // Speech stays clear at this rate and an hour is about 15 MB.
 const AUDIO_BITS = 32_000
 
+async function openStream(source: RecordSource): Promise<MediaStream> {
+  if (source === 'microphone') {
+    return navigator.mediaDevices.getUserMedia({
+      audio: {
+        channelCount: 1,
+        // A lecturer far away: let the browser even out loudness and filter steady noise.
+        autoGainControl: true,
+        noiseSuppression: true,
+        echoCancellation: false
+      }
+    })
+  }
+  // The computer's sound comes with a picture of the app, which getDisplayMedia always asks
+  // for (main grants Windows loopback audio); only the sound is kept.
+  const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true })
+  for (const track of stream.getVideoTracks()) {
+    track.stop()
+    stream.removeTrack(track)
+  }
+  if (!stream.getAudioTracks().length) throw new Error('Windows gave no sound to record')
+  return stream
+}
+
 /**
- * The microphone, recorded two ways at once: 16 kHz samples cut into chunks for whisper,
- * and compressed audio that is kept with the transcript.
+ * The microphone or the computer's sound, recorded two ways at once: 16 kHz samples cut into
+ * chunks for whisper, and compressed audio that is kept with the transcript.
  */
-export async function startMicrophone(handlers: MicrophoneHandlers): Promise<Microphone> {
-  const stream = await navigator.mediaDevices.getUserMedia({
-    audio: {
-      channelCount: 1,
-      // A lecturer far away: let the browser even out loudness and filter steady noise.
-      autoGainControl: true,
-      noiseSuppression: true,
-      echoCancellation: false
-    }
-  })
+export async function startMicrophone(
+  from: RecordSource,
+  handlers: MicrophoneHandlers
+): Promise<Microphone> {
+  const stream = await openStream(from)
   const context = new AudioContext({ sampleRate: RATE })
   const source = context.createMediaStreamSource(stream)
   // A ScriptProcessor rather than an AudioWorklet: a worklet module cannot be loaded from the
@@ -54,7 +73,8 @@ export async function startMicrophone(handlers: MicrophoneHandlers): Promise<Mic
     for (let i = 0; i < block.length; i++) sum += block[i] * block[i]
     const rms = Math.sqrt(sum / block.length)
     handlers.onLevel(Math.min(1, rms * 4))
-    const now = watch.push(rms, block.length / RATE) || track.muted
+    // A paused video is silent too; only a microphone may be muted without me noticing.
+    const now = from === 'microphone' && (watch.push(rms, block.length / RATE) || track.muted)
     if (now !== silent) handlers.onSilent((silent = now))
     for (const chunk of chunker.push(block)) handlers.onChunk(chunk)
   }

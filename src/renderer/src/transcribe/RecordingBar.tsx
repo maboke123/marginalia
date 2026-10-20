@@ -48,7 +48,8 @@ export function RecordingBar(): React.JSX.Element | null {
     <div className="recording-bar" role="status" aria-label="Recording">
       <span className="recording-dot" aria-hidden />
       <span className="recording-time">
-        Recording <RecordingClock startedAt={active.startedAt} />
+        {active.from === 'computer' ? 'Recording the computer sound' : 'Recording'}{' '}
+        <RecordingClock startedAt={active.startedAt} />
       </span>
       <span className="recording-level" aria-hidden>
         <span style={{ width: `${Math.round(level * 100)}%` }} />

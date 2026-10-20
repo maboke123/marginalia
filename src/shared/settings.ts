@@ -25,11 +25,15 @@ export interface AppSettings {
   autoTranscribe: boolean
   /** The bar across the window while recording; when hidden, the record buttons show the time. */
   recordingBar: boolean
+  /** What a recording listens to: the microphone, or the computer's own sound (a recorded lecture). */
+  recordFrom: RecordSource
   /** Where the Claude panel sits: under the panes, or beside them like in VS Code. */
   claudeDock: 'bottom' | 'right'
 }
 
 export type TranscribeLanguage = 'auto' | 'nl' | 'en'
+
+export type RecordSource = 'microphone' | 'computer'
 
 export const TRANSCRIBE_LANGUAGES: { value: TranscribeLanguage; name: string }[] = [
   { value: 'auto', name: 'Any language' },
@@ -74,6 +78,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   transcribeModel: 'accurate',
   transcribeLive: false,
   recordingBar: true,
+  recordFrom: 'microphone',
   autoTranscribe: true,
   claudeDock: 'bottom'
 }
@@ -103,6 +108,7 @@ export function settingsFrom(raw: unknown): AppSettings {
     transcribeModel: r.transcribeModel === 'small' ? 'small' : 'accurate',
     transcribeLive: r.transcribeLive === true,
     recordingBar: r.recordingBar !== false,
+    recordFrom: r.recordFrom === 'computer' ? 'computer' : 'microphone',
     autoTranscribe: r.autoTranscribe !== false,
     claudeDock: r.claudeDock === 'right' ? 'right' : 'bottom'
   }

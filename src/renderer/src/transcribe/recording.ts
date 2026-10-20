@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import type { RecordSource } from '../../../shared/settings'
 import type { RecordingStatus, TranscribePart } from '../../../shared/types'
 import { slideLink } from '../editor/links'
 import { openPdf } from '../lib/open'
@@ -17,7 +18,7 @@ const PROMPT_CHARS = 600
 
 interface RecordingState {
   /** The recording going on, if any. */
-  active: { transcript: string; startedAt: number } | null
+  active: { transcript: string; startedAt: number; from: RecordSource } | null
   status: RecordingStatus | null
   /** Microphone loudness, 0 to 1. */
   level: number
@@ -27,7 +28,8 @@ interface RecordingState {
   /** Percent of a download of missing parts before recording starts (only in development). */
   preparing: number | null
   toggle(): Promise<void>
-  start(): Promise<void>
+  /** Starts recording from `from`, or what the settings say. */
+  start(from?: RecordSource): Promise<void>
   stop(): Promise<void>
   /** The window is closing: keep the audio, do not wait for the transcript to catch up. */
   abandon(): Promise<void>
@@ -108,7 +110,7 @@ export const useRecording = create<RecordingState>((set, get) => {
 
     toggle: () => (get().active ? get().stop() : get().start()),
 
-    async start() {
+    async start(from = useApp.getState().settings.recordFrom) {
       if (get().active || get().stopping || get().preparing !== null) return
       const { showError, refresh } = useApp.getState()
       const folder = lessonFolder()
@@ -157,7 +159,7 @@ export const useRecording = create<RecordingState>((set, get) => {
         })
       }
       try {
-        microphone = await startMicrophone({
+        microphone = await startMicrophone(from, {
           onChunk: (chunk) => void send(chunk).catch((err: Error) => showError(err.message)),
           onAudio: async (data) => {
             await session
@@ -169,9 +171,11 @@ export const useRecording = create<RecordingState>((set, get) => {
       } catch (err) {
         const blocked = ['NotAllowedError', 'NotReadableError', 'NotFoundError']
         showError(
-          blocked.includes((err as Error).name)
-            ? 'No microphone to record with. Check that one is connected and that Windows allows it (Settings > Privacy & security > Microphone)'
-            : `Could not use the microphone: ${(err as Error).message}`
+          from === 'computer'
+            ? `Could not record the sound of this computer: ${(err as Error).message}`
+            : blocked.includes((err as Error).name)
+              ? 'No microphone to record with. Check that one is connected and that Windows allows it (Settings > Privacy & security > Microphone)'
+              : `Could not use the microphone: ${(err as Error).message}`
         )
         return
       }
@@ -181,7 +185,7 @@ export const useRecording = create<RecordingState>((set, get) => {
         const transcript = await session
         slide = slideNow(transcript)
         const startedAt = Date.now()
-        set({ active: { transcript, startedAt }, status: null })
+        set({ active: { transcript, startedAt, from }, status: null })
         stopFollowing = followSlides(startedAt)
         // The transcript becomes one more note of the slides on screen.
         const { lectureMode, slidesFile, activeFile } = useApp.getState()

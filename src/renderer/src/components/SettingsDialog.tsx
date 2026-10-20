@@ -26,6 +26,11 @@ const THEMES: { value: Theme; label: string }[] = [
   { value: 'dark', label: 'Dark' }
 ]
 
+const RECORD_SOURCES: { value: AppSettings['recordFrom']; label: string }[] = [
+  { value: 'microphone', label: 'Microphone' },
+  { value: 'computer', label: 'Sound of this computer (a lecture video)' }
+]
+
 const DOCKS: { value: AppSettings['claudeDock']; label: string }[] = [
   { value: 'bottom', label: 'At the bottom' },
   { value: 'right', label: 'On the right' }
@@ -240,6 +245,22 @@ export function SettingsDialog(): React.JSX.Element {
 
           <section>
             <h3>Recordings</h3>
+            <div className="settings-row" role="radiogroup" aria-label="Record from">
+              <span className="settings-label">Record from</span>
+              <div className="settings-choices">
+                {RECORD_SOURCES.map((s) => (
+                  <label key={s.value} className="check">
+                    <input
+                      type="radio"
+                      name="recordFrom"
+                      checked={settings.recordFrom === s.value}
+                      onChange={() => void save({ recordFrom: s.value })}
+                    />
+                    {s.label}
+                  </label>
+                ))}
+              </div>
+            </div>
             <div className="settings-row">
               <span className="settings-label">Transcribe</span>
               <div>

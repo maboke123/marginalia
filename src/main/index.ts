@@ -1,4 +1,14 @@
-import { app, BrowserWindow, ipcMain, Menu, nativeTheme, net, protocol, shell } from 'electron'
+import {
+  app,
+  BrowserWindow,
+  ipcMain,
+  Menu,
+  nativeTheme,
+  net,
+  protocol,
+  session,
+  shell
+} from 'electron'
 import { cpSync, existsSync } from 'fs'
 import path from 'path'
 import { pathToFileURL } from 'url'
@@ -127,6 +137,12 @@ app.whenReady().then(async () => {
       return new Response('Outside the vault', { status: 403 })
     }
   })
+  // Recording a lecture video that plays on this computer: Windows loopback audio. Chromium
+  // wants a picture with it, and the app's own page is the cheapest to give; the recorder
+  // stops it at once.
+  session.defaultSession.setDisplayMediaRequestHandler((request, callback) =>
+    callback(request.frame ? { video: request.frame, audio: 'loopback' } : {})
+  )
   createWindow()
 })
 

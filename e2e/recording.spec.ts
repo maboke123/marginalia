@@ -38,6 +38,28 @@ test.afterEach(async () => {
   await fs.rm(env.dir, { recursive: true, force: true })
 })
 
+test('records the sound of this computer, picked from the record button', async () => {
+  await start()
+  const button = page.locator('.pdf-viewer').getByRole('button', { name: 'Record lecture' })
+  await button.click({ button: 'right' })
+  await page.getByRole('menuitem', { name: 'Record the sound of this computer' }).click()
+  const bar = page.getByRole('status', { name: 'Recording', exact: true })
+  await expect(bar).toContainText('Recording the computer sound 00:0')
+  // A silent video is no reason to ask about the microphone.
+  await page.waitForTimeout(6000)
+  await expect(bar).not.toContainText('No sound from the microphone')
+  await bar.getByRole('button', { name: 'Stop' }).click()
+  await expect(bar).toBeHidden()
+
+  const audio = (await fs.readdir(path.join(env.vault, section, 'assets'))).find((f) =>
+    f.endsWith('.webm')
+  )!
+  expect((await fs.stat(path.join(env.vault, section, 'assets', audio))).size).toBeGreaterThan(0)
+  const config = JSON.parse(await fs.readFile(path.join(env.userData, 'config.json'), 'utf8'))
+  expect(config.settings.recordFrom).toBe('computer')
+  await expect(button).toHaveAttribute('title', /^Record the sound of this computer/)
+})
+
 test('with live transcription on, the transcript is written while recording', async () => {
   await start({}, { transcribeLive: true })
   await page.keyboard.press('Control+Shift+R')
