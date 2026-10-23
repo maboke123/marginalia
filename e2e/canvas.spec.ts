@@ -634,8 +634,11 @@ test('a canvas dragged onto a folder moves there; dropped on slides it links to 
   await row('Shop').dragTo(row('Patterns'))
   await expect
     .poll(async () => {
+      // Not there until something is linked in this new vault.
       const state = JSON.parse(
-        await fs.readFile(path.join(env.vault, '.marginalia', 'state.json'), 'utf8')
+        await fs
+          .readFile(path.join(env.vault, '.marginalia', 'state.json'), 'utf8')
+          .catch(() => '{}')
       )
       return state.notes?.['Design of Software Systems/les_2/Patterns.pdf']
     })
