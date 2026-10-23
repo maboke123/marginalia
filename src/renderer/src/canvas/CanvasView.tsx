@@ -123,6 +123,26 @@ function loadCamera(path: string): Camera | null {
   }
 }
 
+const ROUTE_KEY = 'canvas-arrow-route'
+
+/** New arrows are drawn like the last one I switched between curved and right angles. */
+function withLastRoute(edge: CanvasEdge | null): CanvasEdge | null {
+  try {
+    return edge && localStorage.getItem(ROUTE_KEY) === 'elbow' ? { ...edge, route: 'elbow' } : edge
+  } catch {
+    return edge
+  }
+}
+
+function saveRoute(route: CanvasEdge['route']): void {
+  try {
+    if (route) localStorage.setItem(ROUTE_KEY, route)
+    else localStorage.removeItem(ROUTE_KEY)
+  } catch {
+    // Only a convenience for the next arrow.
+  }
+}
+
 function saveCamera(path: string, camera: Camera): void {
   try {
     localStorage.setItem(cameraKey(path), JSON.stringify(camera))
@@ -889,7 +909,9 @@ function CanvasSurface({
       if (!from) return
       const land = connectTarget(s.data, at.x, at.y, LAND_PX / cameraRef.current.zoom, d.id)
       if (land) {
-        const edge = connect(s.data, d.id, land.id, { fromSide: d.side, toSide: land.side })
+        const edge = withLastRoute(
+          connect(s.data, d.id, land.id, { fromSide: d.side, toSide: land.side })
+        )
         if (edge) {
           s.change((data) => ({ ...data, edges: [...data.edges, edge] }))
           s.select({ nodes: [], edges: [edge.id] })
@@ -902,7 +924,7 @@ function CanvasSurface({
         s.begin()
         s.update((data) => {
           const withBox = addNodes(data, [box])
-          const edge = connect(withBox, d.id, box.id, { fromSide: d.side })
+          const edge = withLastRoute(connect(withBox, d.id, box.id, { fromSide: d.side }))
           return edge ? { ...withBox, edges: [...withBox.edges, edge] } : withBox
         })
         newBox.current = box.id
@@ -1653,10 +1675,20 @@ function EdgePanel({
       />
     </label>
   )
+  // Centred under the arrow's middle, but kept inside the canvas.
+  const ref = useRef<HTMLDivElement>(null)
+  const [left, setLeft] = useState(at.x)
+  useLayoutEffect(() => {
+    const el = ref.current!
+    const room = el.parentElement!.clientWidth
+    const half = el.offsetWidth / 2
+    setLeft(Math.min(Math.max(at.x, half + 8), room - half - 8))
+  }, [at.x])
   return (
     <div
+      ref={ref}
       className="canvas-edge-panel"
-      style={{ left: at.x, top: at.y + 16 }}
+      style={{ left, top: at.y + 16 }}
       onPointerDown={(e) => e.stopPropagation()}
       onDoubleClick={(e) => e.stopPropagation()}
     >
@@ -1672,6 +1704,36 @@ function EdgePanel({
       {field('fromLabel', 'Start')}
       {field('label', 'Label')}
       {field('toLabel', 'End')}
+      <div className="canvas-route" role="radiogroup" aria-label="Line">
+        <span className="muted">Line</span>
+        <div>
+          {(
+            [
+              [undefined, 'Curved'],
+              ['elbow', 'Right angles']
+            ] as const
+          ).map(([route, label]) => (
+            <button
+              key={label}
+              role="radio"
+              aria-checked={edge.route === route}
+              className={edge.route === route ? 'text-button pressed' : 'text-button'}
+              onClick={() => {
+                saveRoute(route)
+                doc.getState().change((d) =>
+                  updateEdge(d, edge.id, (x) => {
+                    const next = { ...x, route }
+                    if (!route) delete next.route
+                    return next
+                  })
+                )
+              }}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
       <button
         className="text-button"
         title="Swap start and end"

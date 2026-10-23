@@ -3687,11 +3687,21 @@ input.canvas-group-label {
   transform: translateX(-50%);
 }
 
-.canvas-edge-panel label {
+.canvas-edge-panel label,
+.canvas-route {
   display: flex;
   flex-direction: column;
   gap: 2px;
   font-size: 12px;
+}
+
+.canvas-route > div {
+  display: flex;
+  height: 26px;
+}
+
+.canvas-route .text-button {
+  white-space: nowrap;
 }
 
 .canvas-edge-panel input {

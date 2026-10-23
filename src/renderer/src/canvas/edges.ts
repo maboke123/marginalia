@@ -155,6 +155,168 @@ export function edgeGeometry(
   }
 }
 
+/** How far a right-angle line goes straight out of a box before it turns. */
+const STUB = 24
+const CORNER = 8
+
+/** Whether a horizontal or vertical segment runs through the inside of a box. */
+function crosses(a: Point, b: Point, r: Rect): boolean {
+  const e = 0.5
+  return (
+    Math.max(a.x, b.x) > r.x + e &&
+    Math.min(a.x, b.x) < r.x + r.width - e &&
+    Math.max(a.y, b.y) > r.y + e &&
+    Math.min(a.y, b.y) < r.y + r.height - e
+  )
+}
+
+/** The points without repeats and without points in the middle of a straight run. */
+function simplify(points: Point[]): Point[] {
+  const out: Point[] = []
+  for (const p of points) {
+    const last = out[out.length - 1]
+    if (last && Math.abs(last.x - p.x) < 0.01 && Math.abs(last.y - p.y) < 0.01) continue
+    const before = out[out.length - 2]
+    if (
+      before &&
+      last &&
+      (before.x === last.x) === (last.x === p.x) &&
+      (before.y === last.y) === (last.y === p.y)
+    ) {
+      out[out.length - 1] = p
+      continue
+    }
+    out.push(p)
+  }
+  return out
+}
+
+/**
+ * A line of horizontal and vertical pieces from `start` to `end`, leaving and entering along
+ * the sides' normals, through as few boxes as it can, then as short and with as few bends as
+ * it can. Tries routes with one to three bends, turning at the middle or just past a box.
+ */
+export function elbowRoute(
+  start: Point,
+  startSide: Side,
+  end: Point,
+  endSide: Side,
+  boxes: Rect[]
+): Point[] {
+  const s = add(start, NORMALS[startSide], STUB)
+  const e = add(end, NORMALS[endSide], STUB)
+  const area = {
+    x: Math.min(s.x, e.x) - 300,
+    y: Math.min(s.y, e.y) - 300,
+    width: Math.abs(s.x - e.x) + 600,
+    height: Math.abs(s.y - e.y) + 600
+  }
+  const near = boxes.filter((r) =>
+    crosses({ x: area.x, y: area.y }, { x: area.x + area.width, y: area.y + area.height }, r)
+  )
+  const xs = new Set([s.x, e.x, (s.x + e.x) / 2])
+  const ys = new Set([s.y, e.y, (s.y + e.y) / 2])
+  for (const r of near) {
+    xs.add(r.x - STUB)
+    xs.add(r.x + r.width + STUB)
+    ys.add(r.y - STUB)
+    ys.add(r.y + r.height + STUB)
+  }
+  const candidates: Point[][] = [
+    [s, { x: e.x, y: s.y }, e],
+    [s, { x: s.x, y: e.y }, e],
+    ...[...xs].map((x) => [s, { x, y: s.y }, { x, y: e.y }, e]),
+    ...[...ys].map((y) => [s, { x: s.x, y }, { x: e.x, y }, e])
+  ]
+  let best: { points: Point[]; score: number } | null = null
+  for (const c of candidates) {
+    const points = simplify([start, ...c, end])
+    let score = 0
+    for (let i = 1; i < points.length; i++) {
+      const [a, b] = [points[i - 1], points[i]]
+      score += Math.abs(a.x - b.x) + Math.abs(a.y - b.y)
+      score += near.filter((r) => crosses(a, b, r)).length * 100_000
+    }
+    score += (points.length - 2) * 30
+    if (!best || score < best.score) best = { points, score }
+  }
+  return best!.points
+}
+
+/** The point halfway along a line of straight pieces. */
+function halfway(points: Point[]): Point {
+  const lengths = points.slice(1).map((p, i) => Math.hypot(p.x - points[i].x, p.y - points[i].y))
+  let left = lengths.reduce((a, b) => a + b, 0) / 2
+  for (let i = 0; i < lengths.length; i++) {
+    if (left <= lengths[i]) {
+      const t = lengths[i] ? left / lengths[i] : 0
+      return {
+        x: points[i].x + (points[i + 1].x - points[i].x) * t,
+        y: points[i].y + (points[i + 1].y - points[i].y) * t
+      }
+    }
+    left -= lengths[i]
+  }
+  return points[points.length - 1]
+}
+
+/** Straight pieces with slightly rounded corners, as an SVG path. */
+function roundedPath(points: Point[]): string {
+  let d = `M${f(points[0].x)},${f(points[0].y)}`
+  for (let i = 1; i < points.length - 1; i++) {
+    const [a, p, b] = [points[i - 1], points[i], points[i + 1]]
+    const r = Math.min(
+      CORNER,
+      Math.hypot(p.x - a.x, p.y - a.y) / 2,
+      Math.hypot(b.x - p.x, b.y - p.y) / 2
+    )
+    const inDir = { x: Math.sign(p.x - a.x), y: Math.sign(p.y - a.y) }
+    const outDir = { x: Math.sign(b.x - p.x), y: Math.sign(b.y - p.y) }
+    const p1 = add(p, inDir, -r)
+    const p2 = add(p, outDir, r)
+    d += ` L${f(p1.x)},${f(p1.y)} Q${f(p.x)},${f(p.y)} ${f(p2.x)},${f(p2.y)}`
+  }
+  const last = points[points.length - 1]
+  return `${d} L${f(last.x)},${f(last.y)}`
+}
+
+/** Like `edgeGeometry`, with right angles, around `boxes`. */
+export function elbowGeometry(
+  from: Rect,
+  fromSide: Side,
+  to: Rect,
+  toSide: Side,
+  fromMarker: Marker,
+  toMarker: Marker,
+  fromEnd: EndAt,
+  toEnd: EndAt,
+  boxes: Rect[]
+): EdgeGeometry {
+  const start = sideAt(from, fromSide, fromEnd.at, fromEnd.shape)
+  const end = sideAt(to, toSide, toEnd.at, toEnd.shape)
+  const outA = NORMALS[fromSide]
+  const outB = NORMALS[toSide]
+  const points = elbowRoute(start, fromSide, end, toSide, boxes)
+  // The line starts where a marker ends, like the curve.
+  const line = [
+    add(start, outA, MARKER_LENGTH[fromMarker]),
+    ...points.slice(1, -1),
+    add(end, outB, MARKER_LENGTH[toMarker])
+  ]
+  const markers = [
+    markerShape(fromMarker, start, { x: -outA.x, y: -outA.y }),
+    markerShape(toMarker, end, { x: -outB.x, y: -outB.y })
+  ].filter((m): m is MarkerShape => !!m)
+  const beside = (p: Point, out: Point): Point => add(add(p, out, 22), { x: -out.y, y: out.x }, 14)
+  return {
+    path: roundedPath(line),
+    markers,
+    middle: halfway(points),
+    fromLabelAt: beside(start, outA),
+    toLabelAt: beside(end, outB)
+  }
+}
+
 /** While an arrow is dragged out: the side a free end comes in from, facing its start. */
 export function freeEndSide(start: Point, end: Point): Side {
   const dx = end.x - start.x
@@ -215,7 +377,7 @@ export function geometryOf(
   const [fromSide, toSide] = facingSides(from, to)
   const style = edgeStyle(edge)
   const port = ports?.get(edge.id)
-  return edgeGeometry(
+  const args = [
     from,
     edge.fromSide ?? fromSide,
     to,
@@ -224,5 +386,8 @@ export function geometryOf(
     style.toMarker,
     { at: port?.from, shape: shapeOf(from) },
     { at: port?.to, shape: shapeOf(to) }
-  )
+  ] as const
+  if (edge.route !== 'elbow') return edgeGeometry(...args)
+  const boxes = [...byId.values()].filter((n) => n.type !== 'group')
+  return elbowGeometry(...args, boxes)
 }

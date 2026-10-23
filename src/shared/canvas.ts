@@ -95,6 +95,8 @@ export interface CanvasEdge {
   relation?: Relation
   fromLabel?: string
   toLabel?: string
+  /** Our own: drawn with right angles around other boxes instead of as a curve. */
+  route?: 'elbow'
   [extra: string]: unknown
 }
 

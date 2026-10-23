@@ -12,7 +12,14 @@ const file = (name: string): string => path.join(env.vault, lesson, name)
 
 interface Saved {
   nodes: { id: string; type: string; text?: string; x: number; y: number; file?: string }[]
-  edges: { id: string; fromNode: string; toNode: string; relation?: string; toLabel?: string }[]
+  edges: {
+    id: string
+    fromNode: string
+    toNode: string
+    relation?: string
+    toLabel?: string
+    route?: string
+  }[]
 }
 const read = async (name: string): Promise<Saved> =>
   JSON.parse(await fs.readFile(file(name), 'utf8'))
@@ -194,6 +201,34 @@ test('dragging from a box edge to another box connects them; the panel sets the 
   await expect
     .poll(async () => (await read('Shop.canvas')).edges.at(-1))
     .toMatchObject({ fromNode: 'line', toNode: 'vip', relation: 'aggregation', toLabel: '0..1' })
+})
+
+test('an arrow switched to right angles goes around boxes, and new arrows follow', async () => {
+  await openShop()
+  await page.locator('[data-edge="uses"] .canvas-edge-hit').click({ force: true })
+  const panel = page.locator('.canvas-edge-panel')
+  await panel.getByRole('radio', { name: 'Right angles' }).click()
+  await expect(panel.getByRole('radio', { name: 'Right angles' })).toHaveAttribute(
+    'aria-checked',
+    'true'
+  )
+  await expect
+    .poll(async () => (await read('Shop.canvas')).edges.find((e) => e.id === 'uses')!.route)
+    .toBe('elbow')
+  const d = await page.locator('[data-edge="uses"] .canvas-edge-line').getAttribute('d')
+  expect(d).not.toContain('C')
+  await page.screenshot({ path: path.join('test-results', 'canvas-elbow.png') })
+
+  // The next arrow drawn has right angles too.
+  const dot = page.locator('[data-node="line"] .canvas-connect.c-left')
+  await page.locator('[data-node="line"]').hover()
+  const from = (await dot.boundingBox())!
+  const target = (await page.locator('[data-node="vip"]').boundingBox())!
+  await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(target.x + target.width - 10, target.y + 40, { steps: 8 })
+  await page.mouse.up()
+  await expect.poll(async () => (await read('Shop.canvas')).edges.at(-1)!.route).toBe('elbow')
 })
 
 test('pointing at an arrow says what it means, with the names of its boxes', async () => {

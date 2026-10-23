@@ -5,7 +5,7 @@ import { createCanvasDoc } from './doc'
 import { clickScale, makeScaled, templateByName } from './shapes'
 import { sourceRange, wordAround } from './caret'
 import { snapSpacing } from './spacing'
-import { edgeGeometry, edgePorts, freeEndSide, sideAt } from './edges'
+import { edgeGeometry, edgePorts, elbowRoute, freeEndSide, geometryOf, sideAt } from './edges'
 import {
   bringToFront,
   connect,
@@ -299,6 +299,39 @@ describe('ink', () => {
         ])
       ).id
     ).not.toBe(first.id)
+  })
+})
+
+describe('right-angle arrows', () => {
+  const straight = (points: { x: number; y: number }[]): boolean =>
+    points.slice(1).every((p, i) => p.x === points[i].x || p.y === points[i].y)
+
+  it('go straight between boxes side by side, and bend once around a corner', () => {
+    expect(elbowRoute({ x: 100, y: 50 }, 'right', { x: 300, y: 50 }, 'left', [])).toEqual([
+      { x: 100, y: 50 },
+      { x: 300, y: 50 }
+    ])
+    const corner = elbowRoute({ x: 100, y: 50 }, 'right', { x: 400, y: 300 }, 'top', [])
+    expect(corner).toHaveLength(3)
+    expect(corner[1]).toEqual({ x: 400, y: 50 })
+  })
+
+  it('go around a box in the way, with only straight pieces', () => {
+    const wall = { x: 180, y: -100, width: 40, height: 300 }
+    const route = elbowRoute({ x: 100, y: 50 }, 'right', { x: 300, y: 50 }, 'left', [wall])
+    expect(straight(route)).toBe(true)
+    expect(route.some((p) => p.y < wall.y || p.y > wall.y + wall.height)).toBe(true)
+  })
+
+  it('are drawn when an edge asks for them', () => {
+    const a: CanvasNode = { id: 'a', type: 'text', text: 'A', x: 0, y: 0, width: 100, height: 100 }
+    const b: CanvasNode = { ...a, id: 'b', x: 300, y: 300 }
+    const byId = new Map([a, b].map((n) => [n.id, n]))
+    const edge = { id: 'e', fromNode: 'a', toNode: 'b' }
+    expect(geometryOf(edge, byId)!.path).toContain('C')
+    const elbow = geometryOf({ ...edge, route: 'elbow' as const }, byId)!.path
+    expect(elbow).not.toContain('C')
+    expect(elbow).toContain('Q')
   })
 })
 
