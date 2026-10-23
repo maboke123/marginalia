@@ -60,11 +60,16 @@ export interface NoteGoto {
 
 export type Overlay = 'switcher' | 'search' | 'settings' | null
 
-/** Text selected on a slide; kept when focus moves to the chat, which clears the DOM selection. */
+/**
+ * Text selected on a slide or in a text box on it; kept when focus moves to the chat, which
+ * clears the DOM selection.
+ */
 export interface PdfSelection {
   path: string
   page: number
   text: string
+  /** Selected in one of my text boxes, not in the slide's own text. */
+  box?: boolean
 }
 
 /** Where the cursor is in the open summary, for Claude's context. */

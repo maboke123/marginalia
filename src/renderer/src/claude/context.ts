@@ -105,7 +105,7 @@ export function currentChips(attached: string[], quoted: string | null = null): 
       chips.push({
         id: 'slide-selection',
         label: `“${short(pdfSelection.text)}”`,
-        title: 'Text selected on the slide'
+        title: pdfSelection.box ? 'Text selected in a text box' : 'Text selected on the slide'
       })
     }
   }
@@ -279,7 +279,8 @@ export async function buildPacket(
     imageKey = slide.imageKey
   }
   if (ids.has('slide-selection') && pdfSelection) {
-    lines.push(`Selected on page ${pdfSelection.page}: "${pdfSelection.text}"`)
+    const where = pdfSelection.box ? 'in a text box on page' : 'on page'
+    lines.push(`Selected ${where} ${pdfSelection.page}: "${pdfSelection.text}"`)
   }
 
   if (ids.has('summary') && noteCursor) {

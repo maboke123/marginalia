@@ -150,6 +150,33 @@ test('the panel moves to the right of the panes from the settings', async () => 
   await page.screenshot({ path: path.join('test-results', 'claude-panel-right.png') })
 })
 
+test('text selected on the slide or in a text box goes along with the question', async () => {
+  await openSlides(1)
+  const slide = page.locator('.pdf-page[data-page="1"]')
+  await slide.locator('.textLayer span', { hasText: 'Information gain' }).click({ clickCount: 3 })
+  await ask('What does this mean?')
+  await expect(answers()).toHaveCount(1)
+  expect((await readLog())[0].text).toContain('Selected on page 1: "Information gain = H(S) - sum')
+
+  // Typed in a box, then selected: the box's text is what goes along.
+  await slide.click({ position: { x: 20, y: 20 } })
+  await page.keyboard.press('t')
+  const box = (await slide.boundingBox())!
+  await page.mouse.click(box.x + box.width * 0.8, box.y + box.height * 0.6)
+  await page.keyboard.type('Gini impurity is smallest for pure splits')
+  await page.keyboard.press('Shift+Home')
+  await page.keyboard.press('Control+L')
+  await expect(page.locator('.chip', { hasText: 'Gini impurity' })).toHaveAttribute(
+    'title',
+    'Text selected in a text box'
+  )
+  await ask('Is this right?')
+  await expect(answers()).toHaveCount(2)
+  expect((await readLog())[1].text).toContain(
+    'Selected in a text box on page 1: "Gini impurity is smallest for pure splits"'
+  )
+})
+
 test('a narrow chat on the right never scrolls sideways, and Ctrl+wheel zooms it', async () => {
   await openSlides(3)
   await page.keyboard.press('Control+,')

@@ -300,6 +300,13 @@ function Editor({
       spellCheck={false}
       onInput={(e) => grow(e.currentTarget)}
       onBlur={(e) => finish(e.currentTarget.value)}
+      onSelect={(e) => {
+        // Like selected slide text, it goes along with the next question in the chat.
+        const el = e.currentTarget
+        const text = el.value.slice(el.selectionStart, el.selectionEnd).trim()
+        const path = el.closest<HTMLElement>('.pdf-viewer')?.dataset.path
+        if (text && path) useApp.getState().setPdfSelection({ path, page, text, box: true })
+      }}
       onPointerDown={(e) => e.stopPropagation()}
       onKeyDown={(e) => {
         e.stopPropagation()

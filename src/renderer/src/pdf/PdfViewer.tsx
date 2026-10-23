@@ -313,7 +313,7 @@ function Document({
       setSelectionAt(null)
       return
     }
-    const text = window.getSelection()!.toString().replace(/s+/g, ' ').trim()
+    const text = window.getSelection()!.toString().replace(/\s+/g, ' ').trim()
     setPdfSelection(text ? { path, page: Number(layer.dataset.page), text } : null)
     if (!activeDoc) {
       setSelectionAt(null)
