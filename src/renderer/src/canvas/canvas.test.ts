@@ -3,6 +3,7 @@ import type { CanvasData, CanvasNode, InkStroke } from '../../../shared/canvas'
 import { fitCamera, toScreen, toWorld, zoomAt, zoomStep } from './camera'
 import { createCanvasDoc } from './doc'
 import { clickScale, makeScaled, templateByName } from './shapes'
+import { sourceRange, wordAround } from './caret'
 import { edgeGeometry, edgePorts, freeEndSide, sideAt } from './edges'
 import {
   bringToFront,
@@ -297,6 +298,33 @@ describe('ink', () => {
         ])
       ).id
     ).not.toBe(first.id)
+  })
+})
+
+describe('a double-clicked word', () => {
+  const cls = 'Order\n---\n- placed: Date\n- total: float\n---\n+ total(): float'
+  const range = (text: string, part: number | null, shown: string, word: string): string => {
+    const r = sourceRange(text, part, shown, shown.indexOf(word) + 1)
+    return r ? `${r[0]}:${text.slice(...r)}` : 'none'
+  }
+
+  it('is found in the compartment of the class it was drawn in', () => {
+    expect(range(cls, 0, 'Order', 'Order')).toBe('0:Order')
+    expect(range(cls, 1, '- total: float', 'total')).toBe('27:total')
+    // The same word in the operations is another one.
+    expect(range(cls, 2, '+ total(): float', 'total')).toBe(`${cls.lastIndexOf('total')}:total`)
+  })
+
+  it('is found through Markdown marks, and not on a symbol', () => {
+    const text = 'The **gain** of a split'
+    expect(range(text, null, 'gain', 'gain')).toBe('6:gain')
+    expect(sourceRange('a + b', null, 'a + b', 2)).toBeNull()
+  })
+
+  it('takes the same occurrence when a word comes twice on a line', () => {
+    const text = 'Type maps Type'
+    expect(sourceRange(text, null, text, 12)).toEqual([10, 14])
+    expect(wordAround('a: Type', 4)).toEqual([3, 7])
   })
 })
 

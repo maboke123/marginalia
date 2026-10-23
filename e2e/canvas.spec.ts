@@ -423,6 +423,44 @@ test('double-clicking a class edits its text instead of adding a box', async () 
     .toMatch(/^\*\*Order\*\*\n---/)
 })
 
+/** Double-clicks the middle of a word drawn inside `within`. */
+async function dblclickWord(within: Locator, word: string): Promise<void> {
+  const r = await within.evaluate((el, word) => {
+    const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT)
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      const i = node.textContent!.indexOf(word)
+      if (i < 0) continue
+      const range = document.createRange()
+      range.setStart(node, i)
+      range.setEnd(node, i + word.length)
+      const rect = range.getBoundingClientRect()
+      return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 }
+    }
+    throw new Error(`No ${word}`)
+  }, word)
+  await page.mouse.dblclick(r.x, r.y)
+}
+
+test('a word double-clicked in a drawn class is selected, to type over', async () => {
+  await openShop()
+  const order = page.locator('[data-node="order"]')
+  await dblclickWord(order.locator('.canvas-class-part').first(), 'placed')
+  await expect(order.locator('.canvas-editor')).toBeFocused()
+  await page.keyboard.type('created')
+  await page.keyboard.press('Escape')
+  await expect
+    .poll(async () => (await read('Shop.canvas')).nodes.find((n) => n.id === 'order')!.text)
+    .toBe('Order\n---\n- created: Date\n---\n+ total(): float')
+
+  // The same word in another compartment is another one.
+  await dblclickWord(order.locator('.canvas-class-part').last(), 'total')
+  await page.keyboard.type('sum')
+  await page.keyboard.press('Escape')
+  await expect
+    .poll(async () => (await read('Shop.canvas')).nodes.find((n) => n.id === 'order')!.text)
+    .toBe('Order\n---\n- created: Date\n---\n+ sum(): float')
+})
+
 test('an arrow dragged near a box snaps to its side; dots show without selecting', async () => {
   await openShop()
   const line = (await page.locator('[data-node="line"]').boundingBox())!

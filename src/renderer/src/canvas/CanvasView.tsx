@@ -16,7 +16,8 @@ import {
   type Rect,
   type Relation,
   type Shape,
-  type Side
+  type Side,
+  type TextNode
 } from '../../../shared/canvas'
 import { CloseButton } from '../components/CloseButton'
 import { ContextMenu, type MenuItem } from '../components/ContextMenu'
@@ -73,6 +74,7 @@ import {
 } from './ops'
 import { clickScale, makeScaled, TEMPLATES, type Template } from './shapes'
 import { ShapeMenu } from './ShapeMenu'
+import { sourceRange } from './caret'
 
 type Tool = 'select' | 'hand' | 'text' | 'pen'
 
@@ -345,7 +347,10 @@ function CanvasSurface({
   const space = useRef(false)
   const lastInk = useRef<{ id: string; at: number } | null>(null)
   const newBox = useRef<string | null>(null)
-  const [fresh, setFresh] = useState<string | null>(null)
+  // What to select in a box when its editor opens.
+  const [selectOnEdit, setSelectOnEdit] = useState<{ id: string; range: [number, number] } | null>(
+    null
+  )
 
   const setCamera = useCallback((next: Camera | ((c: Camera) => Camera)) => {
     const value = typeof next === 'function' ? next(cameraRef.current) : next
@@ -522,7 +527,7 @@ function CanvasSurface({
       s.end()
     }
     newBox.current = null
-    setFresh(null)
+    setSelectOnEdit(null)
     surfaceRef.current?.focus({ preventScroll: true })
   }, [doc])
 
@@ -549,7 +554,9 @@ function CanvasSurface({
     const marker = node.type === 'text' && isMarker(node.shape)
     const typed = node.type === 'group' || (node.type === 'text' && !marker)
     addBox(node, typed)
-    if (typed) setFresh(node.id)
+    if (node.type === 'text' && !marker) {
+      setSelectOnEdit({ id: node.id, range: [0, node.text.split('\n')[0].length] })
+    }
     setTool('select')
     setPlacing(null)
   }
@@ -896,6 +903,17 @@ function CanvasSurface({
     }
   }
 
+  /** The word under a double-click on a drawn text box, as a range of its text. */
+  const clickedWord = (e: React.MouseEvent, node: TextNode): [number, number] | null => {
+    const at = document.caretPositionFromPoint(e.clientX, e.clientY)
+    const el = at?.offsetNode.parentElement
+    if (!at || at.offsetNode.nodeType !== Node.TEXT_NODE || !el) return null
+    if (el.closest<HTMLElement>('[data-node]')?.dataset.node !== node.id) return null
+    const part = el.closest('.canvas-class > *')
+    const index = part ? [...part.parentElement!.children].indexOf(part) : null
+    return sourceRange(node.text, index, at.offsetNode.textContent ?? '', at.offset)
+  }
+
   const onDoubleClick = (e: React.MouseEvent): void => {
     if (tool !== 'select' || ghost) return
     const target = e.target as HTMLElement
@@ -908,7 +926,11 @@ function CanvasSurface({
     if (nodeId) {
       const node = nodeById(s.data, nodeId)
       if (!node) return
-      if (node.type === 'text' || node.type === 'group') startEdit(nodeId)
+      if (node.type === 'text') {
+        const range = clickedWord(e, node)
+        if (range) setSelectOnEdit({ id: nodeId, range })
+        startEdit(nodeId)
+      } else if (node.type === 'group') startEdit(nodeId)
       else if (node.type === 'file' && !/\.(png|jpe?g|gif|webp|svg)$/i.test(node.file)) {
         const page = /page=(\d+)/.exec(node.subpath ?? '')?.[1]
         useApp.getState().openFile(node.file, page ? Number(page) : undefined)
@@ -1149,7 +1171,7 @@ function CanvasSurface({
       editing={editing === n.id}
       connectable={hover === n.id && !draft}
       landing={draft?.land?.id === n.id ? draft.land.side : null}
-      fresh={fresh === n.id}
+      select={selectOnEdit?.id === n.id ? selectOnEdit.range : undefined}
       proposal={proposals.get(n.id)}
       onText={editing === n.id ? onText : NOOP}
       onDone={editing === n.id ? onDone : NOOP}

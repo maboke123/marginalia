@@ -29,8 +29,8 @@ interface Props {
   connectable?: boolean
   /** An arrow being dragged would land on this side of the box. */
   landing?: Side | null
-  /** Just added from the shapes: typing replaces its placeholder name. */
-  fresh?: boolean
+  /** Text to select when the editor opens: a new shape's placeholder name, a double-clicked word. */
+  select?: [number, number]
   /**
    * 'ghost': proposed by Claude; 'removed': Claude proposes to remove it; 'preview': a picked
    * shape following the pointer.
@@ -156,14 +156,13 @@ function FileContent({ file }: { file: string }): React.JSX.Element {
 /** The text of a box being typed, in a textarea that fills the box. */
 function Editor({
   value,
-  fresh,
+  select,
   onText,
   onDone,
   onGrow
 }: {
   value: string
-  /** A shape just added: its first line (the placeholder name) is selected, to type over. */
-  fresh: boolean
+  select?: [number, number]
   onText(text: string): void
   onDone(): void
   onGrow?(height: number): void
@@ -180,8 +179,7 @@ function Editor({
   useEffect(() => {
     const el = ref.current!
     el.focus()
-    const firstLine = el.value.split('\n')[0].length
-    if (fresh && firstLine) el.setSelectionRange(0, firstLine)
+    if (select) el.setSelectionRange(...select)
     else el.setSelectionRange(el.value.length, el.value.length)
     // Only when the editor opens.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -219,7 +217,7 @@ export const CanvasNodeView = memo(function CanvasNodeView({
   editing,
   connectable = false,
   landing = null,
-  fresh = false,
+  select,
   proposal,
   onText,
   onDone,
@@ -253,7 +251,7 @@ export const CanvasNodeView = memo(function CanvasNodeView({
   let content: React.ReactNode
   if (node.type === 'text') {
     content = editing ? (
-      <Editor value={node.text} fresh={fresh} onText={onText} onDone={onDone} onGrow={onGrow} />
+      <Editor value={node.text} select={select} onText={onText} onDone={onDone} onGrow={onGrow} />
     ) : (
       <TextContent node={node} />
     )
