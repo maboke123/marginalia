@@ -536,10 +536,11 @@ function AnnotatedOverlay({
     doc.getState().select(null)
 
     if (tool === 'text') {
-      const boxWidth = Math.max(
-        60 * unit,
-        Math.min(DEFAULT_BOX_WIDTH * unit, totalWidth - start[0] - 4 * unit)
-      )
+      // A box started in the margin fills the margin's width.
+      const inMargin = margin > 0 && start[0] > width
+      const boxWidth = inMargin
+        ? Math.max(60 * unit, totalWidth - width - 8 * unit)
+        : Math.max(60 * unit, Math.min(DEFAULT_BOX_WIDTH * unit, totalWidth - start[0] - 4 * unit))
       const fontSize = round(ink.textSize * unit)
       // The first line of text goes where I click (not the box's edge), then snaps to the
       // slide line it was put next to, like a moved box.
@@ -549,7 +550,8 @@ function AnnotatedOverlay({
         fontSize
       })
       const top = Math.max(0, start[1] - firstLineMiddle(fontSize))
-      const [x, y] = snapTo(e, Math.min(start[0], totalWidth - boxWidth), top, anchors)
+      const snapped = snapTo(e, Math.min(start[0], totalWidth - boxWidth), top, anchors)
+      const [x, y] = inMargin ? [round(width + 4 * unit), snapped[1]] : snapped
       setGuides(NO_GUIDES)
       const box: TextBox = {
         id: newId('t'),

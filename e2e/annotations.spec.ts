@@ -250,6 +250,20 @@ test('text boxes can be resized, change text size and use bold', async () => {
     .toBeLessThan(fontBefore * 0.5)
 })
 
+test('a text box started in the margin is as wide as the margin', async () => {
+  await openSlides()
+  await page.keyboard.press('t')
+  await drawOnPage([0.8, 0.5], [0.8, 0.5])
+  await page.keyboard.type('Gini')
+  await page.keyboard.press('Escape')
+  const pageBox = (await firstPage().boundingBox())!
+  const box = (await firstPage().locator('.text-box').boundingBox())!
+  const slideRight = pageBox.x + pageBox.width / 1.6
+  expect(box.x).toBeGreaterThan(slideRight)
+  expect(box.x - slideRight).toBeLessThan(15)
+  expect(box.width).toBeGreaterThan(pageBox.width * 0.33)
+})
+
 test('text boxes snap onto lines of slide text, unless Alt is held or snapping is off', async () => {
   await openSlides()
   const span = firstPage().locator('.textLayer span', { hasText: 'Information gain' })
