@@ -14,8 +14,7 @@ import {
   insertBlankPage,
   isBlankPage,
   MAX_BLANKS_PER_SLIDE,
-  slideOf,
-  viewPages
+  slideOf
 } from '../../../shared/blankPages'
 import type { ToolCall, ToolReply } from '../../../shared/claude'
 import { DEFAULT_TEXT_SIZE, pageUnit } from '../../../shared/palette'
@@ -48,6 +47,7 @@ import {
 import { openCanvas, openNote, openPdf, whenOpen, type OpenNote, type OpenPdf } from '../lib/open'
 import { flushAll } from '../lib/flush'
 import { findNode, isFolder } from '../lib/tree'
+import { pageHtml } from '../annotations/pageHtml'
 import { loadPdf, pageSizes } from '../pdf/pdfjs'
 import { renderPage } from '../pdf/snapshot'
 import { pageRuns, pageText } from '../pdf/text'
@@ -461,11 +461,12 @@ async function annotate(
   )
 }
 
-const OFF_SCREEN = 'It is drawn off screen the way Export as PDF draws it, so my view stays put'
+const OFF_SCREEN = 'It is drawn off screen, so my view stays put'
+const NO_ANNOTATIONS = { strokes: [], highlights: [], textBoxes: [] }
 
 /**
- * A screenshot of a file without showing it on screen: drawn from what Export as PDF makes.
- * Text boxes on slides then show their text plainly (formulas as Unicode).
+ * A screenshot of a file without showing it on screen: printed in a hidden window. A note
+ * comes out as Export as PDF makes it; a slide page as the viewer draws it.
  */
 async function offScreenShot(path: string, args: Args): Promise<Result> {
   await flushAll()
@@ -491,18 +492,23 @@ async function offScreenShot(path: string, args: Args): Promise<Result> {
   if (isBlankPage(page) && !pages[String(page)]) {
     throw new ToolError(`There is no blank page ${args.page}; add_blank_page makes one`)
   }
-  const [drawn] = await drawPages(
-    await window.api.vault.annotatedPdf(path),
-    1400,
-    // The export puts blank pages right after their slide, like the viewer.
-    [viewPages(slideOf(page), pages).findIndex((v) => v.id === page) + 1]
-  )
-  if (!drawn) throw new ToolError(`${path} has no page ${args.page}`)
-  return {
-    text:
-      `Page ${page} of ${path} with its annotations (${drawn.width}x${drawn.height} px, ` +
-      `margin included). ${OFF_SCREEN}: text boxes show plain text and formulas as Unicode.`,
-    image: await pageImage(drawn)
+  const margin = loaded?.file?.marginWidth ?? useApp.getState().settings.marginWidth
+  const task = loadPdf(await window.api.vault.readFile(path))
+  try {
+    const pdf = await task.promise
+    if (slideOf(page) < 1 || slideOf(page) > pdf.numPages) {
+      throw new ToolError(`${path} has no page ${args.page}`)
+    }
+    const html = await pageHtml(path, pdf, page, pages[String(page)] ?? NO_ANNOTATIONS, margin)
+    const [drawn] = await drawPages(await window.api.vault.printNote(html), 1400)
+    return {
+      text:
+        `Page ${page} of ${path} with its annotations (${drawn.width}x${drawn.height} px, ` +
+        `margin included), as the viewer shows it. ${OFF_SCREEN}.`,
+      image: await pageImage(drawn)
+    }
+  } finally {
+    void task.destroy()
   }
 }
 

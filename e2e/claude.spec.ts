@@ -571,6 +571,47 @@ test('Claude looks at a page in view live and at a bigger one off screen, withou
   await ask('Look at this page')
   await expect(answers().last()).toContainText('drawn off screen')
   expect(await scrollTop()).toBe(zoomed)
+  await fs.copyFile(`${fakeLog(env)}.png`, path.join('test-results', 'claude-off-screen-slide.png'))
+})
+
+test('off screen, Claude sees text boxes with their formulas and charts drawn', async () => {
+  await fs.writeFile(
+    path.join(env.vault, `${pdfRel}.annotations.json`),
+    JSON.stringify({
+      version: 1,
+      pdf: 'slides.pdf',
+      marginWidth: 0.6,
+      pages: {
+        '1.1': {
+          blank: true,
+          strokes: [],
+          highlights: [],
+          textBoxes: [
+            {
+              id: 't1',
+              x: 40,
+              y: 40,
+              width: 700,
+              fontSize: 22,
+              author: 'claude',
+              markdown:
+                'Entropy $H(S) = -\\sum_i p_i \\log_2 p_i$\n\n' +
+                '```mermaid\nflowchart LR\n  Root --> Left\n  Root --> Right\n```'
+            }
+          ]
+        }
+      }
+    })
+  )
+  await openSlides()
+  // Page 1.1 is below the slide on screen, not wholly in view.
+  await expect(page.locator('.pdf-page[data-page="1.1"] .text-box .diagram svg')).toBeAttached()
+  await ask('Look at page 1.1')
+  await expect(answers().last()).toContainText('as the viewer shows it')
+  const png = await fs.readFile(`${fakeLog(env)}.png`)
+  // 960 points plus a 0.6 margin, drawn 1400 pixels wide.
+  expect([png.readUInt32BE(16), png.readUInt32BE(20)]).toEqual([1400, 492])
+  await fs.copyFile(`${fakeLog(env)}.png`, path.join('test-results', 'claude-off-screen-page.png'))
 })
 
 test('Claude can look at a whole page as it is drawn, also when it is bigger than the view', async () => {

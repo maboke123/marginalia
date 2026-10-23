@@ -214,12 +214,6 @@ export function registerIpc(
         exportAnnotated(source, file, (src) => v.readFile(folder + src).catch(() => null))
       )
   }
-  // The copy Export would write, for Claude to look at a PDF that is not open; nothing is saved.
-  handle('vault:annotatedPdf', async (p: string) => {
-    const result = await annotated(p, (await current().readAnnotations(p)).file)
-    return result.bytes
-  })
-
   const exported = new Set<string>()
   handle('vault:exportPdf', async (p: string) => {
     const v = current()
