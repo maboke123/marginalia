@@ -3896,6 +3896,42 @@ input.canvas-group-label {
   cursor: crosshair;
 }
 
+/* Operations to take over from a parent class; a normal size on screen at any zoom. */
+.canvas-suggest {
+  position: absolute;
+  top: calc(100% + 4px / var(--canvas-zoom));
+  left: 0;
+  z-index: 3;
+  min-width: calc(220px / var(--canvas-zoom));
+  margin: 0;
+  padding: calc(4px / var(--canvas-zoom));
+  border: calc(1px / var(--canvas-zoom)) solid var(--border);
+  border-radius: calc(6px / var(--canvas-zoom));
+  background: var(--bg-menu);
+  box-shadow: var(--shadow-menu);
+  font-size: calc(13px / var(--canvas-zoom));
+  font-weight: normal;
+  line-height: 1.4;
+  text-align: left;
+  list-style: none;
+}
+
+.canvas-suggest li {
+  padding: calc(3px / var(--canvas-zoom)) calc(8px / var(--canvas-zoom));
+  border-radius: calc(4px / var(--canvas-zoom));
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.canvas-suggest li:hover,
+.canvas-suggest li.active {
+  background: var(--bg-hover);
+}
+
+.canvas-suggest li:first-child:not(:only-child) {
+  color: var(--text-muted);
+}
+
 .canvas-node.preview {
   opacity: 0.45;
   pointer-events: none;

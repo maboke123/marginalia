@@ -72,6 +72,7 @@ import {
 } from './ops'
 import { clickScale, makeScaled, TEMPLATES, type Template } from './shapes'
 import { ShapeMenu } from './ShapeMenu'
+import { inheritedOperations } from './overrides'
 import { snapSpacing, type Gap } from './spacing'
 import { RelationPicker } from './RelationPicker'
 import { relationMeaning, relationSentence } from './relations'
@@ -1238,6 +1239,11 @@ function CanvasSurface({
       ? data.edges.find((x) => x.id === hoverEdge.id)
       : undefined
 
+  // What a class being typed could take over from its parents.
+  const inherited = useMemo(
+    () => (editing ? inheritedOperations(data, editing) : undefined),
+    [editing, data]
+  )
   const transform = `scale(${camera.zoom}) translate(${-camera.x}px, ${-camera.y}px)`
   const nodeView = (n: CanvasNode): React.JSX.Element => (
     <CanvasNodeView
@@ -1249,6 +1255,7 @@ function CanvasSurface({
       connectable={hover === n.id && !draft}
       landing={draft?.land?.id === n.id ? draft.land.side : null}
       select={selectOnEdit?.id === n.id ? selectOnEdit.range : undefined}
+      inherited={editing === n.id ? inherited : undefined}
       proposal={proposals.get(n.id)}
       onText={editing === n.id ? onText : NOOP}
       onDone={editing === n.id ? onDone : NOOP}

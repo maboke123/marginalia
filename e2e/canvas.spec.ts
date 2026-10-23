@@ -231,6 +231,56 @@ test('an arrow switched to right angles goes around boxes, and new arrows follow
   await expect.poll(async () => (await read('Shop.canvas')).edges.at(-1)!.route).toBe('elbow')
 })
 
+test('typing operations in a subclass offers those of its parent', async () => {
+  await fs.writeFile(
+    file('Shapes.canvas'),
+    JSON.stringify({
+      nodes: [
+        {
+          id: 'shape',
+          type: 'text',
+          shape: 'class',
+          text: '«interface»\nShape\n---\n+ area(): double\n+ perimeter(): double',
+          x: 0,
+          y: 0,
+          width: 240,
+          height: 120
+        },
+        {
+          id: 'circle',
+          type: 'text',
+          shape: 'class',
+          text: 'Circle\n---\n- radius: double\n---\n+ area(): double',
+          x: 0,
+          y: 260,
+          width: 240,
+          height: 140
+        }
+      ],
+      edges: [{ id: 'r', fromNode: 'circle', toNode: 'shape', relation: 'realization' }]
+    })
+  )
+  await row('Design of Software Systems').click()
+  await row('les_1').click()
+  await row('Shapes').click()
+  const circle = page.locator('[data-node="circle"]')
+  await circle.click()
+  await page.keyboard.press('Enter')
+  await expect(circle.locator('.canvas-editor')).toBeFocused()
+  // The cursor is at the end, under the operations: a new line offers what is missing.
+  await page.keyboard.press('Enter')
+  await page.keyboard.type('+ p')
+  const list = page.getByRole('listbox', { name: 'Operations from the parent' })
+  await expect(list.getByRole('option')).toHaveText(['+ perimeter(): double'])
+  await page.screenshot({ path: path.join('test-results', 'canvas-overrides.png') })
+  await page.keyboard.press('Enter')
+  await expect(list).toBeHidden()
+  await page.keyboard.press('Escape')
+  await expect
+    .poll(async () => (await read('Shapes.canvas')).nodes.find((n) => n.id === 'circle')!.text)
+    .toBe('Circle\n---\n- radius: double\n---\n+ area(): double\n+ perimeter(): double')
+})
+
 test('pointing at an arrow says what it means, with the names of its boxes', async () => {
   await openShop()
   const tip = page.locator('.canvas-edge-tip')

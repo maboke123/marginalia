@@ -1,4 +1,4 @@
-import { memo, useEffect, useLayoutEffect, useMemo, useRef } from 'react'
+import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import {
   compartments,
   cssColor,
@@ -14,6 +14,7 @@ import { vaultUrl } from '../editor/links'
 import { markInTextarea, markOfKey } from '../lib/emphasis'
 import { renderMarkdown } from '../lib/markdown'
 import type { Handle } from './ops'
+import { inOperations, insertOperations, operationName } from './overrides'
 
 const HANDLES: Handle[] = ['n', 'ne', 'e', 'se', 's', 'sw', 'w', 'nw']
 const SIDES = ['top', 'right', 'bottom', 'left'] as const
@@ -31,6 +32,8 @@ interface Props {
   landing?: Side | null
   /** Text to select when the editor opens: a new shape's placeholder name, a double-clicked word. */
   select?: [number, number]
+  /** While typing a class: operations of its parents it does not have yet, to offer. */
+  inherited?: string[]
   /**
    * 'ghost': proposed by Claude; 'removed': Claude proposes to remove it; 'preview': a picked
    * shape following the pointer.
@@ -157,17 +160,50 @@ function FileContent({ file }: { file: string }): React.JSX.Element {
 function Editor({
   value,
   select,
+  inherited,
   onText,
   onDone,
   onGrow
 }: {
   value: string
   select?: [number, number]
+  inherited?: string[]
   onText(text: string): void
   onDone(): void
   onGrow?(height: number): void
 }): React.JSX.Element {
   const ref = useRef<HTMLTextAreaElement>(null)
+  const [caret, setCaret] = useState<number | null>(null)
+  const [active, setActive] = useState(0)
+  const [dismissed, setDismissed] = useState(false)
+
+  // A subclass being typed: the operations of its parents it does not have yet, offered on
+  // the line I am on in its operations, filtered by what I typed there.
+  const options = useMemo((): { label: string; ops: string[] }[] => {
+    if (!inherited?.length || caret === null || dismissed || !inOperations(value, caret)) return []
+    const line = value.slice(value.lastIndexOf('\n', caret - 1) + 1, caret)
+    if (line.trim() && !/^\s*[+\-#~]?\s*[\w$]*$/.test(line)) return []
+    const typed = line
+      .trim()
+      .replace(/^[+\-#~]\s*/, '')
+      .toLowerCase()
+    const fits = inherited.filter((op) => operationName(op).toLowerCase().startsWith(typed))
+    return [
+      ...(fits.length > 1 ? [{ label: `All ${fits.length} from the parent`, ops: fits }] : []),
+      ...fits.map((op) => ({ label: op, ops: [op] }))
+    ]
+  }, [inherited, caret, dismissed, value])
+  const shown = Math.min(active, Math.max(0, options.length - 1))
+
+  const take = (ops: string[]): void => {
+    const done = insertOperations(value, caret ?? value.length, ops)
+    onText(done.text)
+    setCaret(done.cursor)
+    requestAnimationFrame(() => ref.current?.setSelectionRange(done.cursor, done.cursor))
+  }
+  const follow = (el: HTMLTextAreaElement): void => {
+    setCaret(el.selectionStart === el.selectionEnd ? el.selectionStart : null)
+  }
   // Typing past the bottom makes the box taller, so no text hides below it.
   useLayoutEffect(() => {
     const el = ref.current!
@@ -191,11 +227,34 @@ function Editor({
         className="canvas-editor"
         value={value}
         spellCheck
-        onChange={(e) => onText(e.target.value)}
+        onChange={(e) => {
+          onText(e.target.value)
+          follow(e.target)
+          setDismissed(false)
+        }}
+        onSelect={(e) => follow(e.currentTarget)}
         onBlur={onDone}
         onPointerDown={(e) => e.stopPropagation()}
         onKeyDown={(e) => {
           e.stopPropagation()
+          if (options.length) {
+            const step = e.key === 'ArrowDown' ? 1 : e.key === 'ArrowUp' ? -1 : 0
+            if (step) {
+              e.preventDefault()
+              setActive((shown + step + options.length) % options.length)
+              return
+            }
+            if ((e.key === 'Enter' && !e.ctrlKey) || e.key === 'Tab') {
+              e.preventDefault()
+              take(options[shown].ops)
+              return
+            }
+            if (e.key === 'Escape') {
+              e.preventDefault()
+              setDismissed(true)
+              return
+            }
+          }
           const mark = markOfKey(e)
           if (mark) {
             e.preventDefault()
@@ -205,6 +264,26 @@ function Editor({
           }
         }}
       />
+      {options.length > 0 && (
+        <ul className="canvas-suggest" role="listbox" aria-label="Operations from the parent">
+          {options.map((option, i) => (
+            <li
+              key={option.label}
+              role="option"
+              aria-selected={i === shown}
+              className={i === shown ? 'active' : ''}
+              onPointerDown={(e) => {
+                // Keeps the textarea focused, so the box stays in editing.
+                e.preventDefault()
+                e.stopPropagation()
+                take(option.ops)
+              }}
+            >
+              {option.label}
+            </li>
+          ))}
+        </ul>
+      )}
     </>
   )
 }
@@ -218,6 +297,7 @@ export const CanvasNodeView = memo(function CanvasNodeView({
   connectable = false,
   landing = null,
   select,
+  inherited,
   proposal,
   onText,
   onDone,
@@ -251,7 +331,14 @@ export const CanvasNodeView = memo(function CanvasNodeView({
   let content: React.ReactNode
   if (node.type === 'text') {
     content = editing ? (
-      <Editor value={node.text} select={select} onText={onText} onDone={onDone} onGrow={onGrow} />
+      <Editor
+        value={node.text}
+        select={select}
+        inherited={inherited}
+        onText={onText}
+        onDone={onDone}
+        onGrow={onGrow}
+      />
     ) : (
       <TextContent node={node} />
     )

@@ -5,6 +5,7 @@ import { createCanvasDoc } from './doc'
 import { clickScale, makeScaled, templateByName } from './shapes'
 import { sourceRange, wordAround } from './caret'
 import { snapSpacing } from './spacing'
+import { inheritedOperations, inOperations, insertOperations, operationName } from './overrides'
 import { edgeGeometry, edgePorts, elbowRoute, freeEndSide, geometryOf, sideAt } from './edges'
 import {
   bringToFront,
@@ -299,6 +300,53 @@ describe('ink', () => {
         ])
       ).id
     ).not.toBe(first.id)
+  })
+})
+
+describe('operations from a superclass', () => {
+  const node = (id: string, text: string): CanvasNode => ({
+    id,
+    type: 'text',
+    shape: 'class',
+    text,
+    x: 0,
+    y: 0,
+    width: 200,
+    height: 120
+  })
+  const data: CanvasData = {
+    nodes: [
+      node('shape', '«interface»\nShape\n---\n+ area(): double\n+ draw(g: Graphics)'),
+      node(
+        'poly',
+        '*Polygon*\n---\n- sides: int\n---\n+ *perimeter(): double*\n+ draw(g: Graphics)'
+      ),
+      node('square', 'Square\n---\n- side: double\n---\n+ draw(g: Graphics)')
+    ],
+    edges: [
+      { id: 'e1', fromNode: 'poly', toNode: 'shape', relation: 'realization' },
+      { id: 'e2', fromNode: 'square', toNode: 'poly', relation: 'inheritance' }
+    ]
+  }
+
+  it('are the ones up the arrows that the class does not have yet, as it writes them', () => {
+    expect(inheritedOperations(data, 'square')).toEqual([
+      '+ perimeter(): double',
+      '+ area(): double'
+    ])
+    expect(inheritedOperations(data, 'shape')).toEqual([])
+  })
+
+  it('go in the operations part, in place of the line being typed', () => {
+    const text = 'Square\n---\n- side: double\n---\n+ draw(g: Graphics)\n+ '
+    expect(inOperations(text, text.length)).toBe(true)
+    expect(inOperations(text, 12)).toBe(false)
+    const done = insertOperations(text, text.length, ['+ area(): double', '+ perimeter(): double'])
+    expect(done.text).toBe(
+      'Square\n---\n- side: double\n---\n+ draw(g: Graphics)\n+ area(): double\n+ perimeter(): double'
+    )
+    expect(done.cursor).toBe(done.text.length)
+    expect(operationName('+ *perimeter(): double* {abstract}')).toBe('perimeter')
   })
 })
 
