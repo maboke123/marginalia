@@ -2,6 +2,7 @@
 export const HOTKEY_ACTIONS = [
   { id: 'claude', label: 'Claude panel', key: 'Ctrl+L', scope: 'global' },
   { id: 'lecture', label: 'Lecture mode', key: 'Ctrl+Shift+M', scope: 'global' },
+  { id: 'grid', label: 'Files side by side (1, 2, 3 or 4)', key: 'Ctrl+Alt+G', scope: 'global' },
   { id: 'importPdf', label: 'Import PDF', key: 'Ctrl+Shift+I', scope: 'global' },
   { id: 'slideLink', label: 'Insert current slide link', key: 'Ctrl+Shift+L', scope: 'global' },
   { id: 'snapshot', label: 'Slide snapshot', key: 'Ctrl+Shift+S', scope: 'global' },

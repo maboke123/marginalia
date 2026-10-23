@@ -47,6 +47,11 @@ function toggleOverlay(overlay: 'switcher' | 'search' | 'settings'): void {
 const ACTIONS: Partial<Record<HotkeyAction, () => void>> = {
   claude: toggleClaude,
   lecture: () => useApp.getState().toggleLecture(),
+  grid: () => {
+    const { grid, setGrid } = useApp.getState()
+    const size = grid?.panes.length ?? 1
+    setGrid(size >= 4 ? null : size + 1)
+  },
   sidebar: () => useApp.getState().toggleSidebar(),
   close: () => useApp.getState().closeFile(),
   fullScreen: () => void window.api.app.toggleFullScreen(),

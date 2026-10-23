@@ -24,6 +24,7 @@ const PATHS = {
   text: 'M3 3.5h10M8 3.5v9.5M6 13h4',
   undo: 'M5.5 3.5L2.5 6.5l3 3M2.5 6.5H10a3.5 3.5 0 0 1 0 7H7',
   columns: 'M2.5 3h11v10h-11zM8 3v10',
+  panes: 'M2.5 2.5h4.5v4.5H2.5zM9 2.5h4.5v4.5H9zM2.5 9h4.5v4.5H2.5zM9 9h4.5v4.5H9z',
   redo: 'M10.5 3.5l3 3-3 3M13.5 6.5H6a3.5 3.5 0 0 0 0 7h3',
   close: 'M4 4l8 8M12 4l-8 8',
   settings:

@@ -4,6 +4,7 @@ import type { LinkHow, NotebookColor, Position, VaultInfo, VaultNode } from '../
 import { withLink, withoutLink, type NoteLinks } from '../../shared/pairing'
 import { ERASER_SIZES, PEN_WIDTHS, DEFAULT_TEXT_SIZE } from '../../shared/palette'
 import { flushAll } from './lib/flush'
+import { openInGrid, remapGrid, resizeGrid, type Grid } from './lib/grid'
 import { canvasFrom } from '../../shared/canvas'
 import { noteHtml } from './lib/notePdf'
 import {
@@ -119,6 +120,8 @@ interface AppState {
   slidesFile: string | null
   summaryFile: string | null
   lectureMode: boolean
+  /** Several files side by side; then opening a file fills the focused pane. */
+  grid: Grid | null
   /** The sidebar closed on purpose (lecture mode hides it anyway). */
   sidebarHidden: boolean
   pdfGoto: PdfGoto | null
@@ -161,6 +164,9 @@ interface AppState {
   setOverlay(overlay: Overlay): void
   toggleLecture(): Promise<void>
   toggleSidebar(): void
+  /** 2, 3 or 4 panes side by side, or null for one file again. */
+  setGrid(size: number | null): void
+  focusPane(index: number): void
   /** Closes one file (in lecture mode the other stays open), or everything on screen. */
   closeFile(path?: string): void
   /** Lecture mode: shows this note next to the slides and remembers it as their note. */
@@ -263,7 +269,8 @@ export const useApp = create<AppState>((set, get) => {
       selected: selected && remap(selected, from, to),
       activeFile: activeFile && remap(activeFile, from, to),
       slidesFile: slidesFile && remap(slidesFile, from, to),
-      summaryFile: summaryFile && remap(summaryFile, from, to)
+      summaryFile: summaryFile && remap(summaryFile, from, to),
+      grid: get().grid && remapGrid(get().grid!, (p) => remap(p, from, to))
     })
     updateExpanded((e) =>
       Object.fromEntries(Object.entries(e).map(([p, open]) => [remap(p, from, to), open]))
@@ -280,6 +287,7 @@ export const useApp = create<AppState>((set, get) => {
       slidesFile: null,
       summaryFile: null,
       lectureMode: false,
+      grid: null,
       renaming: null,
       recent: (await attempt(() => api.recent())) ?? get().recent
     })
@@ -371,6 +379,7 @@ export const useApp = create<AppState>((set, get) => {
     slidesFile: null,
     summaryFile: null,
     lectureMode: false,
+    grid: null,
     sidebarHidden: false,
     pdfGoto: null,
     noteGoto: null,
@@ -443,7 +452,8 @@ export const useApp = create<AppState>((set, get) => {
         selected: keep(selected),
         activeFile: keep(activeFile),
         slidesFile: keep(slidesFile),
-        summaryFile: keep(summaryFile)
+        summaryFile: keep(summaryFile),
+        grid: get().grid && remapGrid(get().grid!, keep)
       })
     },
 
@@ -456,10 +466,12 @@ export const useApp = create<AppState>((set, get) => {
       const { vault, recentFiles } = get()
       const recent = [path, ...recentFiles.filter((p) => p !== path)].slice(0, 20)
       if (vault) saveRecent(vault.root, recent)
+      const grid = get().grid
       set({
         activeFile: path,
         selected: path,
         recentFiles: recent,
+        grid: grid && openInGrid(grid, path),
         ...(pdf ? { slidesFile: path } : { summaryFile: path }),
         // Cleared on a plain open, else reopening the file later jumps back to the old target.
         ...(pdf
@@ -494,6 +506,12 @@ export const useApp = create<AppState>((set, get) => {
     toggleSidebar: () => set({ sidebarHidden: !get().sidebarHidden }),
 
     closeFile(path) {
+      const { grid } = get()
+      if (grid) {
+        const panes = grid.panes.map((p) => (p === path ? null : p))
+        set({ grid: { ...grid, panes }, activeFile: panes[grid.focus] ?? null })
+        return
+      }
       const { lectureMode, slidesFile, summaryFile } = get()
       const other = !lectureMode || !path ? null : path === slidesFile ? summaryFile : slidesFile
       set({ lectureMode: false, activeFile: other })
@@ -527,7 +545,31 @@ export const useApp = create<AppState>((set, get) => {
       await link(pdf, note, linked ? 'add' : 'remove')
     },
 
+    setGrid(size) {
+      const { grid, lectureMode, slidesFile, summaryFile, activeFile } = get()
+      if (!size) {
+        set({ grid: null, activeFile: grid?.panes[grid.focus] ?? activeFile })
+        return
+      }
+      const start = lectureMode ? [slidesFile, summaryFile] : [activeFile]
+      const next = resizeGrid(grid, size, start)
+      set({
+        grid: next,
+        lectureMode: false,
+        // Like lecture mode, the panes get the whole window.
+        sidebarHidden: grid ? get().sidebarHidden : true,
+        activeFile: next.panes[next.focus] ?? activeFile
+      })
+    },
+
+    focusPane(index) {
+      const { grid, activeFile } = get()
+      if (!grid || grid.focus === index) return
+      set({ grid: { ...grid, focus: index }, activeFile: grid.panes[index] ?? activeFile })
+    },
+
     async toggleLecture() {
+      if (get().grid) set({ grid: null })
       if (get().lectureMode) {
         set({ lectureMode: false })
         return

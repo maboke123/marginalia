@@ -355,6 +355,21 @@ export function Sidebar(): React.JSX.Element {
         >
           <Icon name="settings" />
         </button>
+        <button
+          className="icon-button"
+          title={`Files side by side (${app.settings.hotkeys.grid})`}
+          aria-label="Layout"
+          onClick={(e) =>
+            openMenu(e, [
+              { label: 'One file', onSelect: () => app.setGrid(null) },
+              { label: 'Two side by side', onSelect: () => app.setGrid(2) },
+              { label: 'Three side by side', onSelect: () => app.setGrid(3) },
+              { label: 'Four, two by two', onSelect: () => app.setGrid(4) }
+            ])
+          }
+        >
+          <Icon name="panes" />
+        </button>
         <RecordButton showTime={false} />
         <button
           className="icon-button"

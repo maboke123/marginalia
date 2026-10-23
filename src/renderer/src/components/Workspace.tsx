@@ -19,12 +19,52 @@ function loadSplit(): number {
   }
 }
 
+/** A pane of the grid with nothing in it yet: recent files to put there. */
+function EmptyPane({ index }: { index: number }): React.JSX.Element {
+  const recent = useApp((s) => s.recentFiles)
+  const grid = useApp((s) => s.grid)
+  const nodes = useApp((s) => s.nodes)
+  const choices = recent.filter((p) => !grid?.panes.includes(p) && findNode(nodes, p)).slice(0, 8)
+  const open = (path: string): void => {
+    useApp.getState().focusPane(index)
+    useApp.getState().openFile(path)
+  }
+  return (
+    <div className="grid-empty">
+      <SidebarButton />
+      <p className="muted">
+        Open a file from the sidebar or with Ctrl+P while this pane is chosen, or pick one:
+      </p>
+      <ul>
+        {choices.map((path) => (
+          <li key={path}>
+            <button className="text-button" onClick={() => open(path)}>
+              {displayName(findNode(nodes, path)!)}
+              <span className="muted">{path.split('/').slice(0, -1).join(' / ')}</span>
+            </button>
+          </li>
+        ))}
+      </ul>
+      <button
+        className="button"
+        onClick={() => {
+          useApp.getState().focusPane(index)
+          useApp.getState().setOverlay('switcher')
+        }}
+      >
+        Find a file
+      </button>
+    </div>
+  )
+}
+
 export function Workspace(): React.JSX.Element {
   const nodes = useApp((s) => s.nodes)
   const activeFile = useApp((s) => s.activeFile)
   const lectureMode = useApp((s) => s.lectureMode)
   const slidesFile = useApp((s) => s.slidesFile)
   const summaryFile = useApp((s) => s.summaryFile)
+  const grid = useApp((s) => s.grid)
   const [dropping, setDropping] = useState(false)
   const [split, setSplit] = useState(loadSplit)
 
@@ -59,6 +99,24 @@ export function Workspace(): React.JSX.Element {
       return <CanvasView key={node.path} path={node.path} title={displayName(node)} />
     }
     return <MarkdownEditor key={node.path} path={node.path} title={displayName(node)} />
+  }
+
+  if (grid) {
+    return (
+      <main className={className(`grid grid-${grid.panes.length}`)} {...dropProps}>
+        {grid.panes.map((path, i) => (
+          <section
+            key={i}
+            className={i === grid.focus ? 'grid-pane focused' : 'grid-pane'}
+            aria-label={`Pane ${i + 1}`}
+            onPointerDownCapture={() => useApp.getState().focusPane(i)}
+            onFocusCapture={() => useApp.getState().focusPane(i)}
+          >
+            {viewFor(path) ?? <EmptyPane index={i} />}
+          </section>
+        ))}
+      </main>
+    )
   }
 
   if (lectureMode) {

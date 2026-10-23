@@ -224,19 +224,21 @@ function Document({
   // Saved a second after scrolling stops, and once more when the viewer closes so a quick
   // switch to another file does not lose the position.
   const savedPage = useRef(page)
+  // Side by side with other files, only the focused pane says what is on screen (for Claude).
+  const focused = useApp((s) => !s.grid || s.grid.panes[s.grid.focus] === path)
   useEffect(() => {
-    setPdfView({ path, page, pageCount: sizes.length })
+    if (focused) setPdfView({ path, page, pageCount: sizes.length })
     savedPage.current = page
     const timer = setTimeout(
       () => window.api.vault.setLastPage(path, page).catch(console.error),
       1000
     )
     return () => clearTimeout(timer)
-  }, [path, page, sizes.length, setPdfView])
+  }, [path, page, sizes.length, setPdfView, focused])
 
   useEffect(
     () => () => {
-      setPdfView(null)
+      if (useApp.getState().pdfView?.path === path) setPdfView(null)
       window.api.vault.setLastPage(path, savedPage.current).catch(console.error)
     },
     [path, setPdfView]

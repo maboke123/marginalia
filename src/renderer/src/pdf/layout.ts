@@ -15,10 +15,10 @@ export interface Layout {
 
 export const PAGE_GAP = 16
 export const VIEW_PADDING = 24
-export const MIN_SCALE = 0.25
+export const MIN_SCALE = 0.1
 export const MAX_SCALE = 5
 
-const ZOOM_STEPS = [0.25, 0.5, 0.67, 0.8, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2, 2.5, 3, 4, 5]
+const ZOOM_STEPS = [0.1, 0.25, 0.5, 0.67, 0.8, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2, 2.5, 3, 4, 5]
 
 export function clampScale(scale: number): number {
   return Math.min(MAX_SCALE, Math.max(MIN_SCALE, scale))
