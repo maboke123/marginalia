@@ -1932,8 +1932,26 @@ h2 {
   flex: 1;
   min-height: 0;
   padding: 12px 16px;
+  overflow-x: hidden;
   overflow-y: auto;
   user-select: text;
+}
+
+.claude-answer {
+  overflow-wrap: anywhere;
+}
+
+.claude-answer table,
+.claude-answer .katex-display {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.claude-answer img {
+  max-width: 100%;
+  height: auto;
 }
 
 .claude-messages button {

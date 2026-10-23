@@ -1,4 +1,3 @@
-const KEY = 'noteZoom'
 const STEPS = [0.7, 0.8, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2, 2.5]
 const MIN = STEPS[0]
 const MAX = STEPS[STEPS.length - 1]
@@ -17,12 +16,12 @@ export function zoomByWheel(zoom: number, deltaY: number): number {
 }
 
 // Like the folds and expanded folders, zoom is a per-machine view setting.
-export function readZoom(): number {
-  const value = Number(localStorage.getItem(KEY))
+export function readZoom(key = 'noteZoom'): number {
+  const value = Number(localStorage.getItem(key))
   return value >= MIN && value <= MAX ? value : 1
 }
 
-export function saveZoom(zoom: number): void {
-  if (zoom === 1) localStorage.removeItem(KEY)
-  else localStorage.setItem(KEY, String(zoom))
+export function saveZoom(zoom: number, key = 'noteZoom'): void {
+  if (zoom === 1) localStorage.removeItem(key)
+  else localStorage.setItem(key, String(zoom))
 }

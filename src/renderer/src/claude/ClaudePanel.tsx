@@ -10,6 +10,7 @@ import type { VaultNode } from '../../../shared/types'
 import { ContextMenu, type MenuItem } from '../components/ContextMenu'
 import { Icon, type IconName } from '../components/Icon'
 import { resolveLink } from '../editor/links'
+import { readZoom, saveZoom, zoomByWheel } from '../editor/zoom'
 import { RenderedHtml } from '../components/RenderedHtml'
 import { renderChatMarkdown } from '../lib/markdown'
 import { findNode, isFolder } from '../lib/tree'
@@ -28,6 +29,7 @@ const SIZE_KEY: Record<Dock, string> = { bottom: 'claude-height', right: 'claude
 const MIN_SIZE: Record<Dock, number> = { bottom: 160, right: 320 }
 const DEFAULT_SIZE: Record<Dock, number> = { bottom: 300, right: 420 }
 const EMPTY: Message[] = []
+const ZOOM_KEY = 'chatZoom'
 
 const QUICK_ACTIONS = [
   { label: 'Explain this slide', prompt: 'Explain this slide.' },
@@ -246,6 +248,22 @@ function MessageList({
   const ref = useRef<HTMLDivElement>(null)
   const pinned = useRef(true)
   const [menu, setMenu] = useState<{ x: number; y: number; text: string } | null>(null)
+  const [zoom, setZoom] = useState(() => readZoom(ZOOM_KEY))
+
+  useEffect(() => saveZoom(zoom, ZOOM_KEY), [zoom])
+
+  // Ctrl+wheel zooms the messages like a note; attached by hand because React's wheel
+  // listener is passive and cannot stop the page zoom.
+  useEffect(() => {
+    const el = ref.current!
+    const onWheel = (e: WheelEvent): void => {
+      if (!e.ctrlKey || e.deltaY === 0) return
+      e.preventDefault()
+      setZoom((z) => zoomByWheel(z, e.deltaY))
+    }
+    el.addEventListener('wheel', onWheel, { passive: false })
+    return () => el.removeEventListener('wheel', onWheel)
+  }, [])
 
   // Follow the answer as it streams in, unless I scrolled up to read something.
   useLayoutEffect(() => {
@@ -320,15 +338,17 @@ function MessageList({
         pinned.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40
       }}
     >
-      {messages.length === 0 && (
-        <p className="muted claude-empty">
-          Ask about the slide or your summary. What you are looking at is sent along automatically;
-          remove a chip below to leave it out.
-        </p>
-      )}
-      {messages.map((m, i) => (
-        <MessageView key={m.id} message={m} streaming={running && i === messages.length - 1} />
-      ))}
+      <div className="claude-messages-zoom" style={{ zoom }}>
+        {messages.length === 0 && (
+          <p className="muted claude-empty">
+            Ask about the slide or your summary. What you are looking at is sent along
+            automatically; remove a chip below to leave it out.
+          </p>
+        )}
+        {messages.map((m, i) => (
+          <MessageView key={m.id} message={m} streaming={running && i === messages.length - 1} />
+        ))}
+      </div>
       {menu && (
         <ContextMenu
           x={menu.x}

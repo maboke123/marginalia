@@ -150,6 +150,46 @@ test('the panel moves to the right of the panes from the settings', async () => 
   await page.screenshot({ path: path.join('test-results', 'claude-panel-right.png') })
 })
 
+test('a narrow chat on the right never scrolls sideways, and Ctrl+wheel zooms it', async () => {
+  await openSlides(3)
+  await page.keyboard.press('Control+,')
+  const settings = page.getByRole('dialog', { name: 'Settings' })
+  await settings.getByRole('radio', { name: 'On the right' }).check()
+  await settings.getByRole('button', { name: 'Close', exact: true }).click()
+  await ask('Compare the methods')
+  const answer = answers().first()
+  await expect(answer.locator('.diagram svg')).toBeVisible()
+
+  // As narrow as it goes.
+  const panel = page.locator('.claude-panel')
+  const handle = (await panel.locator('.claude-resize').boundingBox())!
+  await page.mouse.move(handle.x + 3, handle.y + 200)
+  await page.mouse.down()
+  await page.mouse.move(handle.x + 600, handle.y + 200, { steps: 5 })
+  await page.mouse.up()
+  const messages = page.locator('.claude-messages')
+  await expect
+    .poll(() => messages.evaluate((el) => el.scrollWidth - el.clientWidth))
+    .toBeLessThanOrEqual(0)
+  await page.screenshot({ path: path.join('test-results', 'claude-panel-narrow.png') })
+
+  const size = (): Promise<number> =>
+    answer
+      .locator('td')
+      .first()
+      .evaluate((el) => el.getBoundingClientRect().height)
+  const before = await size()
+  const m = (await messages.boundingBox())!
+  await page.mouse.move(m.x + m.width / 2, m.y + m.height / 2)
+  await page.keyboard.down('Control')
+  await page.mouse.wheel(0, -300)
+  await page.keyboard.up('Control')
+  await expect.poll(size).toBeGreaterThan(before * 1.3)
+  await expect
+    .poll(() => page.evaluate(() => Number(localStorage.getItem('chatZoom'))))
+    .toBeGreaterThan(1.3)
+})
+
 test('Claude previews how a note comes out as a PDF', async () => {
   await openSlides(1)
   await page.keyboard.press('Control+Shift+M')

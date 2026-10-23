@@ -35,7 +35,19 @@ export async function* agent(input) {
   const page = Number(match(input.text, /^Slides: .+, page (\d+) of/m) ?? 1)
   const summary = match(input.text, /^Summary: (.+)$/m)
 
-  if (/explain/i.test(question)) {
+  if (/compare the methods/i.test(question)) {
+    const columns = ['Method', 'Bias', 'Variance', 'Trees', 'Depth', 'Sampling', 'Weights']
+    yield {
+      type: 'text',
+      text:
+        `| ${columns.join(' | ')} |\n| ${columns.map(() => '---').join(' | ')} |\n` +
+        '| Bagging | unchanged | lower | independent | deep | bootstrap | equal |\n' +
+        '| Boosting | lower | can rise | sequential | shallow | reweighted | by error |\n\n' +
+        '$$\\hat f(x) = \\frac{1}{B}\\sum_{b=1}^{B} \\hat f_b(x) = \\frac{1}{B}\\left(\\hat f_1(x) + ' +
+        '\\hat f_2(x) + \\hat f_3(x) + \\hat f_4(x) + \\hat f_5(x) + \\hat f_6(x)\\right)$$\n\n' +
+        '```mermaid\nflowchart LR\n  Data --> Bootstrap --> Trees --> Vote --> Prediction\n```\n'
+    }
+  } else if (/explain/i.test(question)) {
     yield { type: 'text', text: 'This is the **information gain** ' }
     yield { type: 'text', text: 'formula: $IG(S,t) = H(S) - \\sum_v \\frac{|S_v|}{|S|} H(S_v)$.' }
   } else if (/short version/i.test(question)) {
