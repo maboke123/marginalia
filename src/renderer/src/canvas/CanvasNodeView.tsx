@@ -14,7 +14,6 @@ import { vaultUrl } from '../editor/links'
 import { markInTextarea, markOfKey } from '../lib/emphasis'
 import { renderMarkdown } from '../lib/markdown'
 import type { Handle } from './ops'
-import { editHint } from './shapes'
 
 const HANDLES: Handle[] = ['n', 'ne', 'e', 'se', 's', 'sw', 'w', 'nw']
 const SIDES = ['top', 'right', 'bottom', 'left'] as const
@@ -32,8 +31,11 @@ interface Props {
   landing?: Side | null
   /** Just added from the shapes: typing replaces its placeholder name. */
   fresh?: boolean
-  /** 'ghost': proposed by Claude; 'removed': Claude proposes to remove it. */
-  proposal?: 'ghost' | 'removed'
+  /**
+   * 'ghost': proposed by Claude; 'removed': Claude proposes to remove it; 'preview': a picked
+   * shape following the pointer.
+   */
+  proposal?: 'ghost' | 'removed' | 'preview'
   onText(text: string): void
   onDone(): void
   /** The text needs this much height (canvas units) to show all of it. */
@@ -154,14 +156,12 @@ function FileContent({ file }: { file: string }): React.JSX.Element {
 /** The text of a box being typed, in a textarea that fills the box. */
 function Editor({
   value,
-  shape,
   fresh,
   onText,
   onDone,
   onGrow
 }: {
   value: string
-  shape: string | undefined
   /** A shape just added: its first line (the placeholder name) is selected, to type over. */
   fresh: boolean
   onText(text: string): void
@@ -188,7 +188,6 @@ function Editor({
   }, [])
   return (
     <>
-      <span className="canvas-edit-hint">{editHint(shape)}</span>
       <textarea
         ref={ref}
         className="canvas-editor"
@@ -227,6 +226,10 @@ export const CanvasNodeView = memo(function CanvasNodeView({
   onGrow
 }: Props): React.JSX.Element {
   const color = cssColor(node.color)
+  const fontScale =
+    typeof node.fontScale === 'number' && node.fontScale >= 0.25 && node.fontScale <= 8
+      ? node.fontScale
+      : 1
   const shape = node.type === 'text' ? (node.shape ?? 'rectangle') : node.type
   const className = [
     'canvas-node',
@@ -243,20 +246,14 @@ export const CanvasNodeView = memo(function CanvasNodeView({
     top: node.y,
     width: node.width,
     height: node.height,
+    ...(fontScale !== 1 ? { fontSize: `${16 * fontScale}px` } : {}),
     ...(color ? { '--node-color': color } : {})
   } as React.CSSProperties
 
   let content: React.ReactNode
   if (node.type === 'text') {
     content = editing ? (
-      <Editor
-        value={node.text}
-        shape={node.shape}
-        fresh={fresh}
-        onText={onText}
-        onDone={onDone}
-        onGrow={onGrow}
-      />
+      <Editor value={node.text} fresh={fresh} onText={onText} onDone={onDone} onGrow={onGrow} />
     ) : (
       <TextContent node={node} />
     )

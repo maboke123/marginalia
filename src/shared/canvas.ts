@@ -40,6 +40,8 @@ interface BaseNode {
   height: number
   /** A preset "1" to "6" or a hex colour. */
   color?: string
+  /** Our own: text size relative to normal, for a shape drawn bigger or added zoomed out. */
+  fontScale?: number
   [extra: string]: unknown
 }
 

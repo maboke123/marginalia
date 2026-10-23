@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { CanvasData, CanvasNode, InkStroke } from '../../../shared/canvas'
 import { fitCamera, toScreen, toWorld, zoomAt, zoomStep } from './camera'
 import { createCanvasDoc } from './doc'
+import { clickScale, makeScaled, templateByName } from './shapes'
 import { edgeGeometry, edgePorts, freeEndSide, sideAt } from './edges'
 import {
   bringToFront,
@@ -296,5 +297,31 @@ describe('ink', () => {
         ])
       ).id
     ).not.toBe(first.id)
+  })
+})
+
+describe('shapes', () => {
+  const cls = templateByName('Class')!
+
+  it('comes out at a normal size on screen when added zoomed out', () => {
+    expect(clickScale(1.5)).toBe(1)
+    expect(clickScale(0.5)).toBe(2)
+    expect(clickScale(0.05)).toBe(4)
+    const node = makeScaled(cls, { x: 0, y: 0 }, 2)
+    expect(node).toMatchObject({ x: -240, y: -150, width: 480, height: 300, fontScale: 2 })
+    expect(makeScaled(cls, { x: 0, y: 0 }, 1).fontScale).toBeUndefined()
+  })
+
+  it('takes a dragged rectangle, its text growing with it', () => {
+    const rect = { x: 10, y: 20, width: 720, height: 300 }
+    // 3 times as wide but 2 times as tall as the template: the text follows the smaller.
+    expect(makeScaled(cls, rect, 1, rect)).toMatchObject({ ...rect, fontScale: 2 })
+  })
+
+  it('keeps start and end dots round', () => {
+    const start = templateByName('Start')!
+    const node = makeScaled(start, { x: 0, y: 0 }, 1, { x: 0, y: 0, width: 90, height: 30 })
+    expect(node.width).toBe(node.height)
+    expect(node.fontScale).toBeUndefined()
   })
 })

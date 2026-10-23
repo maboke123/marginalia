@@ -71,7 +71,7 @@ import {
   type Handle,
   type Selection
 } from './ops'
-import { TEMPLATES, type Template } from './shapes'
+import { clickScale, makeScaled, TEMPLATES, type Template } from './shapes'
 import { ShapeMenu } from './ShapeMenu'
 
 type Tool = 'select' | 'hand' | 'text' | 'pen'
@@ -137,6 +137,10 @@ function saveCamera(path: string, camera: Camera): void {
     // Only a convenience.
   }
 }
+
+/** A shape is drawn at its own size once the drag is a few pixels on screen. */
+const isDragged = (rect: Rect, zoom: number): boolean =>
+  Math.max(rect.width, rect.height) * zoom > 8
 
 /** The rectangle between two corners. */
 const placedRect = (a: { x: number; y: number }, b: { x: number; y: number }): Rect => ({
@@ -328,6 +332,7 @@ function CanvasSurface({
   const [draft, setDraft] = useState<Draft | null>(null)
   // A shape picked in the Shapes menu, put down by the next click or drag on the canvas.
   const [placing, setPlacing] = useState<Template | null>(null)
+  const [cursor, setCursor] = useState<{ x: number; y: number } | null>(null)
   const [hover, setHover] = useState<string | null>(null)
   // What the last press was on: a double-click's own target is the surface, which holds the
   // pointer capture from that press.
@@ -540,9 +545,8 @@ function CanvasSurface({
    * its name in.
    */
   const addTemplate = (t: Template, at: { x: number; y: number }, rect?: Rect): void => {
-    const made = t.make(at.x, at.y)
-    const marker = made.type === 'text' && isMarker(made.shape)
-    const node = rect && !marker ? ({ ...made, ...rect } as CanvasNode) : made
+    const node = makeScaled(t, at, clickScale(cameraRef.current.zoom), rect)
+    const marker = node.type === 'text' && isMarker(node.shape)
     const typed = node.type === 'group' || (node.type === 'text' && !marker)
     addBox(node, typed)
     if (typed) setFresh(node.id)
@@ -588,15 +592,21 @@ function CanvasSurface({
     if (el) markInTextarea(el, mark)
   }
 
-  const textBoxAt = (x: number, y: number, width = 240, height = 80): CanvasNode => ({
-    id: newCanvasId(),
-    type: 'text',
-    text: '',
-    x: Math.round(x - width / 2),
-    y: Math.round(y - height / 2),
-    width,
-    height
-  })
+  // Zoomed out, a new box comes out bigger, text and all, so it reads at a normal size.
+  const textBoxAt = (x: number, y: number, w = 240, h = 80): CanvasNode => {
+    const scale = clickScale(cameraRef.current.zoom)
+    const [width, height] = [Math.round(w * scale), Math.round(h * scale)]
+    return {
+      id: newCanvasId(),
+      type: 'text',
+      text: '',
+      x: Math.round(x - width / 2),
+      y: Math.round(y - height / 2),
+      width,
+      height,
+      ...(scale !== 1 && { fontScale: scale })
+    }
+  }
 
   const addImage = async (
     data: Uint8Array,
@@ -752,6 +762,7 @@ function CanvasSurface({
           ? (connectTarget(s.data, at.x, at.y, HOVER_PX / zoom)?.id ?? null)
           : null
       if (near !== hover) setHover(near)
+      if (placing) setCursor(at)
       return
     }
     switch (d.kind) {
@@ -836,14 +847,7 @@ function CanvasSurface({
       setMarquee(null)
       const at = worldOf(e)
       const rect = placedRect(d.from, at)
-      const dragged = Math.max(rect.width, rect.height) * cameraRef.current.zoom > 8
-      addTemplate(
-        d.template,
-        dragged ? { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 } : d.from,
-        dragged
-          ? { ...rect, width: Math.max(rect.width, 40), height: Math.max(rect.height, 30) }
-          : undefined
-      )
+      addTemplate(d.template, d.from, isDragged(rect, cameraRef.current.zoom) ? rect : undefined)
     } else if (d.kind === 'connect') {
       setDraft(null)
       const at = worldOf(e)
@@ -1153,6 +1157,14 @@ function CanvasSurface({
     />
   )
   const editingNode = editing ? data.nodes.find((n) => n.id === editing) : undefined
+  // The picked shape where a click would put it, or as big as I drag it.
+  const preview = !placing
+    ? null
+    : marquee && isDragged(marquee, camera.zoom)
+      ? makeScaled(placing, marquee, 1, marquee)
+      : cursor
+        ? makeScaled(placing, cursor, clickScale(camera.zoom))
+        : null
   // Lost: boxes exist but none is in view.
   const lost =
     !ghost &&
@@ -1370,6 +1382,7 @@ function CanvasSurface({
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}
           onPointerCancel={onPointerUp}
+          onPointerLeave={() => setCursor(null)}
           onDoubleClick={onDoubleClick}
           onContextMenu={onContextMenu}
           onKeyDown={onKeyDown}
@@ -1431,9 +1444,20 @@ function CanvasSurface({
                 />
               </svg>
             )}
-            {marquee && (
+            {preview && (
+              <CanvasNodeView
+                node={preview}
+                selected={false}
+                handles={false}
+                editing={false}
+                proposal="preview"
+                onText={NOOP}
+                onDone={NOOP}
+              />
+            )}
+            {marquee && !placing && (
               <div
-                className={placing ? 'canvas-marquee placing' : 'canvas-marquee'}
+                className="canvas-marquee"
                 style={{
                   left: marquee.x,
                   top: marquee.y,
@@ -1466,16 +1490,6 @@ function CanvasSurface({
               }}
               doc={doc}
             />
-          )}
-          {placing && !ghost && (
-            <div className="canvas-ghost-bar canvas-place-bar">
-              <span>
-                Click on the canvas to add a {placing.name.toLowerCase()}, or drag to draw it
-              </span>
-              <button className="button" onClick={() => pickShape(null)}>
-                Cancel
-              </button>
-            </div>
           )}
           {ghost && (
             <div className="canvas-ghost-bar">

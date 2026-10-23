@@ -323,14 +323,19 @@ test('shapes come from the Shapes menu by click or drag, and the right-click men
     await page.screenshot({ path: path.join('test-results', 'canvas-shapes-menu.png') })
     await menu.getByRole('button', { name, exact: true }).click()
     await expect(menu).toBeHidden()
-    await expect(page.locator('.canvas-place-bar')).toContainText(name.toLowerCase())
+    await expect(page.getByRole('button', { name: 'Shapes' })).toContainText(name)
   }
+  const preview = page.locator('.canvas-node.preview')
 
-  // Click: a class where I click, its placeholder name selected to type over.
+  // Click: a class where I click (its ghost follows the mouse first), its name selected.
   await pick('Class')
+  await page.mouse.move(view.x + view.width - 170, view.y + 110)
+  await page.mouse.move(view.x + view.width - 160, view.y + 120)
+  await expect(preview).toBeVisible()
+  await page.screenshot({ path: path.join('test-results', 'canvas-shape-preview.png') })
   await page.mouse.click(view.x + view.width - 160, view.y + 120)
-  await expect(page.locator('.canvas-place-bar')).toBeHidden()
-  await expect(page.locator('.canvas-edit-hint')).toContainText('A line with --- starts')
+  await expect(preview).toBeHidden()
+  await expect(page.locator('.canvas-editor')).toBeFocused()
   await page.keyboard.type('Payment')
   await page.keyboard.press('Escape')
   await expect
@@ -354,7 +359,8 @@ test('shapes come from the Shapes menu by click or drag, and the right-click men
   // Esc puts a picked shape back.
   await pick('Note')
   await surface().press('Escape')
-  await expect(page.locator('.canvas-place-bar')).toBeHidden()
+  await expect(page.getByRole('button', { name: 'Shapes' })).not.toContainText('Note')
+  await expect(preview).toHaveCount(0)
 
   // Right-click a box: turn it into another shape.
   await page.locator('[data-node="n1"]').click({ button: 'right' })
@@ -376,6 +382,30 @@ test('selected notes show as selected, also among others', async () => {
   await expect(note).toHaveClass(/selected/)
   await expect(note).toHaveCSS('outline-style', 'solid')
   await expect(note).toHaveCSS('clip-path', 'none')
+})
+
+test('zoomed out, a new class comes out big enough to read', async () => {
+  await openShop()
+  const view = (await surface().boundingBox())!
+  await page.mouse.move(view.x + view.width / 2, view.y + view.height / 2)
+  await page.keyboard.down('Control')
+  await page.mouse.wheel(0, 600)
+  await page.keyboard.up('Control')
+  const zoom =
+    Number((await page.locator('.canvas-zoom-value').textContent())!.replace('%', '')) / 100
+  expect(zoom).toBeLessThan(0.5)
+  await page.getByRole('button', { name: 'Shapes' }).click()
+  await page.getByRole('group', { name: 'Shapes' }).getByRole('button', { name: 'Class' }).click()
+  await page.mouse.click(view.x + 120, view.y + 120)
+  await page.keyboard.press('Escape')
+  await expect.poll(async () => (await read('Shop.canvas')).nodes.length).toBe(8)
+  const added = (await read('Shop.canvas')).nodes.at(-1) as unknown as {
+    width: number
+    fontScale: number
+  }
+  // About as big on screen as a class added at 100%.
+  expect(added.width * zoom).toBeGreaterThan(200)
+  expect(added.fontScale).toBeGreaterThan(2)
 })
 
 test('double-clicking a class edits its text instead of adding a box', async () => {

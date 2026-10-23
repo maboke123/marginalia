@@ -50,7 +50,7 @@ export const TEMPLATES: { section: string; items: Template[] }[] = [
     items: [
       {
         name: 'Class',
-        hint: 'Name, attributes, operations',
+        hint: 'First line the name, then a line with --- before the attributes and another before the operations',
         make: text('class', 'ClassName\n---\n- attribute: Type\n---\n+ operation(): Type', 240, 150)
       },
       {
@@ -94,10 +94,45 @@ export function templateKind(t: Template): string {
 export const templateByName = (name: string): Template | undefined =>
   TEMPLATES.flatMap((s) => s.items).find((t) => t.name === name)
 
-/** What typing in a box means, shown above it while I edit. */
-export function editHint(shape: string | undefined): string {
-  if (shape === 'class') {
-    return 'First line: the name («interface» above it if needed). A line with --- starts the attributes, the next --- the operations. Esc when done.'
+const round2 = (n: number): number => Math.round(n * 100) / 100
+
+/**
+ * How big a shape added with a click comes out: at least normal size on screen, so one added
+ * while zoomed out is not tiny (up to 4 times the normal size).
+ */
+export const clickScale = (zoom: number): number => round2(Math.min(4, Math.max(1, 1 / zoom)))
+
+/**
+ * A template made at a scale: the box and its text grow together (`fontScale`). With `rect`
+ * (a shape dragged out) the scale follows the drawn size and the box takes that rectangle;
+ * start and end dots stay round.
+ */
+export function makeScaled(
+  t: Template,
+  at: { x: number; y: number },
+  scale: number,
+  rect?: { x: number; y: number; width: number; height: number }
+): CanvasNode {
+  const base = t.make(at.x, at.y)
+  const marker = base.type === 'text' && (base.shape === 'initial' || base.shape === 'final')
+  let s = scale
+  if (rect) s = Math.min(rect.width / base.width, rect.height / base.height)
+  s = round2(Math.min(6, Math.max(0.5, s)))
+  let box = rect ?? {
+    x: Math.round(at.x - (base.width * s) / 2),
+    y: Math.round(at.y - (base.height * s) / 2),
+    width: Math.round(base.width * s),
+    height: Math.round(base.height * s)
   }
-  return 'Markdown and $math$ work. Esc or Ctrl+Enter when done.'
+  if (marker) {
+    const side = Math.round(base.width * s)
+    box = {
+      x: Math.round(box.x + box.width / 2 - side / 2),
+      y: Math.round(box.y + box.height / 2 - side / 2),
+      width: side,
+      height: side
+    }
+  }
+  const node = { ...base, ...box } as CanvasNode
+  return s === 1 || marker ? node : ({ ...node, fontScale: s } as CanvasNode)
 }
