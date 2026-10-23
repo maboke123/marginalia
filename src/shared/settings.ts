@@ -29,7 +29,24 @@ export interface AppSettings {
   recordFrom: RecordSource
   /** Where the Claude panel sits: under the panes, or beside them like in VS Code. */
   claudeDock: 'bottom' | 'right'
+  /** How fast Ctrl+wheel and pinching zoom, per kind of file; 1 is normal. */
+  zoomSpeed: ZoomSpeed
 }
+
+export interface ZoomSpeed {
+  slides: number
+  /** Notes and the Claude chat. */
+  notes: number
+  canvas: number
+}
+
+export const ZOOM_SPEEDS = [
+  { name: 'Slow', value: 0.5 },
+  { name: 'Normal', value: 1 },
+  { name: 'Faster', value: 1.5 },
+  { name: 'Fast', value: 2 },
+  { name: 'Very fast', value: 3 }
+]
 
 export type TranscribeLanguage = 'auto' | 'nl' | 'en'
 
@@ -80,7 +97,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   recordingBar: true,
   recordFrom: 'microphone',
   autoTranscribe: true,
-  claudeDock: 'bottom'
+  claudeDock: 'bottom',
+  zoomSpeed: { slides: 1, notes: 1, canvas: 1 }
 }
 
 function colors(raw: unknown, fallback: string[]): string[] {
@@ -88,6 +106,12 @@ function colors(raw: unknown, fallback: string[]): string[] {
   return raw.map((c, i) =>
     typeof c === 'string' && /^#[0-9a-f]{6}$/i.test(c) ? c.toLowerCase() : fallback[i]
   )
+}
+
+function zoomSpeedFrom(raw: unknown): ZoomSpeed {
+  const r = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>
+  const speed = (v: unknown): number => (ZOOM_SPEEDS.some((s) => s.value === v) ? (v as number) : 1)
+  return { slides: speed(r.slides), notes: speed(r.notes), canvas: speed(r.canvas) }
 }
 
 /** Settings from config.json, with defaults for anything missing or invalid. */
@@ -110,6 +134,7 @@ export function settingsFrom(raw: unknown): AppSettings {
     recordingBar: r.recordingBar !== false,
     recordFrom: r.recordFrom === 'computer' ? 'computer' : 'microphone',
     autoTranscribe: r.autoTranscribe !== false,
-    claudeDock: r.claudeDock === 'right' ? 'right' : 'bottom'
+    claudeDock: r.claudeDock === 'right' ? 'right' : 'bottom',
+    zoomSpeed: zoomSpeedFrom(r.zoomSpeed)
   }
 }

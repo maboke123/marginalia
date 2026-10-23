@@ -12,9 +12,11 @@ import {
   DEFAULT_PEN_COLORS,
   MARGIN_WIDTHS,
   TRANSCRIBE_LANGUAGES,
+  ZOOM_SPEEDS,
   type AppSettings,
   type Theme,
-  type TranscribeLanguage
+  type TranscribeLanguage,
+  type ZoomSpeed
 } from '../../../shared/settings'
 import { useApp } from '../store'
 import { useFiles } from '../transcribe/files'
@@ -34,6 +36,12 @@ const RECORD_SOURCES: { value: AppSettings['recordFrom']; label: string }[] = [
 const DOCKS: { value: AppSettings['claudeDock']; label: string }[] = [
   { value: 'bottom', label: 'At the bottom' },
   { value: 'right', label: 'On the right' }
+]
+
+const ZOOM_KINDS: { key: keyof ZoomSpeed; label: string }[] = [
+  { key: 'slides', label: 'Slides' },
+  { key: 'notes', label: 'Notes' },
+  { key: 'canvas', label: 'Canvases' }
 ]
 
 function Colors({
@@ -203,6 +211,35 @@ export function SettingsDialog(): React.JSX.Element {
                     {d.label}
                   </label>
                 ))}
+              </div>
+            </div>
+            <div className="settings-row">
+              <span className="settings-label">Zoom speed</span>
+              <div>
+                <div className="settings-choices">
+                  {ZOOM_KINDS.map((k) => (
+                    <label key={k.key} className="settings-inline">
+                      {k.label}
+                      <select
+                        className="toolbar-select"
+                        aria-label={`Zoom speed for ${k.label.toLowerCase()}`}
+                        value={settings.zoomSpeed[k.key]}
+                        onChange={(e) =>
+                          void save({
+                            zoomSpeed: { ...settings.zoomSpeed, [k.key]: Number(e.target.value) }
+                          })
+                        }
+                      >
+                        {ZOOM_SPEEDS.map((s) => (
+                          <option key={s.value} value={s.value}>
+                            {s.name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  ))}
+                </div>
+                <p className="muted settings-help">For Ctrl+wheel and pinching on the touchpad.</p>
               </div>
             </div>
           </section>

@@ -369,7 +369,7 @@ function Document({
     const onWheel = (e: WheelEvent): void => {
       if (!e.ctrlKey) return
       e.preventDefault()
-      const factor = Math.exp(-e.deltaY / 500)
+      const factor = Math.exp((-e.deltaY * useApp.getState().settings.zoomSpeed.slides) / 500)
       zoomTo(scale * factor, e.clientY - el.getBoundingClientRect().top)
     }
     el.addEventListener('wheel', onWheel, { passive: false })

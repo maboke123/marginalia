@@ -421,7 +421,12 @@ function CanvasSurface({
       const r = el.getBoundingClientRect()
       if (e.ctrlKey) {
         setCamera((c) =>
-          zoomAt(c, wheelZoom(c.zoom, e.deltaY), e.clientX - r.left, e.clientY - r.top)
+          zoomAt(
+            c,
+            wheelZoom(c.zoom, e.deltaY * useApp.getState().settings.zoomSpeed.canvas),
+            e.clientX - r.left,
+            e.clientY - r.top
+          )
         )
       } else {
         const dx = e.shiftKey && !e.deltaX ? e.deltaY : e.deltaX
@@ -844,6 +849,9 @@ function CanvasSurface({
     }
   }
 
+  // Zoomed out, the pen draws thicker so a line looks as wide on screen as at 100%.
+  const penWidth = (zoom: number): number => Math.round(ink.penWidth * clickScale(zoom) * 10) / 10
+
   // `time` is the pointer event's own time stamp.
   const finishInk = (points: [number, number, number][], time: number): void => {
     if (points.length < 2) return
@@ -853,7 +861,7 @@ function CanvasSurface({
       last && time - last.at < INK_JOIN_MS ? (nodeById(s.data, last.id) as InkNode) : null
     const node = withStroke(recent ?? null, {
       color: ink.penColor,
-      width: ink.penWidth,
+      width: penWidth(cameraRef.current.zoom),
       points
     })
     s.change((d) => (node.id === recent?.id ? updateNode(d, node.id, node) : addNodes(d, [node])))
@@ -1507,7 +1515,7 @@ function CanvasSurface({
                       tool: 'pen',
                       author: 'me',
                       color: ink.penColor,
-                      width: ink.penWidth,
+                      width: penWidth(camera.zoom),
                       points: liveInk
                     },
                     true

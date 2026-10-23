@@ -261,7 +261,7 @@ function MessageList({
     const onWheel = (e: WheelEvent): void => {
       if (!e.ctrlKey || e.deltaY === 0) return
       e.preventDefault()
-      setZoom((z) => zoomByWheel(z, e.deltaY))
+      setZoom((z) => zoomByWheel(z, e.deltaY * useApp.getState().settings.zoomSpeed.notes))
     }
     el.addEventListener('wheel', onWheel, { passive: false })
     return () => el.removeEventListener('wheel', onWheel)

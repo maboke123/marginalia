@@ -407,6 +407,33 @@ test('selected notes show as selected, also among others', async () => {
   await expect(note).toHaveCSS('clip-path', 'none')
 })
 
+test('the canvas zoom speed setting makes Ctrl+wheel zoom further', async () => {
+  await openShop()
+  const view = (await surface().boundingBox())!
+  const zoomValue = async (): Promise<number> =>
+    Number((await page.locator('.canvas-zoom-value').textContent())!.replace('%', '')) / 100
+  const zoomIn = async (): Promise<number> => {
+    await surface().focus()
+    await page.keyboard.press('Control+0')
+    await expect.poll(zoomValue).toBe(1)
+    await page.mouse.move(view.x + view.width / 2, view.y + view.height / 2)
+    await page.keyboard.down('Control')
+    await page.mouse.wheel(0, -100)
+    await page.keyboard.up('Control')
+    await expect.poll(zoomValue).toBeGreaterThan(1)
+    return zoomValue()
+  }
+  const normal = await zoomIn()
+
+  await page.keyboard.press('Control+,')
+  const settings = page.getByRole('dialog', { name: 'Settings' })
+  await settings.getByRole('combobox', { name: 'Zoom speed for canvases' }).selectOption('2')
+  await settings.getByRole('button', { name: 'Close', exact: true }).click()
+  const fast = await zoomIn()
+  // Twice the speed: the same turn zooms twice as far on a log scale.
+  expect(Math.log(fast)).toBeCloseTo(2 * Math.log(normal), 1)
+})
+
 test('zoomed out, a new class comes out big enough to read', async () => {
   await openShop()
   const view = (await surface().boundingBox())!

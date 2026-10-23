@@ -23,6 +23,15 @@ describe('settingsFrom', () => {
     expect(settings.hotkeys).toEqual({ ...DEFAULT_HOTKEYS, pen: 'B' })
   })
 
+  it('keeps a zoom speed per kind of file, normal when unknown', () => {
+    expect(settingsFrom({ zoomSpeed: { slides: 2, notes: 7, canvas: 0.5 } }).zoomSpeed).toEqual({
+      slides: 2,
+      notes: 1,
+      canvas: 0.5
+    })
+    expect(settingsFrom({ zoomSpeed: 'fast' }).zoomSpeed).toEqual(DEFAULT_SETTINGS.zoomSpeed)
+  })
+
   it('puts the Claude panel at the bottom unless it was set to the right', () => {
     expect(settingsFrom({ claudeDock: 'right' }).claudeDock).toBe('right')
     expect(settingsFrom({ claudeDock: 'left' }).claudeDock).toBe('bottom')

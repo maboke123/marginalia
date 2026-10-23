@@ -2607,6 +2607,12 @@ button.claude-proposal-label:hover {
   padding-top: 4px;
 }
 
+.settings-inline {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .settings-choices .check {
   display: flex;
   align-items: center;
