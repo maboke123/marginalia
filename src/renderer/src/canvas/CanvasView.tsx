@@ -970,7 +970,45 @@ function CanvasSurface({
     if (!s.selection.nodes.length) return
     const items = copyItems(s.data, s.selection.nodes, 0, 0)
     await navigator.clipboard.writeText(JSON.stringify({ kind: CLIPBOARD_KIND, ...items }))
-    if (cut) deleteSelection()
+    if (!cut) return
+    // A group goes with what is inside it, as it was copied.
+    const copied = [...movingSet(s.data, s.selection.nodes)]
+    s.change((d) => removeItems(d, { nodes: copied, edges: s.selection.edges }))
+    s.select(NOTHING)
+  }
+
+  /** Copied boxes, an image or plain text (as a new box) put in at a point. */
+  const paste = (at: { x: number; y: number }, text: string, image?: Blob): void => {
+    if (image) {
+      void image
+        .arrayBuffer()
+        .then((buf) => addImage(new Uint8Array(buf), IMAGE_TYPES[image.type], at))
+      return
+    }
+    if (!text.trim()) return
+    const s = doc.getState()
+    try {
+      const items = JSON.parse(text)
+      if (items?.kind === CLIPBOARD_KIND && Array.isArray(items.nodes)) {
+        const pasted = pasteItems(s.data, items, Math.round(at.x), Math.round(at.y))
+        s.change(() => pasted.data)
+        s.select(pasted.selection)
+        return
+      }
+    } catch {
+      // Plain text: a new box with it.
+    }
+    addBox({ ...textBoxAt(at.x, at.y, 280, 120), text } as CanvasNode, false)
+  }
+
+  /** Paste from the right-click menu, which gets no paste event. */
+  const pasteFromClipboard = async (at: { x: number; y: number }): Promise<void> => {
+    const items = await navigator.clipboard.read().catch(() => [])
+    for (const item of items) {
+      const type = item.types.find((t) => IMAGE_TYPES[t])
+      if (type) return paste(at, '', await item.getType(type))
+    }
+    paste(at, await navigator.clipboard.readText().catch(() => ''))
   }
 
   const makeGroup = (): void => {
@@ -1043,30 +1081,12 @@ function CanvasSurface({
 
   const onPaste = (e: React.ClipboardEvent): void => {
     if ((e.target as HTMLElement).closest('input, textarea')) return
-    const at = pointer.current ?? viewCenter()
-    const image = [...e.clipboardData.files].find((f) => IMAGE_TYPES[f.type])
     e.preventDefault()
-    if (image) {
-      void image
-        .arrayBuffer()
-        .then((buf) => addImage(new Uint8Array(buf), IMAGE_TYPES[image.type], at))
-      return
-    }
-    const text = e.clipboardData.getData('text/plain')
-    if (!text.trim()) return
-    const s = doc.getState()
-    try {
-      const items = JSON.parse(text)
-      if (items?.kind === CLIPBOARD_KIND && Array.isArray(items.nodes)) {
-        const pasted = pasteItems(s.data, items, Math.round(at.x), Math.round(at.y))
-        s.change(() => pasted.data)
-        s.select(pasted.selection)
-        return
-      }
-    } catch {
-      // Plain text: a new box with it.
-    }
-    addBox({ ...textBoxAt(at.x, at.y, 280, 120), text } as CanvasNode, false)
+    paste(
+      pointer.current ?? viewCenter(),
+      e.clipboardData.getData('text/plain'),
+      [...e.clipboardData.files].find((f) => IMAGE_TYPES[f.type])
+    )
   }
 
   const onDrop = (e: React.DragEvent): void => {
@@ -1132,6 +1152,8 @@ function CanvasSurface({
                 onSelect: () => s.change((d) => bringToFront(d, doc.getState().selection.nodes))
               }
             ]),
+        { label: 'Copy', hint: 'Ctrl+C', onSelect: () => void copy(false) },
+        { label: 'Cut', hint: 'Ctrl+X', onSelect: () => void copy(true) },
         { label: 'Duplicate', hint: 'Ctrl+D', onSelect: duplicate },
         { label: 'Delete', hint: 'Delete', danger: true, onSelect: deleteSelection }
       ]
@@ -1140,6 +1162,8 @@ function CanvasSurface({
       items = [{ label: 'Delete arrow', hint: 'Delete', danger: true, onSelect: deleteSelection }]
     } else {
       items = [
+        { label: 'Paste', hint: 'Ctrl+V', onSelect: () => void pasteFromClipboard(at) },
+        { separator: true },
         {
           label: 'Text box',
           onSelect: () => addBox(textBoxAt(at.x, at.y), true)

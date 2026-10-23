@@ -423,6 +423,45 @@ test('double-clicking a class edits its text instead of adding a box', async () 
     .toMatch(/^\*\*Order\*\*\n---/)
 })
 
+test('copied boxes paste with their arrows, also into another canvas', async () => {
+  await openShop()
+  const view = (await surface().boundingBox())!
+  // Order and its line, with the composition arrow between them.
+  await page.locator('[data-node="order"]').click()
+  await page.locator('[data-node="line"]').click({ modifiers: ['Shift'] })
+  await page.keyboard.press('Control+C')
+  await page.mouse.move(view.x + 60, view.y + view.height - 60)
+  await page.keyboard.press('Control+V')
+  await expect(page.locator('.canvas-node')).toHaveCount(9)
+  await expect.poll(async () => (await read('Shop.canvas')).nodes.length).toBe(9)
+  const saved = await read('Shop.canvas')
+  expect(saved.edges).toHaveLength(5)
+  const copies = saved.nodes.slice(-2)
+  expect(copies.map((n) => (n as { text: string }).text.split('\n')[0])).toEqual([
+    'Order',
+    'OrderLine'
+  ])
+  expect(saved.edges.at(-1)).toMatchObject({ fromNode: copies[0].id, toNode: copies[1].id })
+
+  // A whole group comes with what is inside it; Ctrl+X takes it away here.
+  await page.locator('[data-node="domain"] .canvas-group-label').click()
+  await page.keyboard.press('Control+X')
+  await expect(page.locator('.canvas-node')).toHaveCount(4)
+  await expect.poll(async () => (await read('Shop.canvas')).nodes.length).toBe(4)
+
+  // Pasted from the right-click menu into a new canvas: the group and its four classes.
+  await row('les_1').click({ button: 'right' })
+  await page.getByRole('menuitem', { name: 'New canvas' }).click()
+  await expect(page.locator('.rename-input')).toBeFocused()
+  await page.keyboard.press('Enter')
+  await row('Untitled canvas').click()
+  await expect(page.locator('.canvas-hint')).toBeVisible()
+  await surface().click({ button: 'right', position: { x: 200, y: 200 } })
+  await page.getByRole('menuitem', { name: 'Paste' }).click()
+  await expect(page.locator('.canvas-node')).toHaveCount(5)
+  await expect(page.locator('.canvas-edge')).toHaveCount(3)
+})
+
 /** Double-clicks the middle of a word drawn inside `within`. */
 async function dblclickWord(within: Locator, word: string): Promise<void> {
   const r = await within.evaluate((el, word) => {
