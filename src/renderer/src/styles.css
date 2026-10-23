@@ -2169,6 +2169,36 @@ button.claude-proposal-label:hover {
   height: 12px;
 }
 
+.claude-images {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 4px 0 6px;
+}
+
+.claude-images img {
+  display: block;
+  max-width: 160px;
+  max-height: 96px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.claude-image {
+  position: relative;
+}
+
+.claude-image .chip-remove {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  background: var(--bg);
+}
+
+.claude-image .chip-remove:hover {
+  background: var(--bg-hover);
+}
+
 .claude-input {
   position: relative;
   display: flex;

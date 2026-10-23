@@ -187,6 +187,13 @@ export async function* agent(input) {
   await record(sessionId, {
     text: input.text,
     images: input.images.length,
+    // Width x height of each PNG, read from its header.
+    imageSizes: input.images.map((image) => {
+      const view = new DataView(new Uint8Array(image.data).buffer)
+      return image.mediaType === 'image/png'
+        ? `${view.getUint32(16)}x${view.getUint32(20)}`
+        : image.mediaType
+    }),
     question,
     instructions: input.settings.instructions,
     memory: input.memory

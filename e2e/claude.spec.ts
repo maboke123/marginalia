@@ -150,6 +150,50 @@ test('the panel moves to the right of the panes from the settings', async () => 
   await page.screenshot({ path: path.join('test-results', 'claude-panel-right.png') })
 })
 
+test('images pasted or dropped in the chat go along, big ones made smaller', async () => {
+  await openSlides(2)
+  await ask('What is on this slide?')
+  await expect(answers()).toHaveCount(1)
+
+  // A wide screenshot on the clipboard.
+  await app.evaluate(async ({ clipboard, nativeImage, ClipboardItem }) => {
+    const [width, height] = [3000, 1000]
+    const pixels = Buffer.alloc(width * height * 4, 0x60)
+    const png = nativeImage.createFromBitmap(pixels, { width, height }).toPNG()
+    const blob = new Blob([new Uint8Array(png)], { type: 'image/png' })
+    await clipboard.write([new ClipboardItem({ 'image/png': blob })])
+  })
+  const input = page.getByRole('textbox', { name: 'Message to Claude' })
+  await input.focus()
+  await page.keyboard.press('Control+v')
+  const pending = page.getByLabel('Images sent with your message').locator('img')
+  await expect(pending).toHaveCount(1)
+
+  // And one dropped from Explorer.
+  await page.locator('.claude-compose').evaluate(async (el) => {
+    const canvas = new OffscreenCanvas(200, 100)
+    canvas.getContext('2d')!.fillRect(0, 0, 200, 100)
+    const blob = await canvas.convertToBlob({ type: 'image/png' })
+    const data = new DataTransfer()
+    data.items.add(new File([blob], 'tree.png', { type: 'image/png' }))
+    for (const type of ['dragover', 'drop']) {
+      el.dispatchEvent(new DragEvent(type, { dataTransfer: data, bubbles: true, cancelable: true }))
+    }
+  })
+  await expect(pending).toHaveCount(2)
+  await page.screenshot({ path: path.join('test-results', 'claude-images.png') })
+
+  await ask('Which tree is deeper?')
+  await expect(answers()).toHaveCount(2)
+  await expect(pending).toHaveCount(0)
+  await expect(page.locator('.claude-message.user').last().locator('img')).toHaveCount(2)
+  const sent = (await readLog())[1] as LogEntry & { imageSizes: string[] }
+  // The slide's image was already sent with the first question.
+  expect(sent.imageSizes).toEqual(['1568x523', '200x100'])
+  // Nothing was imported into the vault.
+  expect(await fs.readdir(path.join(env.vault, section))).not.toContain('tree.png')
+})
+
 test('text selected on the slide or in a text box goes along with the question', async () => {
   await openSlides(1)
   const slide = page.locator('.pdf-page[data-page="1"]')

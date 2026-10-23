@@ -1,9 +1,15 @@
 import { create } from 'zustand'
-import type { ChatEvent, ClaudeSettings, ClaudeSettingsUpdate } from '../../../shared/claude'
+import type {
+  ChatEvent,
+  ChatImage,
+  ClaudeSettings,
+  ClaudeSettingsUpdate
+} from '../../../shared/claude'
 import { findNode, isFolder, parentOf } from '../lib/tree'
 import { useApp } from '../store'
 import { pickPin, sendPin, shownChat, type Pin } from './chatPin'
 import { buildPacket, currentChips } from './context'
+import { chatImageOf } from './pastedImages'
 
 export type Part =
   | { kind: 'text'; text: string }
@@ -22,7 +28,15 @@ export interface Message {
   parts: Part[]
   /** Labels of the context chips sent with a question. */
   context?: string[]
+  /** Images I pasted or dropped in with a question, as object URLs. */
+  images?: string[]
   error?: string
+}
+
+/** An image waiting to go with the next question. */
+export interface PendingImage {
+  url: string
+  image: ChatImage
 }
 
 interface Chat {
@@ -48,6 +62,8 @@ interface ChatState {
   attached: string[]
   /** Text I selected in the chat, sent along with the next message. */
   quoted: string | null
+  /** Images pasted or dropped in for the next message. */
+  images: PendingImage[]
   /** The chat whose running answer may edit without asking ("Accept all"). */
   acceptingAll: string | null
 
@@ -62,6 +78,8 @@ interface ChatState {
   openInCode(folder: string): Promise<void>
   removeChip(id: string): void
   attach(path: string): void
+  addImages(files: File[]): Promise<void>
+  removeImage(url: string): void
   quote(text: string | null): void
   loadSettings(): Promise<void>
   saveSettings(update: ClaudeSettingsUpdate): Promise<void>
@@ -254,6 +272,7 @@ export const useChat = create<ChatState>((set, get) => {
     removedChips: [],
     attached: [],
     quoted: null,
+    images: [],
     acceptingAll: null,
 
     setOpen(open) {
@@ -285,7 +304,7 @@ export const useChat = create<ChatState>((set, get) => {
 
     async send(chat, question) {
       if (get().running || !question.trim()) return
-      const { removedChips, attached, quoted } = get()
+      const { removedChips, attached, quoted, images } = get()
       const chips = currentChips(attached, quoted).filter((c) => !removedChips.includes(c.id))
       update(chat, (c) => ({
         ...c,
@@ -295,7 +314,8 @@ export const useChat = create<ChatState>((set, get) => {
             id: id(),
             role: 'user',
             parts: [{ kind: 'text', text: question.trim() }],
-            context: chips.map((c) => c.label)
+            context: chips.map((c) => c.label),
+            ...(images.length && { images: images.map((i) => i.url) })
           },
           { id: id(), role: 'assistant', parts: [] }
         ]
@@ -305,13 +325,18 @@ export const useChat = create<ChatState>((set, get) => {
         pin: sendPin(chat, get().pin),
         removedChips: [],
         attached: [],
-        quoted: null
+        quoted: null,
+        images: []
       })
       try {
         const lastImage = get().chats[chat]?.lastImage ?? null
         const packet = await buildPacket(chat, chips, question.trim(), lastImage)
         if (packet.imageKey) update(chat, (c) => ({ ...c, lastImage: packet.imageKey }))
-        await window.api.claude.send({ chat, text: packet.text, images: packet.images })
+        await window.api.claude.send({
+          chat,
+          text: packet.text,
+          images: [...packet.images, ...images.map((i) => i.image)]
+        })
       } catch (err) {
         if (get().running === chat) onEvent(chat, { type: 'done', error: (err as Error).message })
       }
@@ -338,6 +363,24 @@ export const useChat = create<ChatState>((set, get) => {
       } catch (err) {
         app.showError(err instanceof Error ? err.message : String(err))
       }
+    },
+
+    async addImages(files) {
+      const added = await Promise.all(
+        files.map(async (file) => ({
+          url: URL.createObjectURL(file),
+          image: await chatImageOf(file)
+        }))
+      ).catch((err: Error) => {
+        useApp.getState().showError(`Could not read that image: ${err.message}`)
+        return []
+      })
+      set((s) => ({ images: [...s.images, ...added] }))
+    },
+
+    removeImage(url) {
+      URL.revokeObjectURL(url)
+      set((s) => ({ images: s.images.filter((i) => i.url !== url) }))
     },
 
     removeChip: (chipId) => set((s) => ({ removedChips: [...s.removedChips, chipId] })),

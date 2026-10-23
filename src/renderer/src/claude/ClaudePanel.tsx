@@ -13,12 +13,14 @@ import { resolveLink } from '../editor/links'
 import { readZoom, saveZoom, zoomByWheel } from '../editor/zoom'
 import { RenderedHtml } from '../components/RenderedHtml'
 import { renderChatMarkdown } from '../lib/markdown'
+import { draggingFiles } from '../lib/drop'
 import { findNode, isFolder } from '../lib/tree'
 import { useApp } from '../store'
 import { chatOf, useChat, useShownChat, type Message, type Part } from './chat'
 import { chatGroups, type ChatGroup } from './chatPin'
 import { currentChips } from './context'
 import { selectedText } from './selectedText'
+import { isImageFile } from './pastedImages'
 import { SKILLS } from './skills'
 import { TerminalView } from './TerminalView'
 
@@ -386,6 +388,13 @@ const MessageView = memo(function MessageView({
     return (
       <div className="claude-message user">
         <div className="claude-question">{text}</div>
+        {!!message.images?.length && (
+          <div className="claude-images">
+            {message.images.map((url) => (
+              <img key={url} src={url} alt="Image sent with the question" />
+            ))}
+          </div>
+        )}
         {!!message.context?.length && (
           <div className="claude-sent-context muted">{message.context.join(' · ')}</div>
         )}
@@ -479,6 +488,7 @@ function ChatInput({ chat, busy }: { chat: string; busy: boolean }): React.JSX.E
   const attached = useChat((s) => s.attached)
   const quoted = useChat((s) => s.quoted)
   const removed = useChat((s) => s.removedChips)
+  const images = useChat((s) => s.images)
   const chips = currentChips(attached, quoted).filter((c) => !removed.includes(c.id))
   const [chats, setChats] = useState<ChatInfo[]>([])
   const picking = picker?.kind === '@'
@@ -595,8 +605,29 @@ function ChatInput({ chat, busy }: { chat: string; busy: boolean }): React.JSX.E
     }
   }
 
+  /** Pasted or dropped image files; true when there were any. */
+  const takeImages = (files: FileList): boolean => {
+    const found = [...files].filter(isImageFile)
+    if (found.length) void useChat.getState().addImages(found)
+    return found.length > 0
+  }
+
   return (
-    <div className="claude-compose">
+    <div
+      className="claude-compose"
+      onDragOver={(e) => {
+        if (!draggingFiles(e)) return
+        e.preventDefault()
+        e.dataTransfer.dropEffect = 'copy'
+      }}
+      onDrop={(e) => {
+        // The workspace imports what is not handled here, so only images are taken.
+        if (draggingFiles(e) && takeImages(e.dataTransfer.files)) {
+          e.preventDefault()
+          ref.current?.focus()
+        }
+      }}
+    >
       <div className="claude-quick">
         {QUICK_ACTIONS.map((action) => (
           <button
@@ -618,6 +649,22 @@ function ChatInput({ chat, busy }: { chat: string; busy: boolean }): React.JSX.E
                 className="chip-remove"
                 aria-label={`Leave out ${chip.label}`}
                 onClick={() => useChat.getState().removeChip(chip.id)}
+              >
+                <Icon name="close" />
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+      {images.length > 0 && (
+        <div className="claude-images" aria-label="Images sent with your message">
+          {images.map((image) => (
+            <span key={image.url} className="claude-image">
+              <img src={image.url} alt="Pasted image" />
+              <button
+                className="chip-remove"
+                aria-label="Leave out this image"
+                onClick={() => useChat.getState().removeImage(image.url)}
               >
                 <Icon name="close" />
               </button>
@@ -654,6 +701,9 @@ function ChatInput({ chat, busy }: { chat: string; busy: boolean }): React.JSX.E
           aria-label="Message to Claude"
           onChange={onChange}
           onKeyDown={onKeyDown}
+          onPaste={(e) => {
+            if (takeImages(e.clipboardData.files)) e.preventDefault()
+          }}
           onBlur={() => setPicker(null)}
         />
         {busy ? (
