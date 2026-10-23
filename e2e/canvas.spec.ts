@@ -178,13 +178,36 @@ test('dragging from a box edge to another box connects them; the panel sets the 
   await expect(page.locator('.canvas-edge')).toHaveCount(5)
   const panel = page.locator('.canvas-edge-panel')
   await expect(panel).toBeVisible()
-  await panel.locator('select').selectOption('aggregation')
+  // The relations show their arrow and what they mean.
+  await panel.getByRole('button', { name: 'Relation: Arrow' }).click()
+  const relations = panel.getByRole('listbox', { name: 'Relation' })
+  await expect(relations.getByRole('option')).toHaveCount(8)
+  await expect(relations.getByRole('option', { name: /^Composition/ })).toContainText(
+    'lives and dies with the whole'
+  )
+  await page.screenshot({ path: path.join('test-results', 'canvas-relations.png') })
+  await relations.getByRole('option', { name: /^Aggregation/ }).click()
+  await expect(relations).toBeHidden()
   await panel.locator('input[name="toLabel"]').fill('0..1')
   await panel.locator('input[name="toLabel"]').press('Enter')
   await page.screenshot({ path: path.join('test-results', 'canvas-edge-panel.png') })
   await expect
     .poll(async () => (await read('Shop.canvas')).edges.at(-1))
     .toMatchObject({ fromNode: 'line', toNode: 'vip', relation: 'aggregation', toLabel: '0..1' })
+})
+
+test('pointing at an arrow says what it means, with the names of its boxes', async () => {
+  await openShop()
+  const tip = page.locator('.canvas-edge-tip')
+  // The inheritance arrow from VipCustomer up to Customer.
+  const line = (await page.locator('[data-edge="is"] .canvas-edge-line').boundingBox())!
+  await page.mouse.move(line.x + line.width / 2, line.y + line.height / 2)
+  await expect(tip).toContainText('Inheritance: VipCustomer is a kind of Customer.')
+  // It fades in after a moment, so passing over arrows does not flash tips.
+  await expect(tip).toHaveCSS('opacity', '1')
+  await page.screenshot({ path: path.join('test-results', 'canvas-edge-tip.png') })
+  await page.mouse.move(line.x + 200, line.y + line.height / 2)
+  await expect(tip).toHaveCount(0)
 })
 
 test('moving a group moves what is inside, as one undo step', async () => {

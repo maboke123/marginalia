@@ -3684,8 +3684,7 @@ input.canvas-group-label {
   font-size: 12px;
 }
 
-.canvas-edge-panel input,
-.canvas-edge-panel select {
+.canvas-edge-panel input {
   width: 84px;
   height: 26px;
   padding: 0 6px;
@@ -3700,8 +3699,117 @@ input.canvas-group-label {
   width: 150px;
 }
 
-.canvas-edge-panel select {
-  width: auto;
+.canvas-relation {
+  position: relative;
+}
+
+.canvas-relation-button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 6px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--bg-input);
+  color: var(--text);
+  font: inherit;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.canvas-relation-button:hover {
+  background: var(--bg-hover);
+}
+
+.canvas-relation-button svg:last-child {
+  width: 12px;
+  height: 12px;
+  color: var(--text-muted);
+}
+
+.canvas-relation-preview {
+  flex: none;
+  width: 44px;
+  height: 11px;
+  overflow: visible;
+  color: var(--text);
+}
+
+.canvas-relation-menu {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 0;
+  z-index: 3;
+  width: 340px;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-menu);
+  box-shadow: var(--shadow-menu);
+}
+
+.canvas-relation-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  width: 100%;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: var(--radius);
+  background: none;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.canvas-relation-option:hover,
+.canvas-relation-option.pressed {
+  background: var(--bg-hover);
+}
+
+.canvas-relation-option .canvas-relation-preview {
+  margin-top: 4px;
+}
+
+.canvas-relation-option > span {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.canvas-relation-option strong {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.canvas-edge-tip {
+  position: absolute;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-width: 300px;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-menu);
+  box-shadow: var(--shadow-menu);
+  font-size: 12px;
+  line-height: 1.35;
+  pointer-events: none;
+  transform: translate(12px, 14px);
+  opacity: 0;
+  animation: canvas-tip-in 100ms 300ms forwards;
+}
+
+@keyframes canvas-tip-in {
+  to {
+    opacity: 1;
+  }
 }
 
 .canvas-ghost-bar {

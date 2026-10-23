@@ -7,14 +7,12 @@ import {
   newCanvasId,
   overlaps,
   PRESET_COLORS,
-  RELATIONS,
   withRelation,
   type CanvasData,
   type CanvasEdge,
   type CanvasNode,
   type InkNode,
   type Rect,
-  type Relation,
   type Shape,
   type Side,
   type TextNode
@@ -74,6 +72,8 @@ import {
 } from './ops'
 import { clickScale, makeScaled, TEMPLATES, type Template } from './shapes'
 import { ShapeMenu } from './ShapeMenu'
+import { RelationPicker } from './RelationPicker'
+import { relationMeaning, relationSentence } from './relations'
 import { sourceRange } from './caret'
 
 type Tool = 'select' | 'hand' | 'text' | 'pen'
@@ -84,16 +84,6 @@ const TOOLS: { tool: Tool; icon: IconName; label: string; key: string }[] = [
   { tool: 'text', icon: 'text', label: 'Text box', key: 'T' },
   { tool: 'pen', icon: 'pen', label: 'Pen', key: 'P' }
 ]
-
-const RELATION_LABELS: Record<Relation, string> = {
-  association: 'Association',
-  directed: 'Directed association',
-  inheritance: 'Inheritance',
-  realization: 'Realization',
-  dependency: 'Dependency',
-  aggregation: 'Aggregation',
-  composition: 'Composition'
-}
 
 const SNAP_PX = 6
 const CLIPBOARD_KIND = 'marginalia-canvas'
@@ -336,6 +326,10 @@ function CanvasSurface({
   const [placing, setPlacing] = useState<Template | null>(null)
   const [cursor, setCursor] = useState<{ x: number; y: number } | null>(null)
   const [hover, setHover] = useState<string | null>(null)
+  // The arrow under the pointer and where the pointer came onto it, for the tip saying what it means.
+  const [hoverEdge, setHoverEdge] = useState<{ id: string; at: { x: number; y: number } } | null>(
+    null
+  )
   // What the last press was on: a double-click's own target is the surface, which holds the
   // pointer capture from that press.
   const downOn = useRef<{ node?: string; edge?: string }>({})
@@ -770,6 +764,11 @@ function CanvasSurface({
           : null
       if (near !== hover) setHover(near)
       if (placing) setCursor(at)
+      const edgeId =
+        tool === 'select' && !near && !ghost
+          ? ((e.target as Element).closest<SVGElement>('[data-edge]')?.dataset.edge ?? null)
+          : null
+      if (edgeId !== (hoverEdge?.id ?? null)) setHoverEdge(edgeId ? { id: edgeId, at } : null)
       return
     }
     switch (d.kind) {
@@ -1184,6 +1183,10 @@ function CanvasSurface({
       ? data.edges.find((x) => x.id === selection.edges[0])
       : undefined
   const edgeAt = edge ? geometries.get(edge.id)?.middle : undefined
+  const tipEdge =
+    hoverEdge && hoverEdge.id !== edge?.id && !draft
+      ? data.edges.find((x) => x.id === hoverEdge.id)
+      : undefined
 
   const transform = `scale(${camera.zoom}) translate(${-camera.x}px, ${-camera.y}px)`
   const nodeView = (n: CanvasNode): React.JSX.Element => (
@@ -1428,7 +1431,10 @@ function CanvasSurface({
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}
           onPointerCancel={onPointerUp}
-          onPointerLeave={() => setCursor(null)}
+          onPointerLeave={() => {
+            setCursor(null)
+            setHoverEdge(null)
+          }}
           onDoubleClick={onDoubleClick}
           onContextMenu={onContextMenu}
           onKeyDown={onKeyDown}
@@ -1526,6 +1532,25 @@ function CanvasSurface({
               Back to the boxes (Home)
             </button>
           )}
+          {tipEdge?.relation && hoverEdge && (
+            <div
+              className="canvas-edge-tip"
+              role="tooltip"
+              style={{
+                left: (hoverEdge.at.x - camera.x) * camera.zoom,
+                top: (hoverEdge.at.y - camera.y) * camera.zoom
+              }}
+            >
+              <span>
+                {relationSentence(
+                  tipEdge.relation,
+                  nodeById(data, tipEdge.fromNode),
+                  nodeById(data, tipEdge.toNode)
+                )}
+              </span>
+              <span className="muted">{relationMeaning(tipEdge.relation)}</span>
+            </div>
+          )}
           {edge && edgeAt && !ghost && (
             <EdgePanel
               key={edge.id}
@@ -1609,25 +1634,12 @@ function EdgePanel({
     >
       <label>
         <span className="muted">Relation</span>
-        <select
-          value={edge.relation ?? ''}
-          onChange={(e) =>
-            doc
-              .getState()
-              .change((d) =>
-                updateEdge(d, edge.id, (x) =>
-                  withRelation(x, (e.target.value || undefined) as Relation | undefined)
-                )
-              )
+        <RelationPicker
+          value={edge.relation}
+          onChange={(relation) =>
+            doc.getState().change((d) => updateEdge(d, edge.id, (x) => withRelation(x, relation)))
           }
-        >
-          <option value="">Arrow</option>
-          {RELATIONS.map((r) => (
-            <option key={r} value={r}>
-              {RELATION_LABELS[r]}
-            </option>
-          ))}
-        </select>
+        />
       </label>
       {field('fromLabel', 'Start')}
       {field('label', 'Label')}
