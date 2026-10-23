@@ -3644,6 +3644,10 @@ input.canvas-group-label {
   vector-effect: non-scaling-stroke;
 }
 
+.canvas-guide.gap {
+  fill: none;
+}
+
 .canvas-marquee {
   position: absolute;
   border: calc(1px / var(--canvas-zoom)) solid var(--accent);

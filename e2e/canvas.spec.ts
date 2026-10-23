@@ -523,6 +523,41 @@ test('a word double-clicked in a drawn class is selected, to type over', async (
     .toBe('Order\n---\n- created: Date\n---\n+ sum(): float')
 })
 
+test('a moved box snaps to the same space as its neighbours and shows both spaces', async () => {
+  const box = (id: string, x: number): object => ({
+    id,
+    type: 'text',
+    text: id,
+    x,
+    y: 0,
+    width: 100,
+    height: 50
+  })
+  await fs.writeFile(
+    file('Row.canvas'),
+    JSON.stringify({ nodes: [box('a', 0), box('b', 140), box('c', 320)], edges: [] })
+  )
+  await row('Design of Software Systems').click()
+  await row('les_1').click()
+  await row('Row').click()
+  const c = page.locator('[data-node="c"]')
+  await expect(c).toBeVisible()
+  const zoom =
+    Number((await page.locator('.canvas-zoom-value').textContent())!.replace('%', '')) / 100
+  // 37 to the left would leave a space of 43; the other space is 40.
+  const at = (await c.boundingBox())!
+  await page.mouse.move(at.x + 20, at.y + 20)
+  await page.mouse.down()
+  await page.mouse.move(at.x + 20 - 37 * zoom, at.y + 20, { steps: 8 })
+  await expect(page.locator('.canvas-guide.gap')).toHaveCount(2)
+  await page.screenshot({ path: path.join('test-results', 'canvas-spacing.png') })
+  await page.mouse.up()
+  await expect(page.locator('.canvas-guide.gap')).toHaveCount(0)
+  await expect
+    .poll(async () => (await read('Row.canvas')).nodes.find((n) => n.id === 'c')!.x)
+    .toBe(280)
+})
+
 test('an arrow dragged near a box snaps to its side; dots show without selecting', async () => {
   await openShop()
   const line = (await page.locator('[data-node="line"]').boundingBox())!

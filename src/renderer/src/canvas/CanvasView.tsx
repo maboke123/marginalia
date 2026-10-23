@@ -72,6 +72,7 @@ import {
 } from './ops'
 import { clickScale, makeScaled, TEMPLATES, type Template } from './shapes'
 import { ShapeMenu } from './ShapeMenu'
+import { snapSpacing, type Gap } from './spacing'
 import { RelationPicker } from './RelationPicker'
 import { relationMeaning, relationSentence } from './relations'
 import { sourceRange } from './caret'
@@ -320,7 +321,10 @@ function CanvasSurface({
   const cameraRef = useRef(camera)
   const [tool, setTool] = useState<Tool>('select')
   const [marquee, setMarquee] = useState<Rect | null>(null)
-  const [guides, setGuides] = useState<{ x: number | null; y: number | null }>({ x: null, y: null })
+  const [guides, setGuides] = useState<{ x: number | null; y: number | null; gaps?: Gap[] }>({
+    x: null,
+    y: null
+  })
   const [draft, setDraft] = useState<Draft | null>(null)
   // A shape picked in the Shapes menu, put down by the next click or drag on the canvas.
   const [placing, setPlacing] = useState<Template | null>(null)
@@ -643,10 +647,10 @@ function CanvasSurface({
     dx: number,
     dy: number,
     alt: boolean
-  ): { dx: number; dy: number; gx: number | null; gy: number | null } => {
+  ): { dx: number; dy: number; gx: number | null; gy: number | null; gaps: Gap[] } => {
     const moving = start.nodes.filter((n) => ids.has(n.id))
     const box = boundsOf(moving)
-    if (!box || !snapping || alt) return { dx, dy, gx: null, gy: null }
+    if (!box || !snapping || alt) return { dx, dy, gx: null, gy: null, gaps: [] }
     const others = start.nodes.filter(
       (n) => !ids.has(n.id) && n.type !== 'group' && overlaps(near, n)
     )
@@ -663,7 +667,23 @@ function CanvasSurface({
     const threshold = SNAP_PX / cameraRef.current.zoom
     const sx = snapAxis(box.x + dx, anchorsX, threshold)
     const sy = snapAxis(box.y + dy, anchorsY, threshold)
-    return { dx: sx.pos - box.x, dy: sy.pos - box.y, gx: sx.guide, gy: sy.guide }
+    const result = { dx: sx.pos - box.x, dy: sy.pos - box.y, gx: sx.guide, gy: sy.guide }
+    // Equal spaces win over lining up when they need the smaller move.
+    const gaps: Gap[] = []
+    const moved = { ...box, x: box.x + dx, y: box.y + dy }
+    const spaceX = snapSpacing(moved, others, 'x', threshold)
+    if (spaceX && (sx.guide === null || Math.abs(spaceX.delta) < Math.abs(sx.pos - moved.x))) {
+      result.dx = dx + spaceX.delta
+      result.gx = null
+      gaps.push(...spaceX.gaps)
+    }
+    const spaceY = snapSpacing(moved, others, 'y', threshold)
+    if (spaceY && (sy.guide === null || Math.abs(spaceY.delta) < Math.abs(sy.pos - moved.y))) {
+      result.dy = dy + spaceY.delta
+      result.gy = null
+      gaps.push(...spaceY.gaps)
+    }
+    return { ...result, gaps }
   }
 
   const onPointerDown = (e: React.PointerEvent): void => {
@@ -818,7 +838,7 @@ function CanvasSurface({
           s.begin()
         }
         const snapped = snapMove(d.ids, s.started(), dx, dy, e.altKey)
-        setGuides({ x: snapped.gx, y: snapped.gy })
+        setGuides({ x: snapped.gx, y: snapped.gy, gaps: snapped.gaps })
         s.update((data) => moveNodes(data, s.started(), d.ids, snapped.dx, snapped.dy))
       }
     }
@@ -1474,7 +1494,7 @@ function CanvasSurface({
               selected={chosenEdges}
               proposals={proposals}
               draft={draft}
-              guides={{ ...guides, view }}
+              guides={{ ...guides, view, tick: 4 / camera.zoom }}
             />
             {boxes.map(nodeView)}
             <EdgeLabels edges={allEdges} geometries={geometries} />

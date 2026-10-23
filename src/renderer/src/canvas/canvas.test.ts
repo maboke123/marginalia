@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import type { CanvasData, CanvasNode, InkStroke } from '../../../shared/canvas'
+import type { CanvasData, CanvasNode, InkStroke, Rect } from '../../../shared/canvas'
 import { fitCamera, toScreen, toWorld, zoomAt, zoomStep } from './camera'
 import { createCanvasDoc } from './doc'
 import { clickScale, makeScaled, templateByName } from './shapes'
 import { sourceRange, wordAround } from './caret'
+import { snapSpacing } from './spacing'
 import { edgeGeometry, edgePorts, freeEndSide, sideAt } from './edges'
 import {
   bringToFront,
@@ -298,6 +299,33 @@ describe('ink', () => {
         ])
       ).id
     ).not.toBe(first.id)
+  })
+})
+
+describe('equal spacing', () => {
+  const box = (x: number, y = 0, width = 100, height = 50): Rect => ({ x, y, width, height })
+
+  it('repeats a space already in the row', () => {
+    // A and B 40 apart; the moved box lands 40 after B.
+    const snap = snapSpacing(box(283), [box(0), box(140)], 'x', 6)
+    expect(snap?.delta).toBe(-3)
+    expect(snap?.gaps).toEqual([
+      { x1: 240, y1: 25, x2: 280, y2: 25 },
+      { x1: 100, y1: 25, x2: 140, y2: 25 }
+    ])
+  })
+
+  it('centres between two neighbours', () => {
+    const snap = snapSpacing(box(202), [box(0), box(400)], 'x', 6)
+    expect(snap?.delta).toBe(-2)
+    expect(snap?.gaps.map((g) => g.x2 - g.x1)).toEqual([100, 100])
+  })
+
+  it('works along columns, and ignores boxes in another row or out of reach', () => {
+    const column = [box(0, 0), box(0, 80)]
+    expect(snapSpacing(box(0, 162), column, 'y', 6)?.delta).toBe(-2)
+    expect(snapSpacing(box(283, 300), [box(0), box(140)], 'x', 6)).toBeNull()
+    expect(snapSpacing(box(300), [box(0), box(140)], 'x', 6)).toBeNull()
   })
 })
 

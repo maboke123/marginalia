@@ -8,6 +8,7 @@ import {
   type Side
 } from '../../../shared/canvas'
 import { edgeGeometry, freeEndSide, type EdgeGeometry } from './edges'
+import type { Gap } from './spacing'
 
 interface EdgeProps {
   edge: CanvasEdge
@@ -93,7 +94,8 @@ export function CanvasEdges({
     to: { x: number; y: number }
     land: { rect: Rect; side: Side } | null
   } | null
-  guides: { x: number | null; y: number | null; view: Rect }
+  /** Alignment lines, and equal spaces with `tick` long ends. */
+  guides: { x: number | null; y: number | null; view: Rect; gaps?: Gap[]; tick?: number }
 }): React.JSX.Element {
   let draftPath: string | null = null
   if (draft) {
@@ -141,6 +143,22 @@ export function CanvasEdges({
           x2={view.x + view.width}
         />
       )}
+      {guides.gaps?.map((g, i) => {
+        // The ends stand across the gap.
+        const t = guides.tick ?? 4
+        const [ex, ey] = g.y1 === g.y2 ? [0, t] : [t, 0]
+        return (
+          <path
+            key={i}
+            className="canvas-guide gap"
+            d={
+              `M${g.x1},${g.y1} L${g.x2},${g.y2} ` +
+              `M${g.x1 - ex},${g.y1 - ey} L${g.x1 + ex},${g.y1 + ey} ` +
+              `M${g.x2 - ex},${g.y2 - ey} L${g.x2 + ex},${g.y2 + ey}`
+            }
+          />
+        )
+      })}
     </svg>
   )
 }
