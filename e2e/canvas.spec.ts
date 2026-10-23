@@ -483,3 +483,26 @@ test('a canvas linked to slides shows under them and opens next to them', async 
   await expect(page.locator('.canvas-surface')).toBeVisible()
   await expect(page.locator('.canvas-toolbar .note-switch')).toContainText('Shop')
 })
+
+test('a canvas dragged onto a folder moves there; dropped on slides it links to them', async () => {
+  await fs.mkdir(file('../les_2'), { recursive: true })
+  await makeSlides(file('../les_2/Patterns.pdf'), 3)
+  await row('Design of Software Systems').click()
+  await row('les_1').click()
+  await expect(row('les_2')).toBeVisible()
+
+  await row('Shop').dragTo(row('les_2'))
+  await expect.poll(() => fs.readdir(file('../les_2'))).toContain('Shop.canvas')
+
+  // les_2 opens by itself to show where it went; drop it on the middle of the slides.
+  if (!(await row('Patterns').isVisible())) await row('les_2').click()
+  await row('Shop').dragTo(row('Patterns'))
+  await expect
+    .poll(async () => {
+      const state = JSON.parse(
+        await fs.readFile(path.join(env.vault, '.marginalia', 'state.json'), 'utf8')
+      )
+      return state.notes?.['Design of Software Systems/les_2/Patterns.pdf']
+    })
+    .toEqual(['Design of Software Systems/les_2/Shop.canvas'])
+})

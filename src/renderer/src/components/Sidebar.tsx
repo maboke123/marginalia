@@ -10,6 +10,7 @@ import { draggingFiles, importDroppedFiles } from '../lib/drop'
 import {
   childrenOf,
   displayOrder,
+  findNode,
   isFolder,
   isWithin,
   parentOf,
@@ -31,6 +32,9 @@ interface MenuState {
   y: number
   items: MenuItem[]
 }
+
+const linksTo = (node: VaultNode | null, target: VaultNode): boolean =>
+  !!node && target.kind === 'pdf' && (node.kind === 'markdown' || node.kind === 'canvas')
 
 interface DropTarget {
   path: string
@@ -225,6 +229,8 @@ export function Sidebar(): React.JSX.Element {
   function zoneFor(e: React.DragEvent, row: Row): DropZone {
     const rect = e.currentTarget.getBoundingClientRect()
     const y = (e.clientY - rect.top) / rect.height
+    // A note or canvas dropped on the middle of slides is linked to them.
+    if (linksTo(dragged.current, row.node) && y >= 0.25 && y <= 0.75) return 'into'
     if (!isFolder(row.node)) return y < 0.5 ? 'before' : 'after'
     if (y < 0.25) return 'before'
     // Below an open folder, "after" would land visually between it and its first child.
@@ -247,6 +253,18 @@ export function Sidebar(): React.JSX.Element {
     return before !== node.name
   }
 
+  /** Links a dropped note or canvas to slides; one from another folder moves next to them. */
+  async function linkByDrop(node: VaultNode, pdf: string): Promise<void> {
+    const folder = parentOf(pdf)
+    let path = node.path
+    if (parentOf(path) !== folder) {
+      await app.move(path, folder)
+      path = `${folder}/${node.name}`
+      if (!findNode(useApp.getState().nodes, path)) return
+    }
+    await app.setLinked(pdf, path, true)
+  }
+
   function onDragOver(e: React.DragEvent, row: Row): void {
     const node = dragged.current
     if (!node) {
@@ -264,6 +282,12 @@ export function Sidebar(): React.JSX.Element {
       return
     }
     const zone = zoneFor(e, row)
+    if (zone === 'into' && row.node.kind === 'pdf') {
+      e.preventDefault()
+      e.dataTransfer.dropEffect = 'link'
+      if (drop?.path !== row.node.path || drop.zone !== zone) setDrop({ path: row.node.path, zone })
+      return
+    }
     const { parent, before } = dropTarget(row, zone)
     if (!canDrop(node, parent, before)) {
       setDrop(null)
@@ -285,7 +309,12 @@ export function Sidebar(): React.JSX.Element {
       else if (row.node.kind === 'pdf') void importDroppedFiles(e, row.parent, row.node.path)
       return
     }
-    const { parent, before } = dropTarget(row, zoneFor(e, row))
+    const zone = zoneFor(e, row)
+    if (zone === 'into' && row.node.kind === 'pdf') {
+      void linkByDrop(node, row.node.path)
+      return
+    }
+    const { parent, before } = dropTarget(row, zone)
     if (canDrop(node, parent, before)) app.move(node.path, parent, before)
   }
 
@@ -394,7 +423,7 @@ export function Sidebar(): React.JSX.Element {
             onRename={(name) => finishRename(row.node.path, name)}
             onDragStart={(e) => {
               dragged.current = row.node
-              e.dataTransfer.effectAllowed = 'move'
+              e.dataTransfer.effectAllowed = 'linkMove'
               e.dataTransfer.setData('text/plain', row.node.path)
             }}
             onDragOver={(e) => onDragOver(e, row)}
