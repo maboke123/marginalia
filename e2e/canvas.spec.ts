@@ -11,7 +11,16 @@ const lesson = 'Design of Software Systems/les_1'
 const file = (name: string): string => path.join(env.vault, lesson, name)
 
 interface Saved {
-  nodes: { id: string; type: string; text?: string; x: number; y: number; file?: string }[]
+  nodes: {
+    id: string
+    type: string
+    text?: string
+    x: number
+    y: number
+    width: number
+    height: number
+    file?: string
+  }[]
   edges: {
     id: string
     fromNode: string
