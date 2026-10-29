@@ -1,9 +1,20 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import logo from '../../../../build/icon.svg'
 import { CanvasView } from '../canvas/CanvasView'
 import { MarkdownEditor } from '../editor/MarkdownEditor'
 import { SidebarButton } from './SidebarButton'
-import { draggingFiles, importDroppedFiles } from '../lib/drop'
+import { TREE_FILE, draggingFiles, draggingTreeFile, importDroppedFiles } from '../lib/drop'
+import {
+  MAX_PANES,
+  dropSide,
+  gridOf,
+  moveBorder,
+  paneRects,
+  sideOf,
+  type Grid,
+  type Rect,
+  type Side
+} from '../lib/grid'
 import { displayName, findNode } from '../lib/tree'
 import { PdfViewer } from '../pdf/PdfViewer'
 import { useApp } from '../store'
@@ -45,17 +56,63 @@ function EmptyPane({ index }: { index: number }): React.JSX.Element {
           </li>
         ))}
       </ul>
-      <button
-        className="button"
-        onClick={() => {
-          useApp.getState().focusPane(index)
-          useApp.getState().setOverlay('switcher')
-        }}
-      >
-        Find a file
-      </button>
+      <div className="grid-empty-actions">
+        <button
+          className="button"
+          onClick={() => {
+            useApp.getState().focusPane(index)
+            useApp.getState().setOverlay('switcher')
+          }}
+        >
+          Find a file
+        </button>
+        <button className="text-button" onClick={() => useApp.getState().closePane(index)}>
+          Close this pane
+        </button>
+      </div>
     </div>
   )
+}
+
+/** Drags the border after column `column` (or, with `row`, after that pane in the column). */
+function startBorderDrag(
+  e: React.PointerEvent,
+  host: HTMLElement,
+  grid: Grid,
+  column: number,
+  row?: number
+): void {
+  e.preventDefault()
+  e.currentTarget.setPointerCapture(e.pointerId)
+  const box = host.getBoundingClientRect()
+  const start = row === undefined ? e.clientX : e.clientY
+  const onMove = (ev: PointerEvent): void => {
+    if (row === undefined) {
+      const delta = (ev.clientX - start) / box.width
+      useApp.getState().setGridSizes(moveBorder(grid.widths, column, delta), grid.heights)
+    } else {
+      const delta = (ev.clientY - start) / box.height
+      const heights = grid.heights.map((h, c) => (c === column ? moveBorder(h, row, delta) : h))
+      useApp.getState().setGridSizes(grid.widths, heights)
+    }
+  }
+  window.addEventListener('pointermove', onMove)
+  window.addEventListener('pointerup', () => window.removeEventListener('pointermove', onMove), {
+    once: true
+  })
+}
+
+const percent = (r: Rect): React.CSSProperties => ({
+  left: `${r.left * 100}%`,
+  top: `${r.top * 100}%`,
+  width: `${r.width * 100}%`,
+  height: `${r.height * 100}%`
+})
+
+interface TreeDrop {
+  pane: number
+  side: Side | 'center'
+  rect: Rect
 }
 
 export function Workspace(): React.JSX.Element {
@@ -67,8 +124,59 @@ export function Workspace(): React.JSX.Element {
   const grid = useApp((s) => s.grid)
   const [dropping, setDropping] = useState(false)
   const [split, setSplit] = useState(loadSplit)
+  const mainRef = useRef<HTMLElement>(null)
+  // Where a file dragged from the sidebar would open.
+  const [treeDrop, setTreeDrop] = useState<TreeDrop | null>(null)
+
+  useEffect(() => {
+    const clear = (): void => setTreeDrop(null)
+    window.addEventListener('dragend', clear)
+    return () => window.removeEventListener('dragend', clear)
+  }, [])
+
+  /** The pane under the pointer and which part of it a file from the sidebar goes to. */
+  const treeDropAt = (e: React.DragEvent): TreeDrop | null => {
+    const host = mainRef.current!.getBoundingClientRect()
+    const x = (e.clientX - host.left) / host.width
+    const y = (e.clientY - host.top) / host.height
+    const layout =
+      grid ??
+      (lectureMode
+        ? gridOf([slidesFile, summaryFile], [split, 1 - split])
+        : activeFile
+          ? gridOf([activeFile])
+          : null)
+    if (!layout) return { pane: 0, side: 'center', rect: { left: 0, top: 0, width: 1, height: 1 } }
+    const rects = paneRects(layout)
+    const pane = rects.findIndex(
+      (r) => x >= r.left && x <= r.left + r.width && y >= r.top && y <= r.top + r.height
+    )
+    if (pane < 0) return null
+    const r = rects[pane]
+    const full = layout.panes.length >= MAX_PANES
+    const side = full ? 'center' : dropSide((x - r.left) / r.width, (y - r.top) / r.height)
+    return { pane, side, rect: sideOf(r, side) }
+  }
 
   const dropProps = {
+    ref: mainRef,
+    // Capture: an editor under the pointer would otherwise take the drop as text.
+    onDragOverCapture(e: React.DragEvent) {
+      if (!draggingTreeFile(e)) return
+      e.preventDefault()
+      e.stopPropagation()
+      e.dataTransfer.dropEffect = 'link'
+      const next = treeDropAt(e)
+      if (JSON.stringify(next) !== JSON.stringify(treeDrop)) setTreeDrop(next)
+    },
+    onDropCapture(e: React.DragEvent) {
+      if (!draggingTreeFile(e)) return
+      e.preventDefault()
+      e.stopPropagation()
+      const target = treeDropAt(e)
+      setTreeDrop(null)
+      if (target) useApp.getState().openBeside(e.dataTransfer.getData(TREE_FILE), target)
+    },
     onDragOver(e: React.DragEvent) {
       if (!draggingFiles(e)) return
       e.preventDefault()
@@ -76,7 +184,9 @@ export function Workspace(): React.JSX.Element {
       setDropping(true)
     },
     onDragLeave(e: React.DragEvent) {
-      if (!e.currentTarget.contains(e.relatedTarget as Node)) setDropping(false)
+      if (e.currentTarget.contains(e.relatedTarget as Node)) return
+      setDropping(false)
+      setTreeDrop(null)
     },
     onDrop(e: React.DragEvent) {
       // Images dropped on a slide were already put there by the page.
@@ -88,6 +198,12 @@ export function Workspace(): React.JSX.Element {
   }
   const className = (extra: string): string =>
     ['workspace', extra, dropping ? 'dropping' : ''].filter(Boolean).join(' ')
+  const dropHint = treeDrop && (
+    <div
+      className={treeDrop.side === 'center' ? 'pane-drop-hint replace' : 'pane-drop-hint'}
+      style={percent(treeDrop.rect)}
+    />
+  )
 
   const viewFor = (path: string | null): React.JSX.Element | null => {
     const node = path ? findNode(nodes, path) : null
@@ -102,19 +218,61 @@ export function Workspace(): React.JSX.Element {
   }
 
   if (grid) {
+    const rects = paneRects(grid)
+    let empty = 0
     return (
-      <main className={className(`grid grid-${grid.panes.length}`)} {...dropProps}>
-        {grid.panes.map((path, i) => (
-          <section
-            key={i}
-            className={i === grid.focus ? 'grid-pane focused' : 'grid-pane'}
-            aria-label={`Pane ${i + 1}`}
-            onPointerDownCapture={() => useApp.getState().focusPane(i)}
-            onFocusCapture={() => useApp.getState().focusPane(i)}
-          >
-            {viewFor(path) ?? <EmptyPane index={i} />}
-          </section>
+      <main className={className('grid')} {...dropProps}>
+        {grid.panes.map((path, i) => {
+          const r = rects[i]
+          const edges = [r.left > 0 && 'after-left', r.top > 0 && 'after-top']
+          return (
+            <section
+              // Keyed by file, so a pane that moves when another closes keeps its viewer.
+              key={path ?? `empty-${empty++}`}
+              className={['grid-pane', i === grid.focus && 'focused', ...edges]
+                .filter(Boolean)
+                .join(' ')}
+              style={percent(r)}
+              aria-label={`Pane ${i + 1}`}
+              onPointerDownCapture={() => useApp.getState().focusPane(i)}
+              onFocusCapture={() => useApp.getState().focusPane(i)}
+            >
+              {viewFor(path) ?? <EmptyPane index={i} />}
+            </section>
+          )
+        })}
+        {grid.widths.slice(0, -1).map((_, c) => (
+          <div
+            key={`col-${c}`}
+            className="grid-border vertical"
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="Drag to resize the panes"
+            style={{ left: `${grid.widths.slice(0, c + 1).reduce((a, b) => a + b) * 100}%` }}
+            onPointerDown={(e) => startBorderDrag(e, mainRef.current!, grid, c)}
+          />
         ))}
+        {grid.heights.flatMap((h, c) =>
+          h.slice(0, -1).map((_, row) => {
+            const r = rects[grid.columns.slice(0, c).reduce((a, b) => a + b, 0) + row]
+            return (
+              <div
+                key={`row-${c}-${row}`}
+                className="grid-border horizontal"
+                role="separator"
+                aria-orientation="horizontal"
+                aria-label="Drag to resize the panes"
+                style={{
+                  left: `${r.left * 100}%`,
+                  width: `${r.width * 100}%`,
+                  top: `${(r.top + r.height) * 100}%`
+                }}
+                onPointerDown={(e) => startBorderDrag(e, mainRef.current!, grid, c, row)}
+              />
+            )
+          })
+        )}
+        {dropHint}
       </main>
     )
   }
@@ -152,6 +310,7 @@ export function Workspace(): React.JSX.Element {
         <section className="lecture-pane">
           {viewFor(summaryFile) ?? <p className="pdf-message">No summary open.</p>}
         </section>
+        {dropHint}
       </main>
     )
   }
@@ -163,12 +322,14 @@ export function Workspace(): React.JSX.Element {
         <SidebarButton />
         <p className="muted">Select a page in the sidebar, or drop a PDF here to import it.</p>
         <img className="empty-logo" src={logo} alt="" width={160} height={160} />
+        {dropHint}
       </main>
     )
   }
   return (
     <main className={className('')} {...dropProps}>
       {view}
+      {dropHint}
     </main>
   )
 }

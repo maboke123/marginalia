@@ -4,7 +4,17 @@ import type { LinkHow, NotebookColor, Position, VaultInfo, VaultNode } from '../
 import { withLink, withoutLink, type NoteLinks } from '../../shared/pairing'
 import { ERASER_SIZES, PEN_WIDTHS, DEFAULT_TEXT_SIZE } from '../../shared/palette'
 import { flushAll } from './lib/flush'
-import { openInGrid, remapGrid, resizeGrid, type Grid } from './lib/grid'
+import {
+  closePane,
+  gridOf,
+  openInGrid,
+  remapGrid,
+  resizeGrid,
+  splitPane,
+  MAX_PANES,
+  type Grid,
+  type Side
+} from './lib/grid'
 import { canvasFrom } from '../../shared/canvas'
 import { noteHtml } from './lib/notePdf'
 import {
@@ -166,9 +176,18 @@ interface AppState {
   toggleSidebar(): void
   /** 2, 3 or 4 panes side by side, or null for one file again. */
   setGrid(size: number | null): void
+  /** New shares of the width per column and of each column's height per pane. */
+  setGridSizes(widths: number[], heights: number[][]): void
   focusPane(index: number): void
+  /**
+   * Opens a file in a new pane on `side` of pane `pane` (of what is on screen when there
+   * is no grid yet); 'center' puts it in that pane. Without a target: right of the focused one.
+   */
+  openBeside(path: string, target?: { pane: number; side: Side | 'center' }): void
   /** Closes one file (in lecture mode the other stays open), or everything on screen. */
   closeFile(path?: string): void
+  /** Removes a pane of the grid; the others take its room. */
+  closePane(index: number): void
   /** Lecture mode: shows this note next to the slides and remembers it as their note. */
   showNote(note: string): Promise<void>
   /** Lecture mode: a new note in the slides' folder, linked to them and shown. */
@@ -508,8 +527,9 @@ export const useApp = create<AppState>((set, get) => {
     closeFile(path) {
       const { grid } = get()
       if (grid) {
-        const panes = grid.panes.map((p) => (p === path ? null : p))
-        set({ grid: { ...grid, panes }, activeFile: panes[grid.focus] ?? null })
+        const at = path ? grid.panes.indexOf(path) : -1
+        if (at >= 0) get().closePane(at)
+        else if (!path) set({ grid: null, activeFile: null })
         return
       }
       const { lectureMode, slidesFile, summaryFile } = get()
@@ -560,6 +580,44 @@ export const useApp = create<AppState>((set, get) => {
         sidebarHidden: grid ? get().sidebarHidden : true,
         activeFile: next.panes[next.focus] ?? activeFile
       })
+    },
+
+    setGridSizes(widths, heights) {
+      const { grid } = get()
+      if (grid) set({ grid: { ...grid, widths, heights } })
+    },
+
+    closePane(index) {
+      const { grid } = get()
+      if (!grid) return
+      const next = closePane(grid, index)
+      // One pane left is the single view again.
+      if (next.panes.length === 1) set({ grid: null, activeFile: next.panes[0] })
+      else set({ grid: next, activeFile: next.panes[next.focus] ?? get().activeFile })
+    },
+
+    openBeside(path, target) {
+      const { grid, lectureMode, slidesFile, summaryFile, activeFile } = get()
+      const shown = grid ?? (lectureMode ? gridOf([slidesFile, summaryFile]) : null)
+      const current = shown ?? (activeFile ? gridOf([activeFile]) : null)
+      const side = target?.side ?? 'right'
+      if (!current || (side === 'center' && !grid)) {
+        get().openFile(path)
+        return
+      }
+      const pane = target?.pane ?? current.focus
+      if (side === 'center') {
+        set({ grid: { ...current, focus: pane } })
+        get().openFile(path)
+        return
+      }
+      const next = splitPane(current, pane, side, path)
+      if (!next) {
+        get().showError(`At most ${MAX_PANES} files fit side by side. Close one first.`)
+        return
+      }
+      set({ grid: next, lectureMode: false })
+      get().openFile(path)
     },
 
     focusPane(index) {

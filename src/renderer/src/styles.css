@@ -511,6 +511,7 @@ h2 {
 /* Workspace */
 
 .workspace {
+  position: relative;
   display: flex;
   flex-direction: column;
   flex: 1;
@@ -1305,29 +1306,21 @@ h2 {
   overflow: hidden;
 }
 
-.workspace.grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 1px;
-  background: var(--border);
-}
-
-.workspace.grid-3 {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-
-.workspace.grid-4 {
-  grid-template-rows: repeat(2, minmax(0, 1fr));
-}
-
+/* Each pane keeps the z-indexes inside it (CodeMirror's gutter is 200) to itself; the focused
+   one goes on top so its menus can reach over the others. */
 .grid-pane {
-  position: relative;
+  position: absolute;
+  z-index: 0;
   display: flex;
   flex-direction: column;
   min-width: 0;
   min-height: 0;
   overflow: hidden;
   background: var(--bg);
+}
+
+.grid-pane.focused {
+  z-index: 1;
 }
 
 /* The pane that opening a file fills: a line along its top. */
@@ -1341,6 +1334,57 @@ h2 {
   height: 2px;
   background: var(--accent);
   pointer-events: none;
+}
+
+.grid-pane.after-left {
+  border-left: 1px solid var(--border);
+}
+
+.grid-pane.after-top {
+  border-top: 1px solid var(--border);
+}
+
+/* A wider strip than the 1px line it sits on, so it is easy to grab. */
+.grid-border {
+  position: absolute;
+  z-index: 6;
+}
+
+.grid-border.vertical {
+  top: 0;
+  bottom: 0;
+  width: 7px;
+  margin-left: -3px;
+  cursor: col-resize;
+}
+
+.grid-border.horizontal {
+  height: 7px;
+  margin-top: -3px;
+  cursor: row-resize;
+}
+
+.grid-border:hover,
+.grid-border:active {
+  background: color-mix(in srgb, var(--accent) 25%, transparent);
+}
+
+/* Where a file dragged from the sidebar will open. */
+.pane-drop-hint {
+  position: absolute;
+  z-index: 20;
+  border: 2px solid var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  pointer-events: none;
+}
+
+.pane-drop-hint.replace {
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+}
+
+.grid-empty-actions {
+  display: flex;
+  gap: 8px;
 }
 
 .grid-empty {

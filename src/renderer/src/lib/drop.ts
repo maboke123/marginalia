@@ -1,6 +1,14 @@
 import { useApp } from '../store'
 import { MEDIA_FILE, useFiles } from '../transcribe/files'
 
+/** Data type of a file (not a folder) dragged from the sidebar: its vault path. */
+export const TREE_FILE = 'application/x-marginalia-file'
+
+/** True while a file from the sidebar is dragged, to open it next to what is open. */
+export function draggingTreeFile(e: React.DragEvent): boolean {
+  return e.dataTransfer.types.includes(TREE_FILE)
+}
+
 /** True while files from Explorer (not tree items) are dragged over the app. */
 export function draggingFiles(e: React.DragEvent): boolean {
   return e.dataTransfer.types.includes('Files')

@@ -6,7 +6,7 @@ import {
   type Position,
   type VaultNode
 } from '../../../shared/types'
-import { draggingFiles, importDroppedFiles } from '../lib/drop'
+import { TREE_FILE, draggingFiles, importDroppedFiles } from '../lib/drop'
 import {
   childrenOf,
   displayOrder,
@@ -146,7 +146,14 @@ export function Sidebar(): React.JSX.Element {
         { separator: true }
       )
     } else {
-      items.push({ label: 'Open', onSelect: () => app.openFile(node.path) })
+      items.push(
+        { label: 'Open', onSelect: () => app.openFile(node.path) },
+        {
+          label: 'Open to the side',
+          hint: 'Or drag it to the edge of a pane',
+          onSelect: () => app.openBeside(node.path)
+        }
+      )
       if (node.kind === 'pdf') {
         items.push({ label: 'Export annotated PDF...', onSelect: () => app.exportPdf(node.path) })
       } else if (node.kind === 'canvas') {
@@ -440,6 +447,7 @@ export function Sidebar(): React.JSX.Element {
               dragged.current = row.node
               e.dataTransfer.effectAllowed = 'linkMove'
               e.dataTransfer.setData('text/plain', row.node.path)
+              if (!isFolder(row.node)) e.dataTransfer.setData(TREE_FILE, row.node.path)
             }}
             onDragOver={(e) => onDragOver(e, row)}
             onDrop={(e) => onDrop(e, row)}
