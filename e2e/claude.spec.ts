@@ -150,7 +150,7 @@ test('the panel moves to the right of the panes from the settings', async () => 
   await page.screenshot({ path: path.join('test-results', 'claude-panel-right.png') })
 })
 
-test('images pasted or dropped in the chat go along, big ones made smaller', async () => {
+test('images pasted, dropped or picked in the chat go along, big ones made smaller', async () => {
   await openSlides(2)
   await ask('What is on this slide?')
   await expect(answers()).toHaveCount(1)
@@ -181,15 +181,26 @@ test('images pasted or dropped in the chat go along, big ones made smaller', asy
     }
   })
   await expect(pending).toHaveCount(2)
+
+  // And one picked with the button, from a folder on this computer.
+  const photo = path.join(env.dir, 'whiteboard.png')
+  const png = await page.screenshot({ clip: { x: 0, y: 0, width: 120, height: 80 } })
+  await fs.writeFile(photo, png)
+  // In device pixels, so 150x100 at 125% display scaling.
+  const photoSize = `${png.readUInt32BE(16)}x${png.readUInt32BE(20)}`
+  const chooser = page.waitForEvent('filechooser')
+  await page.getByRole('button', { name: 'Add images' }).click()
+  await (await chooser).setFiles(photo)
+  await expect(pending).toHaveCount(3)
   await page.screenshot({ path: path.join('test-results', 'claude-images.png') })
 
   await ask('Which tree is deeper?')
   await expect(answers()).toHaveCount(2)
   await expect(pending).toHaveCount(0)
-  await expect(page.locator('.claude-message.user').last().locator('img')).toHaveCount(2)
+  await expect(page.locator('.claude-message.user').last().locator('img')).toHaveCount(3)
   const sent = (await readLog())[1] as LogEntry & { imageSizes: string[] }
   // The slide's image was already sent with the first question.
-  expect(sent.imageSizes).toEqual(['1568x523', '200x100'])
+  expect(sent.imageSizes).toEqual(['1568x523', '200x100', photoSize])
   // Nothing was imported into the vault.
   expect(await fs.readdir(path.join(env.vault, section))).not.toContain('tree.png')
 })

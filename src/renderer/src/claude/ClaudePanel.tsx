@@ -605,7 +605,9 @@ function ChatInput({ chat, busy }: { chat: string; busy: boolean }): React.JSX.E
     }
   }
 
-  /** Pasted or dropped image files; true when there were any. */
+  const filePicker = useRef<HTMLInputElement>(null)
+
+  /** Pasted, dropped or picked image files; true when there were any. */
   const takeImages = (files: FileList): boolean => {
     const found = [...files].filter(isImageFile)
     if (found.length) void useChat.getState().addImages(found)
@@ -660,7 +662,7 @@ function ChatInput({ chat, busy }: { chat: string; busy: boolean }): React.JSX.E
         <div className="claude-images" aria-label="Images sent with your message">
           {images.map((image) => (
             <span key={image.url} className="claude-image">
-              <img src={image.url} alt="Pasted image" />
+              <img src={image.url} alt="Image to send" />
               <button
                 className="chip-remove"
                 aria-label="Leave out this image"
@@ -706,6 +708,28 @@ function ChatInput({ chat, busy }: { chat: string; busy: boolean }): React.JSX.E
           }}
           onBlur={() => setPicker(null)}
         />
+        <input
+          ref={filePicker}
+          type="file"
+          accept="image/*"
+          multiple
+          hidden
+          aria-label="Images from this computer"
+          onChange={(e) => {
+            if (e.target.files) takeImages(e.target.files)
+            // The same file can be picked again later.
+            e.target.value = ''
+            ref.current?.focus()
+          }}
+        />
+        <button
+          className="icon-button"
+          title="Add images or screenshots from this computer (or paste or drop them here)"
+          aria-label="Add images"
+          onClick={() => filePicker.current?.click()}
+        >
+          <Icon name="image" />
+        </button>
         {busy ? (
           <button
             className="icon-button"
