@@ -18,6 +18,7 @@ import {
   type TranscribeLanguage,
   type ZoomSpeed
 } from '../../../shared/settings'
+import { RelationPicker } from '../canvas/RelationPicker'
 import { useApp } from '../store'
 import { useFiles } from '../transcribe/files'
 import { Icon } from './Icon'
@@ -287,10 +288,14 @@ export function SettingsDialog(): React.JSX.Element {
 
           <section>
             <h3>Canvases</h3>
-            <div className="settings-row" role="radiogroup" aria-label="New arrows">
+            <div className="settings-row">
               <span className="settings-label">New arrows</span>
-              <div>
-                <div className="settings-choices">
+              <div className="settings-arrow">
+                <RelationPicker
+                  value={settings.arrowRelation ?? undefined}
+                  onChange={(relation) => void save({ arrowRelation: relation ?? null })}
+                />
+                <div className="settings-choices" role="radiogroup" aria-label="Line of new arrows">
                   {ARROW_ROUTES.map((r) => (
                     <label key={r.value} className="check">
                       <input
@@ -304,8 +309,8 @@ export function SettingsDialog(): React.JSX.Element {
                   ))}
                 </div>
                 <p className="muted settings-help">
-                  Right angles go around other boxes. Change one arrow in the panel that shows when
-                  you click it.
+                  Right angles go around other boxes. Or click an arrow on a canvas and choose
+                  &quot;Use for new arrows&quot;.
                 </p>
               </div>
             </div>

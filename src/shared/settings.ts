@@ -1,3 +1,4 @@
+import { RELATIONS, type Relation } from './canvas'
 import { DEFAULT_HOTKEYS, hotkeysFrom, type Hotkeys } from './hotkeys'
 
 export type Theme = 'system' | 'light' | 'dark'
@@ -33,6 +34,8 @@ export interface AppSettings {
   zoomSpeed: ZoomSpeed
   /** How new canvas arrows run: curved, or in right angles around the boxes. */
   arrowRoute: 'curved' | 'elbow'
+  /** The relation of new canvas arrows; null is a plain arrow. */
+  arrowRelation: Relation | null
 }
 
 export interface ZoomSpeed {
@@ -101,7 +104,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   autoTranscribe: true,
   claudeDock: 'bottom',
   zoomSpeed: { slides: 1, notes: 1, canvas: 1 },
-  arrowRoute: 'curved'
+  arrowRoute: 'curved',
+  arrowRelation: null
 }
 
 function colors(raw: unknown, fallback: string[]): string[] {
@@ -139,6 +143,9 @@ export function settingsFrom(raw: unknown): AppSettings {
     autoTranscribe: r.autoTranscribe !== false,
     claudeDock: r.claudeDock === 'right' ? 'right' : 'bottom',
     zoomSpeed: zoomSpeedFrom(r.zoomSpeed),
-    arrowRoute: r.arrowRoute === 'elbow' ? 'elbow' : 'curved'
+    arrowRoute: r.arrowRoute === 'elbow' ? 'elbow' : 'curved',
+    arrowRelation: RELATIONS.includes(r.arrowRelation as Relation)
+      ? (r.arrowRelation as Relation)
+      : null
   }
 }

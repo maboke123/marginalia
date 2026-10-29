@@ -48,7 +48,7 @@ export function RelationPicker({
   useLayoutEffect(() => {
     if (!open) return
     const button = buttonRef.current!.getBoundingClientRect()
-    const host = buttonRef.current!.closest('.canvas-surface') ?? document.body
+    const host = buttonRef.current!.closest('.canvas-surface, .settings-body') ?? document.body
     const bounds = host.getBoundingClientRect()
     const above = button.top - bounds.top - 12
     const below = bounds.bottom - button.bottom - 12

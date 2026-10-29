@@ -218,7 +218,7 @@ test('dragging from a box edge to another box connects them; the panel sets the 
     .toMatchObject({ fromNode: 'line', toNode: 'vip', relation: 'aggregation', toLabel: '0..1' })
 })
 
-test('an arrow switched to right angles goes around boxes; the setting does it for new ones', async () => {
+test('an arrow switched to right angles goes around boxes; new arrows look like the chosen one', async () => {
   await openShop()
   await page.locator('[data-edge="uses"] .canvas-edge-hit').click({ force: true })
   const panel = page.locator('.canvas-edge-panel')
@@ -234,24 +234,46 @@ test('an arrow switched to right angles goes around boxes; the setting does it f
   expect(d).not.toContain('C')
   await page.screenshot({ path: path.join('test-results', 'canvas-elbow.png') })
 
-  // New arrows are curved until the setting says right angles.
+  // This arrow becomes the look of new ones.
+  await panel.getByRole('button', { name: /^Relation:/ }).click()
+  await panel.getByRole('option', { name: /^Composition/ }).click()
+  await panel.getByRole('button', { name: 'Use for new arrows' }).click()
+  await expect(panel.getByRole('button', { name: 'Use for new arrows' })).toBeDisabled()
+  await page.screenshot({ path: path.join('test-results', 'canvas-default-arrow.png') })
+  const connect = async (): Promise<void> => {
+    await page.keyboard.press('Escape')
+    await page.locator('[data-node="line"]').hover()
+    const from = (await page.locator('[data-node="line"] .canvas-connect.c-left').boundingBox())!
+    const target = (await page.locator('[data-node="vip"]').boundingBox())!
+    await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2)
+    await page.mouse.down()
+    await page.mouse.move(target.x + target.width - 10, target.y + 40, { steps: 8 })
+    await page.mouse.up()
+  }
+  await connect()
+  await expect
+    .poll(async () => (await read('Shop.canvas')).edges.at(-1))
+    .toMatchObject({ fromNode: 'line', relation: 'composition', route: 'elbow' })
+
+  // The settings show it and change it.
   await surface().focus()
   await page.keyboard.press('Control+,')
   const settings = page.getByRole('dialog', { name: 'Settings' })
+  await settings.getByRole('button', { name: 'Relation: Composition' }).scrollIntoViewIfNeeded()
+  await page.screenshot({ path: path.join('test-results', 'settings-new-arrows.png') })
+  await settings.getByRole('button', { name: 'Relation: Composition' }).click()
+  await settings.getByRole('option', { name: /^Association/ }).click()
   await settings
-    .getByRole('radiogroup', { name: 'New arrows' })
-    .getByRole('radio', { name: 'Right angles' })
+    .getByRole('radiogroup', { name: 'Line of new arrows' })
+    .getByRole('radio', { name: 'Curved' })
     .check()
   await settings.getByRole('button', { name: 'Close', exact: true }).click()
-  const dot = page.locator('[data-node="line"] .canvas-connect.c-left')
-  await page.locator('[data-node="line"]').hover()
-  const from = (await dot.boundingBox())!
-  const target = (await page.locator('[data-node="vip"]').boundingBox())!
-  await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2)
-  await page.mouse.down()
-  await page.mouse.move(target.x + target.width - 10, target.y + 40, { steps: 8 })
-  await page.mouse.up()
-  await expect.poll(async () => (await read('Shop.canvas')).edges.at(-1)!.route).toBe('elbow')
+  const before = (await read('Shop.canvas')).edges.length
+  await connect()
+  await expect.poll(async () => (await read('Shop.canvas')).edges.length).toBe(before + 1)
+  const last = (await read('Shop.canvas')).edges.at(-1)!
+  expect(last.relation).toBe('association')
+  expect(last.route).toBeUndefined()
 })
 
 test('typing operations in a subclass offers those of its parent', async () => {

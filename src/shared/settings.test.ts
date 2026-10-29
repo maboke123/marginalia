@@ -37,6 +37,12 @@ describe('settingsFrom', () => {
     expect(settingsFrom({ arrowRoute: 'zigzag' }).arrowRoute).toBe('curved')
   })
 
+  it('gives new canvas arrows the chosen relation, else a plain arrow', () => {
+    expect(settingsFrom({ arrowRelation: 'composition' }).arrowRelation).toBe('composition')
+    expect(settingsFrom({ arrowRelation: 'friendship' }).arrowRelation).toBeNull()
+    expect(settingsFrom({}).arrowRelation).toBeNull()
+  })
+
   it('puts the Claude panel at the bottom unless it was set to the right', () => {
     expect(settingsFrom({ claudeDock: 'right' }).claudeDock).toBe('right')
     expect(settingsFrom({ claudeDock: 'left' }).claudeDock).toBe('bottom')

@@ -126,11 +126,12 @@ function loadCamera(path: string): Camera | null {
   }
 }
 
-/** New arrows run as the setting says: curved or in right angles. */
-function withDefaultRoute(edge: CanvasEdge | null): CanvasEdge | null {
-  return edge && useApp.getState().settings.arrowRoute === 'elbow'
-    ? { ...edge, route: 'elbow' }
-    : edge
+/** New arrows get the relation and line of the settings. */
+function withDefaultStyle(edge: CanvasEdge | null): CanvasEdge | null {
+  if (!edge) return null
+  const { arrowRoute, arrowRelation } = useApp.getState().settings
+  const styled = arrowRelation ? withRelation(edge, arrowRelation) : edge
+  return arrowRoute === 'elbow' ? { ...styled, route: 'elbow' } : styled
 }
 
 function saveCamera(path: string, camera: Camera): void {
@@ -917,7 +918,7 @@ function CanvasSurface({
       if (!from) return
       const land = connectTarget(s.data, at.x, at.y, LAND_PX / cameraRef.current.zoom, d.id)
       if (land) {
-        const edge = withDefaultRoute(
+        const edge = withDefaultStyle(
           connect(s.data, d.id, land.id, { fromSide: d.side, toSide: land.side })
         )
         if (edge) {
@@ -932,7 +933,7 @@ function CanvasSurface({
         s.begin()
         s.update((data) => {
           const withBox = addNodes(data, [box])
-          const edge = withDefaultRoute(connect(withBox, d.id, box.id, { fromSide: d.side }))
+          const edge = withDefaultStyle(connect(withBox, d.id, box.id, { fromSide: d.side }))
           return edge ? { ...withBox, edges: [...withBox.edges, edge] } : withBox
         })
         newBox.current = box.id
@@ -1664,6 +1665,11 @@ function EdgePanel({
   at: { x: number; y: number }
   doc: CanvasDoc
 }): React.JSX.Element {
+  const isDefault = useApp(
+    (s) =>
+      s.settings.arrowRelation === (edge.relation ?? null) &&
+      (s.settings.arrowRoute === 'elbow') === (edge.route === 'elbow')
+  )
   // Typing in a field is one undo step, from focus to blur.
   const field = (name: 'label' | 'fromLabel' | 'toLabel', label: string): React.JSX.Element => (
     <label>
@@ -1766,6 +1772,23 @@ function EdgePanel({
         }
       >
         Swap
+      </button>
+      <button
+        className="text-button"
+        disabled={isDefault}
+        title={
+          isDefault
+            ? 'New arrows already look like this'
+            : 'New arrows get this relation and line (also in Settings, Canvases)'
+        }
+        onClick={() =>
+          void useApp.getState().saveSettings({
+            arrowRelation: edge.relation ?? null,
+            arrowRoute: edge.route === 'elbow' ? 'elbow' : 'curved'
+          })
+        }
+      >
+        Use for new arrows
       </button>
       <button
         className="text-button"
