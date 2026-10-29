@@ -32,6 +32,11 @@ describe('settingsFrom', () => {
     expect(settingsFrom({ zoomSpeed: 'fast' }).zoomSpeed).toEqual(DEFAULT_SETTINGS.zoomSpeed)
   })
 
+  it('draws new canvas arrows curved unless right angles were chosen', () => {
+    expect(settingsFrom({ arrowRoute: 'elbow' }).arrowRoute).toBe('elbow')
+    expect(settingsFrom({ arrowRoute: 'zigzag' }).arrowRoute).toBe('curved')
+  })
+
   it('puts the Claude panel at the bottom unless it was set to the right', () => {
     expect(settingsFrom({ claudeDock: 'right' }).claudeDock).toBe('right')
     expect(settingsFrom({ claudeDock: 'left' }).claudeDock).toBe('bottom')

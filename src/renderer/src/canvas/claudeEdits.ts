@@ -39,6 +39,8 @@ export interface CanvasChange {
   to_label?: string
   from_side?: string
   to_side?: string
+  /** 'curved' or 'right_angles'. */
+  line?: string
 }
 
 export interface EditResult {
@@ -251,7 +253,8 @@ export function applyChanges(data: CanvasData, changes: CanvasChange[]): EditRes
             label: c.arrow_label || undefined,
             fromLabel: c.from_label || undefined,
             toLabel: c.to_label || undefined,
-            color: validColor(c.color)
+            color: validColor(c.color),
+            route: c.line === 'right_angles' ? 'elbow' : undefined
           }),
           relationOf(c.relation)
         )
@@ -275,6 +278,8 @@ export function applyChanges(data: CanvasData, changes: CanvasChange[]): EditRes
         if (c.to_side !== undefined) set('toSide', sideOf(c.to_side) ?? '')
         if (c.color !== undefined) set('color', c.color === '' ? '' : validColor(c.color))
         if (c.relation !== undefined) updated = withRelation(updated, relationOf(c.relation))
+        if (c.line === 'right_angles') updated.route = 'elbow'
+        else if (c.line === 'curved') delete updated.route
         next = { ...next, edges: next.edges.map((e) => (e === target ? updated : e)) }
         touched.push(target.fromNode, target.toNode)
         return
@@ -326,7 +331,9 @@ export function describeCanvas(path: string, data: CanvasData): string {
   }
   for (const e of data.edges) {
     const ends = [e.fromLabel && `from "${e.fromLabel}"`, e.toLabel && `to "${e.toLabel}"`]
-    const extra = [e.label && `"${e.label}"`, ...ends].filter(Boolean).join(', ')
+    const extra = [e.label && `"${e.label}"`, ...ends, e.route === 'elbow' && 'right angles']
+      .filter(Boolean)
+      .join(', ')
     lines.push(
       `- arrow ${e.id}: ${e.fromNode} -> ${e.toNode} (${e.relation ?? 'arrow'})${extra ? ` ${extra}` : ''}`
     )

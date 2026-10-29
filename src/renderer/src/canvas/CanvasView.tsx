@@ -124,24 +124,11 @@ function loadCamera(path: string): Camera | null {
   }
 }
 
-const ROUTE_KEY = 'canvas-arrow-route'
-
-/** New arrows are drawn like the last one I switched between curved and right angles. */
-function withLastRoute(edge: CanvasEdge | null): CanvasEdge | null {
-  try {
-    return edge && localStorage.getItem(ROUTE_KEY) === 'elbow' ? { ...edge, route: 'elbow' } : edge
-  } catch {
-    return edge
-  }
-}
-
-function saveRoute(route: CanvasEdge['route']): void {
-  try {
-    if (route) localStorage.setItem(ROUTE_KEY, route)
-    else localStorage.removeItem(ROUTE_KEY)
-  } catch {
-    // Only a convenience for the next arrow.
-  }
+/** New arrows run as the setting says: curved or in right angles. */
+function withDefaultRoute(edge: CanvasEdge | null): CanvasEdge | null {
+  return edge && useApp.getState().settings.arrowRoute === 'elbow'
+    ? { ...edge, route: 'elbow' }
+    : edge
 }
 
 function saveCamera(path: string, camera: Camera): void {
@@ -910,7 +897,7 @@ function CanvasSurface({
       if (!from) return
       const land = connectTarget(s.data, at.x, at.y, LAND_PX / cameraRef.current.zoom, d.id)
       if (land) {
-        const edge = withLastRoute(
+        const edge = withDefaultRoute(
           connect(s.data, d.id, land.id, { fromSide: d.side, toSide: land.side })
         )
         if (edge) {
@@ -925,7 +912,7 @@ function CanvasSurface({
         s.begin()
         s.update((data) => {
           const withBox = addNodes(data, [box])
-          const edge = withLastRoute(connect(withBox, d.id, box.id, { fromSide: d.side }))
+          const edge = withDefaultRoute(connect(withBox, d.id, box.id, { fromSide: d.side }))
           return edge ? { ...withBox, edges: [...withBox.edges, edge] } : withBox
         })
         newBox.current = box.id
@@ -1726,7 +1713,6 @@ function EdgePanel({
               aria-checked={edge.route === route}
               className={edge.route === route ? 'text-button pressed' : 'text-button'}
               onClick={() => {
-                saveRoute(route)
                 doc.getState().change((d) =>
                   updateEdge(d, edge.id, (x) => {
                     const next = { ...x, route }

@@ -33,6 +33,17 @@ describe('applyChanges', () => {
     })
   })
 
+  it('draws arrows in right angles or curved when asked', () => {
+    const { data } = applyChanges(EMPTY_CANVAS, [
+      ...CLASSES.slice(0, 3),
+      { op: 'add_arrow', id: 'is', from: 'dog', to: 'animal', line: 'right_angles' }
+    ])
+    expect(data.edges[0].route).toBe('elbow')
+    expect(describeCanvas('Zoo.canvas', data)).toContain('right angles')
+    const curved = applyChanges(data, [{ op: 'change_arrow', id: 'is', line: 'curved' }])
+    expect(curved.data.edges[0].route).toBeUndefined()
+  })
+
   it('puts a parent class above its children, the children side by side', () => {
     const { data } = applyChanges(EMPTY_CANVAS, CLASSES)
     expect(at(data, 'animal').y).toBeLessThan(at(data, 'dog').y)

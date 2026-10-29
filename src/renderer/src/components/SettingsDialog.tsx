@@ -38,6 +38,11 @@ const DOCKS: { value: AppSettings['claudeDock']; label: string }[] = [
   { value: 'right', label: 'On the right' }
 ]
 
+const ARROW_ROUTES: { value: AppSettings['arrowRoute']; label: string }[] = [
+  { value: 'curved', label: 'Curved' },
+  { value: 'elbow', label: 'Right angles' }
+]
+
 const ZOOM_KINDS: { key: keyof ZoomSpeed; label: string }[] = [
   { key: 'slides', label: 'Slides' },
   { key: 'notes', label: 'Notes' },
@@ -278,6 +283,32 @@ export function SettingsDialog(): React.JSX.Element {
               defaults={DEFAULT_HIGHLIGHT_COLORS}
               onChange={(highlightColors) => void save({ highlightColors })}
             />
+          </section>
+
+          <section>
+            <h3>Canvases</h3>
+            <div className="settings-row" role="radiogroup" aria-label="New arrows">
+              <span className="settings-label">New arrows</span>
+              <div>
+                <div className="settings-choices">
+                  {ARROW_ROUTES.map((r) => (
+                    <label key={r.value} className="check">
+                      <input
+                        type="radio"
+                        name="arrowRoute"
+                        checked={settings.arrowRoute === r.value}
+                        onChange={() => void save({ arrowRoute: r.value })}
+                      />
+                      {r.label}
+                    </label>
+                  ))}
+                </div>
+                <p className="muted settings-help">
+                  Right angles go around other boxes. Change one arrow in the panel that shows when
+                  you click it.
+                </p>
+              </div>
+            </div>
           </section>
 
           <section>

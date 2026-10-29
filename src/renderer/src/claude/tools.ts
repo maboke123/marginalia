@@ -621,7 +621,10 @@ const TOOLS: Record<string, (args: Args) => Promise<Result>> = {
 
   async edit_canvas(args) {
     const path = fileArg(args, 'canvas')
-    const changes = Array.isArray(args.changes) ? (args.changes as CanvasChange[]) : []
+    const route = useApp.getState().settings.arrowRoute === 'elbow' ? 'right_angles' : 'curved'
+    const changes = (Array.isArray(args.changes) ? (args.changes as CanvasChange[]) : []).map(
+      (c) => (c.op === 'add_arrow' && !c.line ? { ...c, line: route } : c)
+    )
     if (!changes.length) throw new ToolError('No changes given')
     const planned = applyChanges(await canvasData(path), changes)
     if (!planned.data.nodes.length && !planned.data.edges.length && planned.errors.length) {

@@ -74,7 +74,14 @@ const canvasChange = z.object({
   from_label: z.string().optional().describe('Multiplicity or role at the start, like 1'),
   to_label: z.string().optional().describe('Multiplicity or role at the end, like 0..*'),
   from_side: z.enum(['top', 'right', 'bottom', 'left']).optional(),
-  to_side: z.enum(['top', 'right', 'bottom', 'left']).optional()
+  to_side: z.enum(['top', 'right', 'bottom', 'left']).optional(),
+  line: z
+    .enum(['curved', 'right_angles'])
+    .optional()
+    .describe(
+      'add_arrow/change_arrow: a curved line, or straight pieces in right angles around the ' +
+        "boxes. Leave it out for new arrows: they follow the user's setting"
+    )
 })
 
 const READ_ONLY = { readOnlyHint: true }

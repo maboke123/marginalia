@@ -185,13 +185,19 @@ test('dragging from a box edge to another box connects them; the panel sets the 
   await expect(page.locator('.canvas-edge')).toHaveCount(5)
   const panel = page.locator('.canvas-edge-panel')
   await expect(panel).toBeVisible()
-  // The relations show their arrow and what they mean.
+  // The relations show their arrow; the one pointed at says what it means.
   await panel.getByRole('button', { name: 'Relation: Arrow' }).click()
   const relations = panel.getByRole('listbox', { name: 'Relation' })
   await expect(relations.getByRole('option')).toHaveCount(8)
-  await expect(relations.getByRole('option', { name: /^Composition/ })).toContainText(
+  await relations.getByRole('option', { name: /^Composition/ }).hover()
+  await expect(panel.locator('.canvas-relation-meaning')).toContainText(
     'lives and dies with the whole'
   )
+  // The whole list fits in the canvas.
+  const menu = (await panel.locator('.canvas-relation-menu').boundingBox())!
+  const view = (await surface().boundingBox())!
+  expect(menu.y).toBeGreaterThanOrEqual(view.y)
+  expect(menu.y + menu.height).toBeLessThanOrEqual(view.y + view.height)
   await page.screenshot({ path: path.join('test-results', 'canvas-relations.png') })
   await relations.getByRole('option', { name: /^Aggregation/ }).click()
   await expect(relations).toBeHidden()
@@ -203,7 +209,7 @@ test('dragging from a box edge to another box connects them; the panel sets the 
     .toMatchObject({ fromNode: 'line', toNode: 'vip', relation: 'aggregation', toLabel: '0..1' })
 })
 
-test('an arrow switched to right angles goes around boxes, and new arrows follow', async () => {
+test('an arrow switched to right angles goes around boxes; the setting does it for new ones', async () => {
   await openShop()
   await page.locator('[data-edge="uses"] .canvas-edge-hit').click({ force: true })
   const panel = page.locator('.canvas-edge-panel')
@@ -219,7 +225,15 @@ test('an arrow switched to right angles goes around boxes, and new arrows follow
   expect(d).not.toContain('C')
   await page.screenshot({ path: path.join('test-results', 'canvas-elbow.png') })
 
-  // The next arrow drawn has right angles too.
+  // New arrows are curved until the setting says right angles.
+  await surface().focus()
+  await page.keyboard.press('Control+,')
+  const settings = page.getByRole('dialog', { name: 'Settings' })
+  await settings
+    .getByRole('radiogroup', { name: 'New arrows' })
+    .getByRole('radio', { name: 'Right angles' })
+    .check()
+  await settings.getByRole('button', { name: 'Close', exact: true }).click()
   const dot = page.locator('[data-node="line"] .canvas-connect.c-left')
   await page.locator('[data-node="line"]').hover()
   const from = (await dot.boundingBox())!

@@ -31,6 +31,8 @@ export interface AppSettings {
   claudeDock: 'bottom' | 'right'
   /** How fast Ctrl+wheel and pinching zoom, per kind of file; 1 is normal. */
   zoomSpeed: ZoomSpeed
+  /** How new canvas arrows run: curved, or in right angles around the boxes. */
+  arrowRoute: 'curved' | 'elbow'
 }
 
 export interface ZoomSpeed {
@@ -98,7 +100,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   recordFrom: 'microphone',
   autoTranscribe: true,
   claudeDock: 'bottom',
-  zoomSpeed: { slides: 1, notes: 1, canvas: 1 }
+  zoomSpeed: { slides: 1, notes: 1, canvas: 1 },
+  arrowRoute: 'curved'
 }
 
 function colors(raw: unknown, fallback: string[]): string[] {
@@ -135,6 +138,7 @@ export function settingsFrom(raw: unknown): AppSettings {
     recordFrom: r.recordFrom === 'computer' ? 'computer' : 'microphone',
     autoTranscribe: r.autoTranscribe !== false,
     claudeDock: r.claudeDock === 'right' ? 'right' : 'bottom',
-    zoomSpeed: zoomSpeedFrom(r.zoomSpeed)
+    zoomSpeed: zoomSpeedFrom(r.zoomSpeed),
+    arrowRoute: r.arrowRoute === 'elbow' ? 'elbow' : 'curved'
   }
 }
