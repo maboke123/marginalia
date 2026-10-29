@@ -340,6 +340,51 @@ test('moving a group moves what is inside, as one undo step', async () => {
     .toBe(420)
 })
 
+test('right-angle arrows of subclasses run apart, and hop where arrows cross', async () => {
+  const cls = (id: string, x: number, y: number): object => ({
+    id,
+    type: 'text',
+    shape: 'class',
+    text: `${id[0].toUpperCase()}${id.slice(1)}\n---\n---\n+ area(): double`,
+    x,
+    y,
+    width: 160,
+    height: 90
+  })
+  const isA = (child: string): object => ({
+    id: `is-${child}`,
+    fromNode: child,
+    toNode: 'shape',
+    relation: 'inheritance',
+    route: 'elbow'
+  })
+  const children = ['circle', 'square', 'triangle', 'hexagon']
+  await fs.writeFile(
+    file('Shapes.canvas'),
+    JSON.stringify({
+      nodes: [
+        cls('shape', 420, 0),
+        ...children.map((c, i) => cls(c, [0, 220, 620, 840][i], 320)),
+        cls('canvas', -260, 160),
+        cls('printer', 1100, 160)
+      ],
+      edges: [
+        ...children.map(isA),
+        { id: 'draws', fromNode: 'canvas', toNode: 'printer', route: 'elbow' }
+      ]
+    })
+  )
+  await row('Design of Software Systems').click()
+  await row('les_1').click()
+  await row('Shapes').click()
+  await expect(page.locator('.canvas-edge')).toHaveCount(5)
+  await page.getByRole('button', { name: 'Zoom to fit' }).click()
+  // The long arrow crosses the four others and hops over each of them.
+  const across = await page.locator('[data-edge="draws"] .canvas-edge-line').getAttribute('d')
+  expect(across!.match(/A/g)).toHaveLength(4)
+  await page.screenshot({ path: path.join('test-results', 'canvas-elbow-tree.png') })
+})
+
 test('a moved or resized group lines up with another group', async () => {
   await fs.writeFile(
     file('Packages.canvas'),

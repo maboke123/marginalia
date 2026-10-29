@@ -6,7 +6,15 @@ import { clickScale, makeScaled, templateByName } from './shapes'
 import { sourceRange, wordAround } from './caret'
 import { snapSpacing } from './spacing'
 import { inheritedOperations, inOperations, insertOperations, operationName } from './overrides'
-import { edgeGeometry, edgePorts, elbowRoute, freeEndSide, geometryOf, sideAt } from './edges'
+import {
+  edgeGeometries,
+  edgeGeometry,
+  edgePorts,
+  elbowRoute,
+  freeEndSide,
+  geometryOf,
+  sideAt
+} from './edges'
 import {
   bringToFront,
   connect,
@@ -379,6 +387,80 @@ describe('right-angle arrows', () => {
     const route = elbowRoute({ x: 100, y: 50 }, 'right', { x: 300, y: 50 }, 'left', [wall])
     expect(straight(route)).toBe(true)
     expect(route.some((p) => p.y < wall.y || p.y > wall.y + wall.height)).toBe(true)
+  })
+
+  it('avoid crossing arrows already there when a route as good does not', () => {
+    const start = { x: 0, y: 0 }
+    const end = { x: 300, y: 200 }
+    expect(elbowRoute(start, 'right', end, 'left', []).some((p) => p.x === 150)).toBe(true)
+    const other: [{ x: number; y: number }, { x: number; y: number }] = [
+      { x: 100, y: -50 },
+      { x: 100, y: 100 }
+    ]
+    const route = elbowRoute(start, 'right', end, 'left', [], [other])
+    expect(route.some((p) => p.x === 150)).toBe(false)
+    expect(straight(route)).toBe(true)
+  })
+
+  // Horizontal pieces of a drawn path: the points of M, L and the ends of Q, two by two.
+  const flatPieces = (path: string): [number, number, number][] => {
+    const points = [...path.matchAll(/[MLQ][^MLQA]*/g)].map((m) => {
+      const numbers = m[0].slice(1).trim().split(/[ ,]+/).map(Number)
+      return { x: numbers[numbers.length - 2], y: numbers[numbers.length - 1] }
+    })
+    return points
+      .slice(1)
+      .map((p, i): [number, number, number] => [points[i].y, points[i].x, p.x])
+      .filter(([y, a, b], i) => Math.abs(points[i + 1].y - y) < 0.01 && Math.abs(a - b) > 1)
+  }
+
+  it('keep the arrows of subclasses on one level apart, without crossing', () => {
+    const parent = text('shape', 400, 0, 200, 100)
+    const children = [0, 220, 640, 860].map((x, i) => text(`c${i}`, x, 300, 160, 80))
+    const byId = new Map([parent, ...children].map((n) => [n.id, n]))
+    const edges = children.map((c) => ({
+      id: `is-${c.id}`,
+      fromNode: c.id,
+      toNode: 'shape',
+      relation: 'inheritance' as const,
+      route: 'elbow' as const
+    }))
+    const paths = [...edgeGeometries(edges, byId).values()].map((g) => g.path)
+    expect(paths).toHaveLength(4)
+    // Nothing to hop over.
+    for (const path of paths) expect(path).not.toContain('A')
+    const pieces = paths.map(flatPieces)
+    for (let i = 0; i < pieces.length; i++) {
+      for (let j = i + 1; j < pieces.length; j++) {
+        for (const [y1, a1, b1] of pieces[i]) {
+          for (const [y2, a2, b2] of pieces[j]) {
+            const overlap =
+              Math.min(Math.max(a1, b1), Math.max(a2, b2)) -
+              Math.max(Math.min(a1, b1), Math.min(a2, b2))
+            expect(Math.abs(y1 - y2) > 1 || overlap <= 1).toBe(true)
+          }
+        }
+      }
+    }
+  })
+
+  it('hop over an arrow they have to cross', () => {
+    const nodes = [
+      text('a', 0, 100, 100, 80),
+      text('b', 600, 100, 100, 80),
+      text('c', 280, -200, 120, 80),
+      text('d', 280, 400, 120, 80)
+    ]
+    const byId = new Map(nodes.map((n) => [n.id, n]))
+    const geometries = edgeGeometries(
+      [
+        { id: 'across', fromNode: 'a', toNode: 'b', route: 'elbow' },
+        { id: 'down', fromNode: 'c', toNode: 'd', route: 'elbow' }
+      ],
+      byId
+    )
+    expect(geometries.get('across')!.path).toContain('A')
+    expect(geometries.get('down')!.path).not.toContain('A')
   })
 
   it('are drawn when an edge asks for them', () => {
