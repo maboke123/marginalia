@@ -104,6 +104,30 @@ test('zooms and fits the width again', async () => {
   await expect(zoomLevel).toHaveText(fitted!)
 })
 
+test('Ctrl+wheel keeps the spot under the mouse in place, also across the page', async () => {
+  await importIntoSection()
+  const slide = page.locator('.pdf-page[data-page="1"]')
+  const spotUnderMouse = async (x: number, y: number): Promise<[number, number]> => {
+    const box = (await slide.boundingBox())!
+    return [(x - box.x) / box.width, (y - box.y) / box.height]
+  }
+  // Towards the right end of the slide, left of the margin.
+  const box = (await slide.boundingBox())!
+  const x = box.x + box.width * 0.55
+  const y = box.y + box.height * 0.4
+  const before = await spotUnderMouse(x, y)
+
+  await page.mouse.move(x, y)
+  await page.keyboard.down('Control')
+  for (let i = 0; i < 3; i++) await page.mouse.wheel(0, -200)
+  await page.keyboard.up('Control')
+  await expect.poll(async () => (await slide.boundingBox())!.width).toBeGreaterThan(box.width * 1.5)
+
+  const after = await spotUnderMouse(x, y)
+  expect(Math.abs(after[0] - before[0])).toBeLessThan(0.01)
+  expect(Math.abs(after[1] - before[1])).toBeLessThan(0.01)
+})
+
 test('remembers the last page after a restart', async () => {
   await importIntoSection()
   await pageInput().fill('37')

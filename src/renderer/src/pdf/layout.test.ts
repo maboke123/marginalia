@@ -2,9 +2,11 @@ import { describe, expect, it } from 'vitest'
 import {
   PAGE_GAP,
   VIEW_PADDING,
+  contentWidthOf,
   fitWidthScale,
   layoutPages,
   mostVisiblePage,
+  pageLeft,
   pagesBetween,
   stepZoom
 } from './layout'
@@ -44,6 +46,16 @@ describe('fitWidthScale', () => {
         648
       )
     ).toBe(0.5)
+  })
+})
+
+describe('contentWidthOf and pageLeft', () => {
+  it('centres pages and lets content wider than the view scroll', () => {
+    const layout = layoutPages(slides.slice(0, 1), 1)
+    expect(contentWidthOf(layout, 2000)).toBe(2000)
+    expect(pageLeft(layout, 0, 2000)).toBe(520)
+    expect(contentWidthOf(layout, 500)).toBe(960 + 2 * VIEW_PADDING)
+    expect(pageLeft(layout, 0, contentWidthOf(layout, 500))).toBe(VIEW_PADDING)
   })
 })
 

@@ -25,9 +25,11 @@ import { useApp, type Tool } from '../store'
 import {
   VIEW_PADDING,
   clampScale,
+  contentWidthOf,
   fitWidthScale,
   layoutPages,
   mostVisiblePage,
+  pageLeft,
   pagesBetween,
   stepZoom,
   type PageSize
@@ -55,6 +57,8 @@ interface Anchor {
   id: number
   fraction: number
   viewY: number
+  /** Set by a zoom at the mouse: the point across the page (0 to 1) to keep at viewX. */
+  across?: { fraction: number; viewX: number }
 }
 
 // Stands in for the annotation doc when annotations are off, so hooks stay unconditional.
@@ -172,7 +176,7 @@ function Document({
 
   const scale = zoom === 'fit' ? fitWidthScale(viewSizes, viewport.width, margin) : zoom
   const layout = useMemo(() => layoutPages(viewSizes, scale, margin), [viewSizes, scale, margin])
-  const contentWidth = Math.max(viewport.width, layout.maxWidth + 2 * VIEW_PADDING)
+  const contentWidth = contentWidthOf(layout, viewport.width)
 
   useLayoutEffect(() => {
     const el = scrollRef.current!
@@ -196,11 +200,16 @@ function Document({
   useLayoutEffect(() => {
     const el = scrollRef.current!
     if (!viewport.width) return
-    const { id, fraction, viewY } = anchor.current
+    const { id, fraction, viewY, across } = anchor.current
     const i = indexOf(id)
     el.scrollTop = layout.tops[i] + fraction * layout.heights[i] - viewY
+    if (across) {
+      el.scrollLeft =
+        pageLeft(layout, i, contentWidth) + across.fraction * layout.widths[i] - across.viewX
+      anchor.current = { ...anchor.current, across: undefined }
+    }
     setScrollTop(el.scrollTop)
-  }, [layout, viewport.width, indexOf])
+  }, [layout, viewport.width, indexOf, contentWidth])
 
   const onScroll = useCallback(() => {
     const el = scrollRef.current!
@@ -349,19 +358,25 @@ function Document({
     return () => document.removeEventListener('selectionchange', onChange)
   }, [])
 
+  /** `viewX` and `viewY` (from the view's top left) stay on the same spot of the slide. */
   const zoomTo = useCallback(
-    (next: number, viewY = 0) => {
+    (next: number, viewY = 0, viewX?: number) => {
       const el = scrollRef.current!
       const y = el.scrollTop + viewY
       const [i] = pagesBetween(layout, y, y + 1)
+      const x = el.scrollLeft + (viewX ?? 0)
       anchor.current = {
         id: views[i].id,
         fraction: (y - layout.tops[i]) / layout.heights[i],
-        viewY
+        viewY,
+        across:
+          viewX === undefined
+            ? undefined
+            : { fraction: (x - pageLeft(layout, i, contentWidth)) / layout.widths[i], viewX }
       }
       setZoom(clampScale(next))
     },
-    [layout, views]
+    [layout, views, contentWidth]
   )
 
   // Ctrl+wheel zooms around the mouse. React's wheel listener is passive and cannot
@@ -372,7 +387,8 @@ function Document({
       if (!e.ctrlKey) return
       e.preventDefault()
       const factor = Math.exp((-e.deltaY * useApp.getState().settings.zoomSpeed.slides) / 500)
-      zoomTo(scale * factor, e.clientY - el.getBoundingClientRect().top)
+      const view = el.getBoundingClientRect()
+      zoomTo(scale * factor, e.clientY - view.top, e.clientX - view.left)
     }
     el.addEventListener('wheel', onWheel, { passive: false })
     return () => el.removeEventListener('wheel', onWheel)
@@ -439,7 +455,7 @@ function Document({
         const el = scrollRef.current!
         const [x, y, w, h] = hit.rects[0]
         const top = layout.tops[i] + y * scale
-        const left = (contentWidth - layout.widths[i]) / 2 + x * scale
+        const left = pageLeft(layout, i, contentWidth) + x * scale
         if (top < el.scrollTop || top + Math.max(h * scale, 40) > el.scrollTop + el.clientHeight) {
           el.scrollTop = top - el.clientHeight / 3
         }
@@ -667,7 +683,7 @@ function Document({
                   size={viewSizes[i]}
                   margin={margin}
                   top={layout.tops[i]}
-                  left={(contentWidth - layout.widths[i]) / 2}
+                  left={pageLeft(layout, i, contentWidth)}
                   scale={scale}
                   rendered={i >= first && i <= last}
                 />

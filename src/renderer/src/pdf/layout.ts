@@ -61,6 +61,16 @@ export function layoutPages(sizes: PageSize[], scale: number, margin = 0): Layou
   }
 }
 
+/** Width of the scrolled content: the widest page with padding, at least the view. */
+export function contentWidthOf(layout: Layout, viewWidth: number): number {
+  return Math.max(viewWidth, layout.maxWidth + 2 * VIEW_PADDING)
+}
+
+/** Pages are centred in the content, so a narrower page has more room on both sides. */
+export function pageLeft(layout: Layout, i: number, contentWidth: number): number {
+  return (contentWidth - layout.widths[i]) / 2
+}
+
 /** Index of the first page whose bottom edge is below `y`. */
 function firstPageEndingAfter(layout: Layout, y: number): number {
   let lo = 0
