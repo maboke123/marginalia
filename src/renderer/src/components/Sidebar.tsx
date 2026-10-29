@@ -6,7 +6,7 @@ import {
   type Position,
   type VaultNode
 } from '../../../shared/types'
-import { TREE_FILE, draggingFiles, importDroppedFiles } from '../lib/drop'
+import { TREE_FILE, draggingFiles, importDroppedFiles, importPaths } from '../lib/drop'
 import {
   childrenOf,
   displayOrder,
@@ -143,6 +143,11 @@ export function Sidebar(): React.JSX.Element {
           label: 'Transcribe a recording...',
           onSelect: () => void useFiles.getState().transcribe(node.path)
         },
+        {
+          label: 'Import notes or a transcript...',
+          hint: 'A transcript a friend recorded, say',
+          onSelect: () => void pickAndImport(node.path)
+        },
         { separator: true }
       )
     } else {
@@ -165,11 +170,18 @@ export function Sidebar(): React.JSX.Element {
         )
       }
       if (node.kind === 'pdf') {
-        items.push({
-          label: 'Transcribe a recording of this...',
-          onSelect: () =>
-            void useFiles.getState().transcribe(parentOf(node.path), undefined, node.path)
-        })
+        items.push(
+          {
+            label: 'Transcribe a recording of this...',
+            onSelect: () =>
+              void useFiles.getState().transcribe(parentOf(node.path), undefined, node.path)
+          },
+          {
+            label: 'Import a transcript of this...',
+            hint: 'Recorded by someone else; its slide links come here',
+            onSelect: () => void pickAndImport(parentOf(node.path), node.path)
+          }
+        )
       }
       if (node.kind === 'markdown' || node.kind === 'canvas') {
         const pdfs = childrenOf(nodes, parentOf(node.path)).filter((n) => n.kind === 'pdf')
@@ -472,6 +484,11 @@ export function Sidebar(): React.JSX.Element {
       {menu && <ContextMenu {...menu} onClose={closeMenu} />}
     </aside>
   )
+}
+
+async function pickAndImport(folder: string, pdf?: string): Promise<void> {
+  const paths = await window.api.vault.pickNotes()
+  if (paths.length) await importPaths(paths, folder, pdf)
 }
 
 function vaultMenu(

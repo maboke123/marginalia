@@ -225,6 +225,16 @@ interface AppState {
   setHidden(path: string, hidden: boolean): Promise<void>
   /** Without `sources` a file dialog asks for them; without `parent` the current section is used. */
   importPdfs(sources?: string[], parent?: string): Promise<void>
+  /**
+   * Notes or transcripts from outside (a friend's recording of a lecture) into `parent` or the
+   * current section, linked to `pdf` when given. Returns the recordings that went along.
+   */
+  importNotes(
+    sources: string[],
+    parent?: string,
+    pdf?: string,
+    recordings?: string[]
+  ): Promise<string[]>
 }
 
 // Which folders are open is a per-machine convenience, so it lives in localStorage
@@ -746,6 +756,20 @@ export const useApp = create<AppState>((set, get) => {
       await get().refresh()
       expandAncestors(imported[0])
       get().openFile(imported[0])
+    },
+
+    async importNotes(sources, parent, pdf, recordings) {
+      const target = parent ?? currentFolder()
+      if (!target) {
+        get().showError('Select a notebook or section to import into')
+        return []
+      }
+      const imported = await attempt(() => api.importNotes(target, sources, pdf, recordings))
+      if (!imported?.notes.length) return []
+      await get().refresh()
+      expandAncestors(imported.notes[0])
+      get().openFile(imported.notes[0])
+      return imported.recordings
     },
 
     async create(item, parent) {

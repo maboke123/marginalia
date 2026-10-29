@@ -299,6 +299,40 @@ export function registerIpc(
     return imported
   })
 
+  handle('vault:pickNotes', async () => {
+    const win = getWindow()
+    const options: Electron.OpenDialogOptions = {
+      title: 'Import notes or a transcript',
+      properties: ['openFile', 'multiSelections'],
+      filters: [
+        { name: 'Notes and transcripts', extensions: ['md'] },
+        {
+          name: 'With the recording',
+          extensions: ['md', 'webm', 'opus', 'ogg', 'm4a', 'mp3', 'wav', 'flac', 'aac']
+        }
+      ]
+    }
+    const result = win
+      ? await dialog.showOpenDialog(win, options)
+      : await dialog.showOpenDialog(options)
+    return result.canceled ? [] : result.filePaths
+  })
+
+  handle(
+    'vault:importNotes',
+    async (parent: string, sources: string[], pdf?: string, recordings: string[] = []) => {
+      const v = current()
+      const notes: string[] = []
+      const used: string[] = []
+      for (const source of sources) {
+        const result = await v.importNote(parent, source, { pdf, recordings })
+        notes.push(result.note)
+        if (result.recording) used.push(result.recording)
+      }
+      return { notes, recordings: used }
+    }
+  )
+
   handle('vault:trash', async (p: string) => {
     const v = current()
     const abs = v.resolve(p)

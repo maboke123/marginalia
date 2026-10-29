@@ -18,6 +18,14 @@ import {
   type CanvasData,
   type FileNode
 } from '../../shared/canvas'
+import {
+  adoptTranscript,
+  audioOf,
+  isTranscriptNote,
+  linkedPdfNames,
+  recordedOn,
+  transcriptName
+} from '../transcribe/transcript'
 import { formatAnnotations, isAnnotationFile, sha256File } from './annotations'
 import { renameWithRetry, tempPathFor, writeFileAtomic } from './atomic'
 import {
@@ -365,6 +373,71 @@ export class Vault {
       throw err
     }
     return toRel(this.root, target)
+  }
+
+  /**
+   * Copies a note from outside into a section; the original is only read. A transcript (one
+   * this app made, on this laptop or a friend's) keeps a transcript's name and is linked to
+   * its slides: `pdf`, else the PDF here its slide links name, else the only PDF here. Its
+   * links then point at those slides, and its recording comes along when it is among
+   * `recordings`.
+   */
+  async importNote(
+    parentRel: string,
+    source: string,
+    opts: { pdf?: string; recordings?: string[] } = {}
+  ): Promise<{ note: string; pdf: string | null; recording: string | null }> {
+    if (!parentRel) throw new VaultError('Notes go inside a notebook or section')
+    if (!isMarkdown(source)) throw new VaultError(`"${path.basename(source)}" is not a note`)
+    const text = await fs.readFile(source, 'utf8').catch(() => {
+      throw new VaultError(`File not found: ${source}`)
+    })
+    const parent = await this.existingDir(parentRel)
+    const base = path.basename(source, path.extname(source))
+    // Notes are only linked to slides in their own folder.
+    const given = opts.pdf && path.posix.dirname(opts.pdf) === parentRel ? opts.pdf : null
+    if (!isTranscriptNote(path.basename(source), text)) {
+      const target = path.join(parent, await uniqueName(parent, base, '.md'))
+      await writeFileAtomic(target, text)
+      const note = toRel(this.root, target)
+      if (given) await this.linkNote(given, note, 'add')
+      return { note, pdf: given, recording: null }
+    }
+
+    const date = recordedOn(text)
+    const named = /^Transcript /i.test(base)
+      ? base
+      : date
+        ? transcriptName(date).replace(/\.md$/, '')
+        : `Transcript ${base}`
+    const target = path.join(parent, await uniqueName(parent, named, '.md'))
+    const note = toRel(this.root, target)
+    const pdfsHere = (await fs.readdir(parent)).filter(isPdf)
+    const byLink = linkedPdfNames(text).find((name) => pdfsHere.includes(name))
+    const here = byLink ?? (pdfsHere.length === 1 ? pdfsHere[0] : null)
+    const pdf = given ?? (here ? `${parentRel}/${here}` : null)
+
+    const audio = audioOf(text)?.split('/').pop()
+    const recording =
+      (audio &&
+        opts.recordings?.find((r) => path.basename(r).toLowerCase() === audio.toLowerCase())) ||
+      null
+    let audioRel: string | null = null
+    if (recording) {
+      const assets = path.join(parent, ASSETS_DIR)
+      await fs.mkdir(assets, { recursive: true })
+      const ext = path.extname(recording)
+      const name = await uniqueName(
+        assets,
+        path.basename(recording, ext).replace(/[^\w.-]/g, '-'),
+        ext
+      )
+      await fs.copyFile(recording, path.join(assets, name), fsConstants.COPYFILE_EXCL)
+      audioRel = `${ASSETS_DIR}/${name}`
+    }
+    await writeFileAtomic(target, adoptTranscript(text, note, pdf, audioRel))
+    if (pdf) await this.linkNote(pdf, note, 'add')
+    return { note, pdf, recording }
   }
 
   async readText(rel: string): Promise<string> {

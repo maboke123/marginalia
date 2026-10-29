@@ -96,6 +96,19 @@ export interface MarginaliaApi {
     pickPdfs(): Promise<string[]>
     /** Copies PDFs from anywhere on disk into a section; returns their vault paths. */
     importPdfs(parent: string, sources: string[]): Promise<string[]>
+    /** Opens a file dialog for notes and transcripts (and their recordings). */
+    pickNotes(): Promise<string[]>
+    /**
+     * Copies notes from anywhere on disk into a section. Transcripts are linked to their slides
+     * (`pdf`, else the one they name) and take their recording along when it is in
+     * `recordings`. Returns the new notes and the recordings that went along.
+     */
+    importNotes(
+      parent: string,
+      sources: string[],
+      pdf?: string,
+      recordings?: string[]
+    ): Promise<{ notes: string[]; recordings: string[] }>
     readFile(path: string): Promise<Uint8Array>
     lastPage(path: string): Promise<number | null>
     setLastPage(path: string, page: number): Promise<void>

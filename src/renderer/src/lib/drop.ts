@@ -15,36 +15,45 @@ export function draggingFiles(e: React.DragEvent): boolean {
 }
 
 /**
- * Imports the PDFs among the dropped files into `parent` (or the current section); a video or
- * audio recording is offered for transcription into that lesson.
+ * Imports the PDFs and notes (a friend's transcript, say) among `paths` into `parent` (or the
+ * current section); a video or audio recording is offered for transcription into that lesson,
+ * unless it is the recording of a transcript that came along.
  */
-export async function importDroppedFiles(
-  e: React.DragEvent,
+export async function importPaths(
+  paths: string[],
   parent?: string,
-  /** Dropped on this PDF: a video is about this deck. */
+  /** Dropped on this PDF: a video or transcript is about this deck. */
   pdf?: string
 ): Promise<void> {
-  const files = [...e.dataTransfer.files]
-  const pdfs = files.filter((f) => /\.pdf$/i.test(f.name))
-  const recordings = files.filter((f) => MEDIA_FILE.test(f.name))
-  const others = files
-    .filter((f) => !/\.pdf$/i.test(f.name) && !MEDIA_FILE.test(f.name))
-    .map((f) => f.name)
+  const name = (p: string): string => p.split(/[\\/]/).pop() ?? p
+  const pdfs = paths.filter((p) => /\.pdf$/i.test(p))
+  const notes = paths.filter((p) => /\.md$/i.test(p))
+  let recordings = paths.filter((p) => MEDIA_FILE.test(p))
+  const others = paths.filter(
+    (p) => !pdfs.includes(p) && !notes.includes(p) && !recordings.includes(p)
+  )
   const app = useApp.getState()
-  if (pdfs.length) {
-    await app.importPdfs(
-      pdfs.map((f) => window.api.files.pathFor(f)),
-      parent
-    )
+  if (pdfs.length) await app.importPdfs(pdfs, parent)
+  if (notes.length) {
+    const along = await app.importNotes(notes, parent, pdf, recordings)
+    recordings = recordings.filter((r) => !along.includes(r))
   }
   // One at a time: each gets the choice between fast and accurate.
-  if (recordings.length) {
-    await useFiles.getState().transcribe(parent, window.api.files.pathFor(recordings[0]), pdf)
-  }
-  const skipped = [...others, ...recordings.slice(1).map((f) => f.name)]
+  if (recordings.length) await useFiles.getState().transcribe(parent, recordings[0], pdf)
+  const skipped = [...others, ...recordings.slice(1)].map(name)
   if (skipped.length) {
     app.showError(
-      `Only PDFs and one recording at a time can be dropped. Skipped: ${skipped.join(', ')}`
+      `Only PDFs, notes and one recording at a time can be added. Skipped: ${skipped.join(', ')}`
     )
   }
+}
+
+/** `importPaths` for files dropped from Explorer. */
+export function importDroppedFiles(
+  e: React.DragEvent,
+  parent?: string,
+  pdf?: string
+): Promise<void> {
+  const paths = [...e.dataTransfer.files].map((f) => window.api.files.pathFor(f))
+  return importPaths(paths, parent, pdf)
 }

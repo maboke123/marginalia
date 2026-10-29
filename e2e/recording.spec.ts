@@ -548,3 +548,41 @@ test('recording stops and is kept when the laptop goes to sleep', async () => {
   const assets = await fs.readdir(path.join(env.vault, section, 'assets'))
   expect(assets.some((f) => f.endsWith('.webm'))).toBe(true)
 })
+
+test("a friend's transcript comes in from the slides' menu, linked to them", async () => {
+  await start()
+  const shared = path.join(env.dir, 'from a friend')
+  await fs.mkdir(shared)
+  const friend = path.join(shared, 'B2 lecture.md')
+  await fs.writeFile(
+    friend,
+    [
+      '# Transcript 6 October 2026, 10:30',
+      '',
+      'Recorded from the microphone.',
+      'Audio: [recording-2026-10-06T10-30.webm](assets/recording-2026-10-06T10-30.webm)',
+      '',
+      '**00:12** · [slide 2](Decision%20trees.pdf#page=2) Information gain picks the split.',
+      ''
+    ].join('\n')
+  )
+  await app.evaluate(({ dialog }, file) => {
+    dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [file] })
+  }, friend)
+  await row('slides.pdf').click({ button: 'right' })
+  await page.getByRole('menuitem', { name: /Import a transcript of this/ }).click()
+
+  // It opens, its slide link points at these slides and it shows under them.
+  const editor = page.locator('.md-editor')
+  await expect(editor).toContainText('Information gain picks the split')
+  const name = 'Transcript 2026-10-06 10-30.md'
+  const text = await fs.readFile(path.join(env.vault, section, name), 'utf8')
+  expect(text).toContain('[slide 2](slides.pdf#page=2)')
+  expect(text).not.toContain('Audio:')
+  const state = JSON.parse(
+    await fs.readFile(path.join(env.vault, '.marginalia', 'state.json'), 'utf8')
+  )
+  expect(state.notes[`${section}/slides.pdf`]).toContain(`${section}/${name}`)
+  await page.locator('.cm-link-text', { hasText: 'slide 2' }).click()
+  await expect(page.getByRole('textbox', { name: 'Page' })).toHaveValue('2')
+})

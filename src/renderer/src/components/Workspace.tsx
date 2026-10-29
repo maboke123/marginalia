@@ -30,6 +30,8 @@ function loadSplit(): number {
   }
 }
 
+const onScreenPdf = (): string | undefined => useApp.getState().pdfView?.path
+
 /** A pane of the grid with nothing in it yet: recent files to put there. */
 function EmptyPane({ index }: { index: number }): React.JSX.Element {
   const recent = useApp((s) => s.recentFiles)
@@ -193,7 +195,8 @@ export function Workspace(): React.JSX.Element {
       const handled = e.defaultPrevented
       e.preventDefault()
       setDropping(false)
-      if (draggingFiles(e) && !handled) importDroppedFiles(e)
+      // A transcript or recording dropped on open slides is about them.
+      if (draggingFiles(e) && !handled) importDroppedFiles(e, undefined, onScreenPdf())
     }
   }
   const className = (extra: string): string =>

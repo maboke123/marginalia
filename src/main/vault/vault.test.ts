@@ -442,6 +442,53 @@ describe('importPdf', () => {
     await expect(vault.importPdf('', path.join(outside, 'a.pdf'))).rejects.toThrow('notebook')
   })
 
+  it('imports a transcript from a friend next to the slides it is about', async () => {
+    await write('ML/les_5/B5 trees.pdf', '%PDF')
+    await write('ML/les_5/Summary.md', '# Trees')
+    const source = path.join(outside, 'lecture 5.md')
+    const recording = path.join(outside, 'recording-2026-10-06T10-30.webm')
+    await fs.writeFile(recording, 'opus')
+    const text = [
+      '# Transcript 6 October 2026, 10:30',
+      '',
+      'Recorded from the microphone.',
+      'Audio: [recording-2026-10-06T10-30.webm](assets/recording-2026-10-06T10-30.webm)',
+      '',
+      '**00:12** · [slide 1](Trees.pdf#page=1) Good morning.',
+      ''
+    ].join('\n')
+    await fs.writeFile(source, text)
+
+    const imported = await vault.importNote('ML/les_5', source, { recordings: [recording] })
+    // The only PDF there; the friend's copy had another name.
+    expect(imported).toEqual({
+      note: 'ML/les_5/Transcript 2026-10-06 10-30.md',
+      pdf: 'ML/les_5/B5 trees.pdf',
+      recording
+    })
+    const note = await vault.readText(imported.note)
+    expect(note).toContain('[slide 1](B5%20trees.pdf#page=1)')
+    expect(note).toContain(
+      'Audio: [recording-2026-10-06T10-30.webm](assets/recording-2026-10-06T10-30.webm)'
+    )
+    expect(
+      await fs.readFile(path.join(root, 'ML/les_5/assets/recording-2026-10-06T10-30.webm'), 'utf8')
+    ).toBe('opus')
+    expect((await vault.tree()).notes['ML/les_5/B5 trees.pdf']).toEqual([imported.note])
+    // The originals are only read.
+    expect(await fs.readFile(source, 'utf8')).toBe(text)
+    expect(await fs.readdir(outside)).toHaveLength(2)
+
+    // A second copy gets its own name, and a plain note comes in as it is.
+    expect((await vault.importNote('ML/les_5', source)).note).toBe(
+      'ML/les_5/Transcript 2026-10-06 10-30 (2).md'
+    )
+    await fs.writeFile(path.join(outside, 'Summary.md'), '# From a friend')
+    expect((await vault.importNote('ML/les_5', path.join(outside, 'Summary.md'))).note).toBe(
+      'ML/les_5/Summary (2).md'
+    )
+  })
+
   it('reads a file as bytes', async () => {
     await write('ML/slides.pdf', 'pdf bytes')
 

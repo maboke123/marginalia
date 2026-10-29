@@ -34,6 +34,9 @@ const api: MarginaliaApi = {
       invoke('vault:setCourseLanguage', notebook, language),
     pickPdfs: () => invoke('vault:pickPdfs'),
     importPdfs: (parent, sources) => invoke('vault:importPdfs', parent, sources),
+    pickNotes: () => invoke('vault:pickNotes'),
+    importNotes: (parent, sources, pdf, recordings) =>
+      invoke('vault:importNotes', parent, sources, pdf, recordings),
     readFile: (path) => invoke('vault:readFile', path),
     lastPage: (path) => invoke('vault:lastPage', path),
     setLastPage: (path, page) => invoke('vault:setLastPage', path, page),

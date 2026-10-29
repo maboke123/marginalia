@@ -8,10 +8,14 @@ import type { Transcriber } from './engine'
 import { LiveSession } from './live'
 import { LiveSession as Session, timelineName } from './live'
 import {
+  adoptTranscript,
   audioOf,
   clock,
   headerOf,
+  isTranscriptNote,
+  linkedPdfNames,
   NOT_TRANSCRIBED,
+  recordedOn,
   slideAt,
   slideMarker,
   transcriptHeader,
@@ -198,5 +202,45 @@ describe('slide links in transcripts', () => {
     expect(slideMarker('ML/les_3/Transcript.md', 'ML/les_2/B1.pdf', 40)).toBe(
       '[slide 40](../les_2/B1.pdf#page=40)'
     )
+  })
+})
+
+describe('a transcript from another laptop', () => {
+  const FRIEND = [
+    '# Transcript 6 October 2026, 10:30',
+    '',
+    'Recorded from the microphone.',
+    'Audio: [recording-2026-10-06T10-30.webm](assets/recording-2026-10-06T10-30.webm)',
+    '',
+    '**00:12** · [slide 1](Lecture%205%20-%20Trees.pdf#page=1) Good morning.',
+    '',
+    '**01:40** · [slide 2](../slides/Lecture%205%20-%20Trees.pdf#page=2) Entropy is \\$5 of info.',
+    ''
+  ].join('\n')
+
+  it('is known by its name or its first line', () => {
+    expect(isTranscriptNote('Transcript 2026-10-06 10-30.md', '')).toBe(true)
+    expect(isTranscriptNote('lecture 5.md', FRIEND)).toBe(true)
+    expect(isTranscriptNote('Summary.md', '# Decision trees')).toBe(false)
+  })
+
+  it('tells when it was recorded and which slides it links to', () => {
+    expect(recordedOn(FRIEND)).toEqual(new Date(2026, 9, 6, 10, 30))
+    expect(recordedOn('# Transcript of my own')).toBeNull()
+    expect(linkedPdfNames(FRIEND)).toEqual(['Lecture 5 - Trees.pdf'])
+  })
+
+  it('links to the slides here and drops the recording it does not have', () => {
+    const adopted = adoptTranscript(FRIEND, 'ML/les_5/Transcript.md', 'ML/les_5/B5 trees.pdf', null)
+    expect(adopted).toContain('**00:12** · [slide 1](B5%20trees.pdf#page=1) Good morning.')
+    expect(adopted).toContain('[slide 2](B5%20trees.pdf#page=2) Entropy is \\$5 of info.')
+    expect(adopted).not.toContain('Audio:')
+    expect(adopted.split('\n').slice(0, 3)).toEqual(FRIEND.split('\n').slice(0, 3))
+  })
+
+  it('keeps its links without slides here, and points at the recording that came along', () => {
+    const adopted = adoptTranscript(FRIEND, 'ML/les_5/T.md', null, 'assets/recording (2).webm')
+    expect(adopted).toContain('(Lecture%205%20-%20Trees.pdf#page=1)')
+    expect(audioOf(adopted)).toBe('assets/recording (2).webm')
   })
 })

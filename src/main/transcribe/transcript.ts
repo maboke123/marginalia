@@ -114,6 +114,74 @@ export function headerOf(note: string): string | null {
   return audio === -1 ? null : lines.slice(0, audio + 1).join('\n') + '\n'
 }
 
+/** Whether a note is a transcript this app made (on this laptop or another): by name or title. */
+export function isTranscriptNote(fileName: string, text: string): boolean {
+  return /^Transcript .*\.md$/i.test(fileName) || text.trimStart().startsWith('# Transcript ')
+}
+
+const MONTHS = [
+  'january',
+  'february',
+  'march',
+  'april',
+  'may',
+  'june',
+  'july',
+  'august',
+  'september',
+  'october',
+  'november',
+  'december'
+]
+
+/** When the lecture was recorded, from a header like "# Transcript 6 October 2026, 10:30". */
+export function recordedOn(text: string): Date | null {
+  const m = /^# Transcript (\d{1,2}) (\w+) (\d{4}), (\d{1,2}):(\d{2})/m.exec(text)
+  const month = m ? MONTHS.indexOf(m[2].toLowerCase()) : -1
+  if (!m || month === -1) return null
+  return new Date(Number(m[3]), month, Number(m[1]), Number(m[4]), Number(m[5]))
+}
+
+const SLIDE_LINK = /\[slide (\d+)\]\(([^)\s]*?\.pdf)#page=(\d+)\)/gi
+
+/** File names of the PDFs a transcript's slide links point at, like "B2 trees.pdf". */
+export function linkedPdfNames(text: string): string[] {
+  const names = [...text.matchAll(SLIDE_LINK)].map((m) => {
+    const file = m[2].split('/').pop()!
+    try {
+      return decodeURIComponent(file)
+    } catch {
+      return file
+    }
+  })
+  return [...new Set(names)]
+}
+
+/**
+ * A transcript from another vault, made to fit this one at vault path `note`: its slide links
+ * point at `pdf` when given, and its Audio line at `audio` (relative to the note), or it goes
+ * when the recording did not come along.
+ */
+export function adoptTranscript(
+  text: string,
+  note: string,
+  pdf: string | null,
+  audio: string | null
+): string {
+  const linked = pdf
+    ? text.replace(SLIDE_LINK, (...m: string[]) => slideMarker(note, pdf, Number(m[3])))
+    : text
+  return linked
+    .split('\n')
+    .flatMap((line) => {
+      if (!line.startsWith('Audio: [')) return [line]
+      // A ")" in the file name, as in "recording (2).webm", would end the link.
+      const href = encodeURI(audio ?? '').replace(/[()]/g, (c) => (c === '(' ? '%28' : '%29'))
+      return audio ? [`Audio: [${audio.split('/').pop()}](${href})`] : []
+    })
+    .join('\n')
+}
+
 /** The kept audio a transcript links to, relative to the note: `assets/recording-....webm`. */
 export function audioOf(note: string): string | null {
   const m = /^Audio: \[[^\]]*\]\(([^)]+)\)/m.exec(note)
