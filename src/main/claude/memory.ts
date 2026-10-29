@@ -12,7 +12,10 @@ export const MAX_MEMORY = 8000
  * The key of a course note is the notebook name; '' is the note about me.
  */
 export class MemoryStore {
-  constructor(readonly dir: string) {}
+  constructor(
+    readonly dir: string,
+    readonly max = MAX_MEMORY
+  ) {}
 
   fileOf(course: string): string {
     return course
@@ -36,7 +39,7 @@ export class MemoryStore {
       return
     }
     await fs.mkdir(path.dirname(file), { recursive: true })
-    await writeFileAtomic(file, trimmed.slice(0, MAX_MEMORY) + '\n')
+    await writeFileAtomic(file, trimmed.slice(0, this.max) + '\n')
   }
 
   /** Every note there is: '' (about me) first, then the courses that have one. */

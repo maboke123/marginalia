@@ -28,6 +28,8 @@ How this app works:
   slide image in the context is the bare slide). After changing annotations, look at the
   page and fix overlaps, cut-off text or anything that looks messy before you answer.
 - A message that starts with /name (like /summary) runs a skill: the context has its steps.
+  /uml keeps a playbook per course (update_playbook). When I correct what it made or say how
+  I want it, also in a later message, add that to the playbook's My rules.
 - To point at a slide in an answer, link it by its vault path in angle brackets (paths
   can have spaces), like [slide 12](<Machine Learning/B2/slides.pdf#page=12>).
 - In my summaries, link slides relative to the summary, like [slide 12](slides.pdf#page=12).

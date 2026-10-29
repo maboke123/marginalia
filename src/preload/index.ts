@@ -139,6 +139,8 @@ const api: MarginaliaApi = {
     openInCode: (folder) => invoke('claude:openInCode', folder),
     memory: () => invoke('claude:memory'),
     setMemory: (course, note) => invoke('claude:setMemory', course, note),
+    playbook: (skill, course) => invoke('claude:playbook', skill, course),
+    setPlaybook: (skill, course, text) => invoke('claude:setPlaybook', skill, course, text),
     onEvent: (listener) => {
       const handler = (_e: unknown, chat: string, event: ChatEvent): void => listener(chat, event)
       ipcRenderer.on('claude:event', handler)

@@ -247,6 +247,31 @@ export interface Packet {
  * The context packet (SPEC section 6) for the chosen chips, in front of the question.
  * The slide image is left out when the previous message already carried the same page.
  */
+/** A learning skill's playbook for the course of the chat, and what it has not read yet. */
+async function playbookContext(skill: string, course: string): Promise<string[]> {
+  if (!course) return ['No course is open, so there is no playbook: use standard UML.']
+  const book = await window.api.claude.playbook(skill, course).catch(() => null)
+  if (!book) return []
+  const lines = [
+    `Your /${skill} playbook for the course ${course} (keep it up to date with update_playbook):`,
+    '<playbook>',
+    book.text.trim() || '(empty: nothing learned yet)',
+    '</playbook>'
+  ]
+  if (!book.pending.length) {
+    lines.push(`You learned from all ${book.learned} slide decks and transcripts of the course.`)
+    return lines
+  }
+  const shown = book.pending.slice(0, 40)
+  lines.push(
+    `Files of the course not learned yet: ${book.pending.length} of ${book.learned + book.pending.length}, in course order:`,
+    ...shown.map((p) => `- ${p}`)
+  )
+  if (book.pending.length > shown.length)
+    lines.push(`- and ${book.pending.length - shown.length} more`)
+  return lines
+}
+
 export async function buildPacket(
   chat: string,
   chips: Chip[],
@@ -321,6 +346,7 @@ export async function buildPacket(
 
   const skill = skillOf(question)
   if (skill) lines.push(`Skill /${skill.name}: follow these steps for my message.`, skill.steps)
+  if (skill?.learns) lines.push(...(await playbookContext(skill.name, chat.split('/')[0])))
 
   lines.push(CONTEXT_END, '', question)
   return { text: lines.join('\n'), images, imageKey }

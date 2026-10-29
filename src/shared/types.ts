@@ -11,6 +11,7 @@ import type {
   ChatRequest,
   ClaudeSettings,
   ClaudeSettingsUpdate,
+  Playbook,
   ToolCall,
   ToolReply
 } from './claude'
@@ -222,6 +223,12 @@ export interface MarginaliaApi {
     memory(): Promise<Record<string, string>>
     /** Replaces one note; empty text removes it. */
     setMemory(course: string, note: string): Promise<void>
+    /**
+     * What a skill (/uml) learned for a course, how many of the course's slide decks and
+     * transcripts it read, and the ones it has not (in the order of the course).
+     */
+    playbook(skill: string, course: string): Promise<Playbook>
+    setPlaybook(skill: string, course: string, text: string): Promise<void>
     onEvent(listener: (chat: string, event: ChatEvent) => void): () => void
     onToolCall(listener: (call: ToolCall) => void): () => void
     replyTool(reply: ToolReply): void

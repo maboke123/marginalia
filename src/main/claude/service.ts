@@ -11,6 +11,7 @@ import type {
   ChatRequest,
   ClaudeSettings,
   ClaudeSettingsUpdate,
+  Playbook,
   ToolReply
 } from '../../shared/claude'
 import { claudeSettings, type ConfigStore } from '../config'
@@ -28,6 +29,7 @@ import {
 } from './agent'
 import { storedApiKey } from './cli'
 import { courseOf, courseOfFile, type MemoryStore } from './memory'
+import { courseSources, notLearned, type PlaybookStore } from './playbook'
 import type { Memory } from './prompt'
 import { toHistory } from './events'
 import { findSession, projectsDir } from './sessions'
@@ -74,7 +76,8 @@ export function registerClaude(
   getWindow: () => BrowserWindow | null,
   config: ConfigStore,
   getVault: () => Vault | null,
-  memory: MemoryStore
+  memory: MemoryStore,
+  playbooks: PlaybookStore
 ): void {
   const agentModule = loadAgent()
   let running: AbortController | null = null
@@ -112,14 +115,66 @@ export function registerClaude(
     }
   }
 
+  /** The playbook of a skill for a course, with the files of the course it has not read. */
+  async function playbookOf(skill: string, course: string): Promise<Playbook> {
+    const [text, learned, sources] = await Promise.all([
+      playbooks.read(skill, course),
+      playbooks.learned(skill, course),
+      course ? courseSources(vault(), course) : {}
+    ])
+    const pending = notLearned(sources, learned)
+    return { text, learned: Object.keys(sources).length - pending.length, pending }
+  }
+
+  async function updatePlaybook(args: Record<string, unknown>): Promise<ToolReply> {
+    const id = randomUUID()
+    const skill = String(args.skill ?? 'uml')
+    const course = String(args.course ?? '').trim() || courseOf(runningChat)
+    if (!course) return { id, ok: false, text: 'Name the course: no course is open' }
+    try {
+      await playbooks.write(skill, course, String(args.playbook ?? ''))
+      const read = Array.isArray(args.learned) ? args.learned.map(String) : []
+      const sources = await courseSources(vault(), course)
+      const known = read.filter((file) => sources[file])
+      if (known.length) {
+        await playbooks.markLearned(
+          skill,
+          course,
+          Object.fromEntries(known.map((file) => [file, sources[file]]))
+        )
+      }
+      const { pending } = await playbookOf(skill, course)
+      const unknown = read.filter((file) => !sources[file])
+      return {
+        id,
+        ok: true,
+        text: [
+          `Saved the /${skill} playbook for ${course}.`,
+          unknown.length ? `Not files of this course: ${unknown.join(', ')}.` : '',
+          pending.length
+            ? `${pending.length} files of the course are not learned yet.`
+            : 'Every slide deck and transcript of the course is learned.'
+        ]
+          .filter(Boolean)
+          .join(' ')
+      }
+    } catch (err) {
+      return { id, ok: false, text: (err as Error).message }
+    }
+  }
+
   async function memoryFor(course: string): Promise<Memory> {
     const [me, courseNote] = await Promise.all([memory.read(''), course ? memory.read(course) : ''])
     return { me, course, courseNote }
   }
 
-  // The memory lives in main; every other tool runs in the renderer.
+  // The memory and the playbooks live in main; every other tool runs in the renderer.
   const callTool: CallTool = (name, args) =>
-    name === 'remember' ? remember(args) : rendererTool(name, args)
+    name === 'remember'
+      ? remember(args)
+      : name === 'update_playbook'
+        ? updatePlaybook(args)
+        : rendererTool(name, args)
 
   const rendererTool: CallTool = (name, args) =>
     new Promise((resolve) => {
@@ -326,6 +381,10 @@ export function registerClaude(
 
   handle('claude:memory', () => memory.all())
   handle('claude:setMemory', (course: string, note: string) => memory.write(course, note))
+  handle('claude:playbook', (skill: string, course: string) => playbookOf(skill, course))
+  handle('claude:setPlaybook', (skill: string, course: string, text: string) =>
+    playbooks.write(skill, course, text)
+  )
 
   handle('claude:newChat', (chat: string) => vault().setChatSession(chat, null))
 }

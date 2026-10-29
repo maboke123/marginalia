@@ -15,6 +15,7 @@ import { pathToFileURL } from 'url'
 import icon from '../../build/icon.ico?asset'
 import { ConfigStore } from './config'
 import { MemoryStore } from './claude/memory'
+import { PlaybookStore } from './claude/playbook'
 import { registerClaude } from './claude/service'
 import { handle, registerIpc } from './ipc'
 import { registerTerminal } from './terminal'
@@ -124,7 +125,8 @@ app.whenReady().then(async () => {
   nativeTheme.themeSource = (await config.read()).settings.theme
   const currentVault = registerIpc(() => mainWindow, config, app.getPath('userData'))
   const memory = new MemoryStore(path.join(app.getPath('userData'), 'memory'))
-  registerClaude(handle, () => mainWindow, config, currentVault, memory)
+  const playbooks = new PlaybookStore(path.join(app.getPath('userData'), 'skills'))
+  registerClaude(handle, () => mainWindow, config, currentVault, memory, playbooks)
   registerTerminal(handle, () => mainWindow, config, currentVault, memory)
   registerTranscription(handle, () => mainWindow, app.getPath('userData'), config, currentVault)
   protocol.handle('vault', (request) => {

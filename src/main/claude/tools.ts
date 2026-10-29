@@ -324,6 +324,17 @@ export function appToolServer(sdk: Sdk, call: CallTool): McpSdkServerConfigWithI
         note: z.string().describe('The whole note: short Markdown bullet points')
       },
       run('remember')
+    ),
+    sdk.tool(
+      'update_playbook',
+      "Replaces the playbook of a skill that learns a course (/uml) with this new version: what you learned from the course's slides and transcripts, and my rules from my feedback. List in learned the slide decks and transcripts (vault paths) you read for it this time, so they are not offered again.",
+      {
+        skill: z.enum(['uml']),
+        course: z.string().optional().describe('Name of the top folder, if not the current one'),
+        playbook: z.string().describe('The whole playbook, Markdown'),
+        learned: z.array(z.string()).optional().describe('Vault paths of files read this time')
+      },
+      run('update_playbook')
     )
   ]
   return sdk.createSdkMcpServer({ name: SERVER_NAME, version: '1.0.0', tools })
@@ -350,5 +361,6 @@ export const APP_TOOLS = [
   'screenshot',
   'preview_pdf_export',
   'goto',
-  'remember'
+  'remember',
+  'update_playbook'
 ].map((name) => `mcp__${SERVER_NAME}__${name}`)

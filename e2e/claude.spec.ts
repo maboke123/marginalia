@@ -397,6 +397,60 @@ test('Claude remembers how I like things, per course, and I can edit it', async 
     .toBe('- Likes short summaries with one example\n')
 })
 
+test('/uml learns the course lesson by lesson and keeps my rules', async () => {
+  const skills = path.join(env.userData, 'skills', 'uml', 'courses')
+  await fs.writeFile(
+    path.join(env.vault, section, 'Transcript 2026-10-06 10-30.md'),
+    '# Transcript 6 October 2026, 10:30\n\n**00:12** Start with the domain model.\n'
+  )
+  await fs.copyFile(slides, path.join(env.vault, 'Machine Learning/B3 Ensembles/ensembles.pdf'))
+  await openSlides()
+
+  // The picker offers the modes; learning takes the first lesson of the course.
+  await page.keyboard.press('Control+L')
+  await page.getByRole('textbox', { name: 'Message to Claude' }).fill('/uml')
+  await expect(page.getByRole('option', { name: /\/uml learn/ })).toBeVisible()
+  await expect(page.getByRole('option', { name: /\/uml review/ })).toBeVisible()
+  await ask('/uml learn')
+  await expect(answers().last()).toHaveText(
+    'Saved the /uml playbook for Machine Learning. 1 files of the course are not learned yet.'
+  )
+  await expect(page.locator('.claude-tool').last()).toContainText(
+    'Updated its /uml playbook for this course'
+  )
+  const first = (await readLog()).at(-1)!
+  expect(first.text).toContain('Skill /uml: follow these steps')
+  expect(first.text).toContain('(empty: nothing learned yet)')
+  expect(first.text).toContain('Files of the course not learned yet: 3 of 3, in course order:')
+  expect(await fs.readFile(path.join(skills, 'Machine Learning.md'), 'utf8')).toContain(
+    '- Domain model first'
+  )
+  const learned = JSON.parse(
+    await fs.readFile(path.join(skills, 'Machine Learning.learned.json'), 'utf8')
+  )
+  expect(Object.keys(learned).sort()).toEqual([
+    `${section}/Transcript 2026-10-06 10-30.md`,
+    `${section}/slides.pdf`
+  ])
+
+  // The next /uml has the playbook along; a rule I give stays in it.
+  await ask('/uml an order has lines, never put getters in a class')
+  await expect(answers().last()).toHaveText('Playbook: - Domain model first slide 1')
+  await expect
+    .poll(() => fs.readFile(path.join(skills, 'Machine Learning.md'), 'utf8'))
+    .toContain('- Never put getters in a class')
+
+  // Settings show it for the course on screen, with how much it learned.
+  await page.getByRole('button', { name: 'Claude settings' }).click()
+  await expect(page.getByRole('combobox', { name: 'Playbook of' })).toHaveValue('Machine Learning')
+  await expect(page.getByRole('textbox', { name: 'Playbook', exact: true })).toHaveValue(
+    /Never put getters in a class/
+  )
+  await expect(page.getByText('Learned from 2 of the 3 slide decks and transcripts')).toBeVisible()
+  await page.getByRole('textbox', { name: 'Playbook', exact: true }).scrollIntoViewIfNeeded()
+  await page.screenshot({ path: path.join('test-results', 'claude-playbook.png') })
+})
+
 test('text in the chat can be selected, copied and asked about', async () => {
   await openSlides(3)
   await ask('Explain this formula')
@@ -968,7 +1022,8 @@ test('/summary runs a skill that writes a new note linked to the slides', async 
   const input = page.getByRole('textbox', { name: 'Message to Claude' })
   await page.keyboard.press('Control+L')
   await input.fill('/')
-  await expect(page.locator('.claude-picker li')).toHaveCount(4)
+  // Four skills, and /uml learn and /uml review.
+  await expect(page.locator('.claude-picker li')).toHaveCount(6)
   await input.press('Enter')
   await expect(input).toHaveValue('/summary ')
   await input.press('Enter')

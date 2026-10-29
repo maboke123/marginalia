@@ -4,7 +4,8 @@ import {
   MODELS,
   type ChatInfo,
   type EffortChoice,
-  type ModelChoice
+  type ModelChoice,
+  type Playbook
 } from '../../../shared/claude'
 import type { VaultNode } from '../../../shared/types'
 import { ContextMenu, type MenuItem } from '../components/ContextMenu'
@@ -500,16 +501,22 @@ function ChatInput({ chat, busy }: { chat: string; busy: boolean }): React.JSX.E
     if (!picker) return []
     const q = picker.query.toLowerCase()
     if (picker.kind === '/') {
-      return SKILLS.filter((skill) => skill.name.startsWith(q)).map((skill) => ({
-        key: skill.name,
-        icon: 'chat',
-        text: `/${skill.name}`,
-        detail: skill.label,
-        pick: () => {
-          setText(`/${skill.name} `)
-          setPicker(null)
-        }
-      }))
+      const commands = SKILLS.flatMap((skill) => [
+        { command: skill.name, label: skill.label },
+        ...(skill.modes ?? []).map((m) => ({ command: `${skill.name} ${m.name}`, label: m.label }))
+      ])
+      return commands
+        .filter((c) => c.command.startsWith(q))
+        .map((c) => ({
+          key: c.command,
+          icon: 'chat',
+          text: `/${c.command}`,
+          detail: c.label,
+          pick: () => {
+            setText(`/${c.command} `)
+            setPicker(null)
+          }
+        }))
     }
     const all = flatten(nodes).filter((n) => n.path.toLowerCase().includes(q))
     const otherChats = chatGroups(chatOf(useApp.getState()), chats)
@@ -755,6 +762,78 @@ function ChatInput({ chat, busy }: { chat: string; busy: boolean }): React.JSX.E
   )
 }
 
+/** What /uml learned per course, from the slides, transcripts and my feedback; editable. */
+function PlaybookField(): React.JSX.Element {
+  const nodes = useApp((s) => s.nodes)
+  const activeFile = useApp((s) => s.activeFile)
+  const courses = nodes.filter((n) => n.kind === 'notebook').map((n) => n.name)
+  const [course, setCourse] = useState(() => {
+    const current = activeFile?.split('/')[0] ?? ''
+    return courses.includes(current) ? current : (courses[0] ?? '')
+  })
+  // Kept with its course, so another course shows nothing until its playbook is loaded.
+  const [loaded, setLoaded] = useState<{ course: string; book: Playbook } | null>(null)
+  const book = loaded?.course === course ? loaded.book : null
+  const setBook = (next: Playbook): void => setLoaded({ course, book: next })
+  const [draft, setDraft] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (course) {
+      void window.api.claude.playbook('uml', course).then((b) => setLoaded({ course, book: b }))
+    }
+  }, [course])
+
+  if (!courses.length) return <></>
+  const total = book ? book.learned + book.pending.length : 0
+  return (
+    <div className="field">
+      <span>/uml playbook</span>
+      <div className="claude-instructions">
+        <select
+          aria-label="Playbook of"
+          value={course}
+          onChange={(e) => {
+            setDraft(null)
+            setCourse(e.target.value)
+          }}
+        >
+          {courses.map((c) => (
+            <option key={c} value={c}>
+              {c}
+            </option>
+          ))}
+        </select>
+        <textarea
+          aria-label="Playbook"
+          rows={8}
+          value={draft ?? book?.text ?? ''}
+          disabled={!book}
+          placeholder={'Nothing learned yet. Send "/uml learn" in a chat of this course.'}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={() => {
+            if (book && draft !== null && draft !== book.text) {
+              const text = draft.trim()
+              void window.api.claude
+                .setPlaybook('uml', course, text)
+                .then(() => setBook({ ...book, text: text && `${text}\n` }))
+                .catch((err: Error) => useApp.getState().showError(err.message))
+            }
+            setDraft(null)
+          }}
+        />
+        <p className="muted">
+          {book &&
+            (total
+              ? `Learned from ${book.learned} of the ${total} slide decks and transcripts of this course. `
+              : 'This course has no slides or transcripts yet. ')}
+          /uml follows it and adds your corrections to My rules. &quot;/uml learn&quot; reads what
+          it has not read yet. Only on this computer, not in your vault.
+        </p>
+      </div>
+    </div>
+  )
+}
+
 /** What Claude remembers about me and per course; it writes these itself, I can edit them. */
 function MemoryField(): React.JSX.Element {
   const nodes = useApp((s) => s.nodes)
@@ -908,6 +987,7 @@ function SettingsView({ onDone }: { onDone(): void }): React.JSX.Element {
         </div>
       </div>
       <MemoryField />
+      <PlaybookField />
       <div className="field">
         <span>Login</span>
         <div className="claude-login">

@@ -169,6 +169,32 @@ export async function* agent(input) {
       text: 'Information gain'
     })
     yield { type: 'text', text: reply.ok ? 'Highlighted it.' : reply.text }
+  } else if (question.startsWith('/uml learn')) {
+    // Learns the first lesson among the files the context says are not learned yet.
+    const pending = (input.text.split('Files of the course not learned yet').pop() ?? '')
+      .split('\n')
+      .filter((l) => l.startsWith('- '))
+      .map((l) => l.slice(2))
+    const lesson = pending[0]?.split('/').slice(0, -1).join('/')
+    const learned = pending.filter((p) => p.startsWith(`${lesson}/`))
+    yield { type: 'tool', name: 'update_playbook', input: { skill: 'uml' } }
+    const reply = await input.callTool('update_playbook', {
+      skill: 'uml',
+      playbook: `## How the lecturer models\n- Domain model first [slide 1](<${learned[0]}#page=1>)\n\n## My rules\n`,
+      learned
+    })
+    yield { type: 'text', text: reply.text }
+  } else if (question.startsWith('/uml')) {
+    // Says what came along: the playbook, and whether a rule was given.
+    const book = /<playbook>\n([\s\S]*?)\n<\/playbook>/.exec(input.text)?.[1] ?? 'none'
+    const rule = /never (.+)$/i.exec(question)?.[1]
+    if (rule) {
+      await input.callTool('update_playbook', {
+        skill: 'uml',
+        playbook: `${book}\n- Never ${rule}`
+      })
+    }
+    yield { type: 'text', text: `Playbook: ${book.split('\n')[1] ?? book}` }
   } else if (/^remember/i.test(question)) {
     // "remember: <note>" saves the course note, "remember me: <note>" the one about me.
     const about = /^remember me/i.test(question) ? 'me' : 'course'

@@ -91,6 +91,15 @@ export interface ToolReply {
   image?: ChatImage
 }
 
+/** What a skill learned for one course (see PlaybookStore in main). */
+export interface Playbook {
+  text: string
+  /** How many of the course's slide decks and transcripts it has read. */
+  learned: number
+  /** Those it has not read yet, or that changed since, in the order of the course. */
+  pending: string[]
+}
+
 /** The context packet travels in front of each question, between these markers. */
 export const CONTEXT_START = '<context>'
 export const CONTEXT_END = '</context>'

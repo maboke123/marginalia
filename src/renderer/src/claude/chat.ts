@@ -171,6 +171,8 @@ function describeTool(name: string, input: Record<string, unknown>): string {
       return input.about === 'me'
         ? 'Updated what it remembers about you'
         : `Updated what it remembers about ${input.course || 'this course'}`
+    case 'update_playbook':
+      return `Updated its /${input.skill} playbook for ${input.course || 'this course'}`
     case 'Read':
       return `Read ${file}`
     case 'Glob':
