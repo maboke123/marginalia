@@ -3,6 +3,7 @@ import { useStore } from 'zustand'
 import {
   boundsOf,
   canvasFrom,
+  contains,
   formatCanvas,
   newCanvasId,
   overlaps,
@@ -64,6 +65,7 @@ import {
   pasteItems,
   removeItems,
   resized,
+  snapResized,
   updateEdge,
   updateNode,
   withStroke,
@@ -653,6 +655,13 @@ function CanvasSurface({
     }
   }
 
+  /**
+   * Boxes on screen a moved or resized set can line up with. Groups only count when a group
+   * moves: a box would otherwise stick to the border of the group it sits in.
+   */
+  const snapOthers = (start: CanvasData, ids: Set<string>, groups: boolean): CanvasNode[] =>
+    start.nodes.filter((n) => !ids.has(n.id) && (groups || n.type !== 'group') && overlaps(near, n))
+
   // Snapping a moved set of boxes: its edges and middle to those of the other boxes on screen.
   const snapMove = (
     ids: Set<string>,
@@ -664,8 +673,10 @@ function CanvasSurface({
     const moving = start.nodes.filter((n) => ids.has(n.id))
     const box = boundsOf(moving)
     if (!box || !snapping || alt) return { dx, dy, gx: null, gy: null, gaps: [] }
-    const others = start.nodes.filter(
-      (n) => !ids.has(n.id) && n.type !== 'group' && overlaps(near, n)
+    const others = snapOthers(
+      start,
+      ids,
+      moving.some((n) => n.type === 'group')
     )
     const xs = others.flatMap((n) => [n.x, n.x + n.width / 2, n.x + n.width])
     const ys = others.flatMap((n) => [n.y, n.y + n.height / 2, n.y + n.height])
@@ -838,7 +849,24 @@ function CanvasSurface({
       case 'resize': {
         const node = nodeById(s.data, d.id)
         const keep = e.shiftKey || node?.type === 'file' || node?.type === 'ink'
-        const rect = resized(d.rect, d.handle, at.x - d.from.x, at.y - d.from.y, keep)
+        let rect = resized(d.rect, d.handle, at.x - d.from.x, at.y - d.from.y, keep)
+        // Sides being dragged line up with those of the boxes around (not with a kept ratio).
+        if (node && snapping && !keep && !e.altKey) {
+          const start = s.started()
+          const outer = (n: CanvasNode): boolean => n.type === 'group' && contains(n, d.rect)
+          const others = snapOthers(start, new Set([d.id]), node.type === 'group').filter(
+            (n) => !outer(n)
+          )
+          const snapped = snapResized(
+            rect,
+            d.handle,
+            others.flatMap((n) => [n.x, n.x + n.width]),
+            others.flatMap((n) => [n.y, n.y + n.height]),
+            SNAP_PX / cameraRef.current.zoom
+          )
+          rect = snapped.rect
+          setGuides({ x: snapped.gx, y: snapped.gy })
+        }
         s.update((data) => updateNode(data, d.id, rect))
         return
       }
@@ -934,6 +962,7 @@ function CanvasSurface({
         s.select({ nodes: [d.clicked], edges: [] })
       }
     } else if (d.kind === 'resize') {
+      setGuides({ x: null, y: null })
       s.end()
     } else if (d.kind === 'marquee') {
       setMarquee(null)

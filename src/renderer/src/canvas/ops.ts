@@ -15,6 +15,7 @@ import {
   type Rect,
   type Side
 } from '../../../shared/canvas'
+import { snapAxis } from '../annotations/snap'
 import { grow } from './camera'
 
 // Pure edits of a canvas. Each returns a new CanvasData and keeps unchanged nodes and edges as
@@ -142,6 +143,41 @@ export function resized(
     width: Math.round(width),
     height: Math.round(height)
   }
+}
+
+/**
+ * A resized rectangle whose dragged sides snap to the lines `xs` / `ys` within `threshold`,
+ * with where to draw the guides.
+ */
+export function snapResized(
+  rect: Rect,
+  handle: Handle,
+  xs: number[],
+  ys: number[],
+  threshold: number
+): { rect: Rect; gx: number | null; gy: number | null } {
+  let { x, y, width, height } = rect
+  let gx: number | null = null
+  let gy: number | null = null
+  const nearest = (v: number, lines: number[]): number | null => {
+    const hit = snapAxis(v, [{ offset: 0, targets: lines }], threshold)
+    return hit.guide
+  }
+  if (handle.includes('e')) {
+    const t = nearest(x + width, xs)
+    if (t !== null && t - x >= MIN_SIZE) [width, gx] = [t - x, t]
+  } else if (handle.includes('w')) {
+    const t = nearest(x, xs)
+    if (t !== null && x + width - t >= MIN_SIZE) [width, x, gx] = [x + width - t, t, t]
+  }
+  if (handle.includes('s')) {
+    const t = nearest(y + height, ys)
+    if (t !== null && t - y >= MIN_SIZE) [height, gy] = [t - y, t]
+  } else if (handle.includes('n')) {
+    const t = nearest(y, ys)
+    if (t !== null && y + height - t >= MIN_SIZE) [height, y, gy] = [y + height - t, t, t]
+  }
+  return { rect: { x, y, width, height }, gx, gy }
 }
 
 /** Nodes whose box lies inside a dragged selection rectangle (groups only when fully inside). */

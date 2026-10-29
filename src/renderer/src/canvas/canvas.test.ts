@@ -22,6 +22,7 @@ import {
   pasteItems,
   removeItems,
   resized,
+  snapResized,
   withStroke
 } from './ops'
 
@@ -94,6 +95,15 @@ describe('ops', () => {
     expect(resized(rect, 'nw', 50, 20)).toEqual({ x: 50, y: 20, width: 150, height: 80 })
     expect(resized(rect, 'w', 500, 0).width).toBe(24)
     expect(resized(rect, 'se', 100, 0, true)).toEqual({ x: 0, y: 0, width: 300, height: 150 })
+  })
+
+  it('snaps the dragged sides of a resized box to lines nearby', () => {
+    const rect = { x: 0, y: 0, width: 203, height: 97 }
+    const se = snapResized(rect, 'se', [205, 400], [100], 6)
+    expect(se).toEqual({ rect: { x: 0, y: 0, width: 205, height: 100 }, gx: 205, gy: 100 })
+    // The left side moves when the left handle is dragged; nothing too far away snaps.
+    const w = snapResized({ x: 10, y: 0, width: 190, height: 97 }, 'w', [4, 205], [300], 6)
+    expect(w).toEqual({ rect: { x: 4, y: 0, width: 196, height: 97 }, gx: 4, gy: null })
   })
 
   it('selects with a dragged box: groups only when fully inside', () => {

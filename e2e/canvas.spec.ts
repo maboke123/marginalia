@@ -331,6 +331,48 @@ test('moving a group moves what is inside, as one undo step', async () => {
     .toBe(420)
 })
 
+test('a moved or resized group lines up with another group', async () => {
+  await fs.writeFile(
+    file('Packages.canvas'),
+    JSON.stringify({
+      nodes: [
+        { id: 'a', type: 'group', label: 'Domain', x: 0, y: 0, width: 300, height: 200 },
+        { id: 'order', type: 'text', text: 'Order', x: 20, y: 40, width: 120, height: 60 },
+        { id: 'b', type: 'group', label: 'UI', x: 500, y: 90, width: 300, height: 160 },
+        { id: 'view', type: 'text', text: 'View', x: 520, y: 140, width: 120, height: 60 }
+      ],
+      edges: []
+    })
+  )
+  await row('Design of Software Systems').click()
+  await row('les_1').click()
+  await row('Packages').click()
+  await expect(page.locator('.canvas-node')).toHaveCount(4)
+  const top = async (id: string): Promise<number> =>
+    (await page.locator(`[data-node="${id}"]`).boundingBox())!.y
+
+  // Let go a few pixels below the other group's top: it snaps level with it.
+  const label = (await page.locator('[data-node="b"] .canvas-group-label').boundingBox())!
+  const up = (await top('b')) - (await top('a')) - 3
+  await page.mouse.move(label.x + 10, label.y + 8)
+  await page.mouse.down()
+  await page.mouse.move(label.x + 10, label.y + 8 - up, { steps: 6 })
+  await expect(page.locator('.canvas-guide')).not.toHaveCount(0)
+  await page.mouse.up()
+  const group = async (id: string): Promise<{ y: number; height: number }> =>
+    (await read('Packages.canvas')).nodes.find((n) => n.id === id)!
+  await expect.poll(async () => (await group('b')).y).toBe(0)
+
+  // Its bottom edge, dragged near the other group's bottom, snaps to it too.
+  const handle = (await page.locator('[data-node="b"] [data-handle="s"]').boundingBox())!
+  const a = (await page.locator('[data-node="a"]').boundingBox())!
+  await page.mouse.move(handle.x + handle.width / 2, handle.y + handle.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(handle.x + handle.width / 2, a.y + a.height - 3, { steps: 6 })
+  await page.mouse.up()
+  await expect.poll(async () => (await group('b')).height).toBe(200)
+})
+
 test('zooming keeps the point under the mouse; fit shows everything', async () => {
   await openShop()
   const order = page.locator('[data-node="order"]')
