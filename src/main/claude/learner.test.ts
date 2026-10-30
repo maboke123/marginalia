@@ -4,7 +4,7 @@ import path from 'path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { Vault } from '../vault/vault'
 import type { LearnInput } from './agent'
-import { Learner } from './learner'
+import { Learner, RETRY_MS } from './learner'
 import { afterDrawing, PlaybookStore, SETTLE_MS } from './playbook'
 
 let dir: string
@@ -32,31 +32,34 @@ const box = (id: string, text: string): object => ({
   height: 60
 })
 
-function learner(): Learner {
-  return new Learner({
-    playbooks: store,
-    vault: () => vault,
-    // Like Claude: saves a playbook naming the lesson, says what it did.
-    learn: async () => async (input) => {
-      runs.push(input)
-      if (fail) throw new Error(fail)
-      const lesson = /Lesson: (.+)\./.exec(input.text)![1]
-      await store.write(
-        'uml',
-        'DSS',
-        'text',
-        `${await store.read('uml', 'DSS', 'text')}- ${lesson}\n`
-      )
-      return `- Learned ${lesson}`
+function learner(now?: () => number): Learner {
+  return new Learner(
+    {
+      playbooks: store,
+      vault: () => vault,
+      // Like Claude: saves a playbook naming the lesson, says what it did.
+      learn: async () => async (input) => {
+        runs.push(input)
+        if (fail) throw new Error(fail)
+        const lesson = /Lesson: (.+)\./.exec(input.text)![1]
+        await store.write(
+          'uml',
+          'DSS',
+          'text',
+          `${await store.read('uml', 'DSS', 'text')}- ${lesson}\n`
+        )
+        return `- Learned ${lesson}`
+      },
+      tools: () => async () => ({ id: '', ok: true, text: '' }),
+      input: async () => ({
+        settings: {} as LearnInput['settings'],
+        memory: { me: '', course: 'DSS', courseNote: '' },
+        apiKey: null
+      }),
+      emit: () => {}
     },
-    tools: () => async () => ({ id: '', ok: true, text: '' }),
-    input: async () => ({
-      settings: {} as LearnInput['settings'],
-      memory: { me: '', course: 'DSS', courseNote: '' },
-      apiKey: null
-    }),
-    emit: () => {}
-  })
+    now
+  )
 }
 
 beforeEach(async () => {
@@ -153,5 +156,21 @@ describe('Learner', () => {
     fail = null
     await learner().run('uml', 'DSS', false)
     expect((await store.state('uml', 'DSS')).error).toBeNull()
+  })
+
+  it('waits an hour before trying again by itself after a run failed', async () => {
+    let clock = Date.now()
+    const one = learner(() => clock)
+    await store.update('uml', 'DSS', (s) => ({ ...s, learning: true }))
+    fail = 'You have reached your usage limit'
+    await one.tick()
+    expect(runs).toHaveLength(1)
+    fail = null
+    clock += 5 * 60_000
+    await one.tick()
+    expect(runs).toHaveLength(1)
+    clock += RETRY_MS
+    await one.tick()
+    expect(runs).toHaveLength(3)
   })
 })

@@ -18,6 +18,9 @@ import type { CallTool } from './tools'
 
 export type LessonFile = Pending & { edits: string[] | null }
 
+/** After a failed run, the next one by itself (not "Learn now") waits this long. */
+export const RETRY_MS = 60 * 60_000
+
 const KIND: Record<SourceKind, string> = {
   pdf: 'slides or other PDF',
   transcript: 'transcript',
@@ -80,8 +83,13 @@ interface LearnerDeps {
  */
 export class Learner {
   private current: { status: LearnStatus; controller: AbortController } | null = null
+  // When a run of a course last failed (usage limit, offline): ticks leave it alone a while.
+  private failed = new Map<string, number>()
 
-  constructor(private deps: LearnerDeps) {}
+  constructor(
+    private deps: LearnerDeps,
+    private now: () => number = Date.now
+  ) {}
 
   status(): LearnStatus | null {
     return this.current?.status ?? null
@@ -120,7 +128,7 @@ export class Learner {
     this.current = { status, controller }
     const { playbooks } = this.deps
     try {
-      const pending = await this.pending(vault, skill, course, settled ? Date.now() : Infinity)
+      const pending = await this.pending(vault, skill, course, settled ? this.now() : Infinity)
       const lessons = lessonsOf(pending)
       for (const [i, lesson] of lessons.entries()) {
         if (controller.signal.aborted || this.deps.vault() !== vault) break
@@ -131,10 +139,12 @@ export class Learner {
       if (lessons.length && !controller.signal.aborted) {
         await playbooks.update(skill, course, (s) => ({ ...s, error: null }))
       }
+      this.failed.delete(`${skill}/${course}`)
     } catch (err) {
       if (!controller.signal.aborted) {
         const error = (err as Error).message || String(err)
         console.error('[learn]', error)
+        this.failed.set(`${skill}/${course}`, this.now())
         await playbooks.update(skill, course, (s) => ({ ...s, error })).catch(() => {})
       }
     } finally {
@@ -196,11 +206,16 @@ export class Learner {
     })
   }
 
-  /** For each course being learned: what has settled since the last time. */
+  /**
+   * For each course being learned: what has settled since the last time. A course whose last
+   * run failed waits an hour, so a reached usage limit is not asked again every few minutes.
+   */
   async tick(): Promise<void> {
     if (this.current || !this.deps.vault()) return
     for (const skill of LEARNING_SKILLS) {
       for (const course of await this.deps.playbooks.learning(skill)) {
+        const failed = this.failed.get(`${skill}/${course}`)
+        if (failed !== undefined && this.now() - failed < RETRY_MS) continue
         await this.run(skill, course, true).catch((err) => console.error('[learn]', err))
       }
     }
