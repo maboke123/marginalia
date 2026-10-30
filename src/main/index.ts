@@ -123,9 +123,18 @@ app.whenReady().then(async () => {
   app.setAppUserModelId('io.github.maboke123.marginalia')
   const config = new ConfigStore(path.join(app.getPath('userData'), 'config.json'))
   nativeTheme.themeSource = (await config.read()).settings.theme
-  const currentVault = registerIpc(() => mainWindow, config, app.getPath('userData'))
   const memory = new MemoryStore(path.join(app.getPath('userData'), 'memory'))
   const playbooks = new PlaybookStore(path.join(app.getPath('userData'), 'skills'))
+  // What Claude keeps about a course and its files follows renames in the vault.
+  const currentVault = registerIpc(
+    () => mainWindow,
+    config,
+    app.getPath('userData'),
+    async (from, to) => {
+      if (to) await memory.rename(from, to)
+      await playbooks.remap(from, to)
+    }
+  )
   registerClaude(handle, () => mainWindow, config, currentVault, memory, playbooks)
   registerTerminal(handle, () => mainWindow, config, currentVault, memory)
   registerTranscription(handle, () => mainWindow, app.getPath('userData'), config, currentVault)

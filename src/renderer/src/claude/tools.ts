@@ -186,6 +186,9 @@ async function applyChange(
 // PDFs Claude changes without opening them: their doc writes back to the annotation file.
 const closedSaves = new WeakMap<AnnotationDoc, () => Promise<void>>()
 let closedTasks: { destroy(): Promise<void> }[] = []
+// A chat and a learning run may call tools at the same time: the PDFs loaded for them are
+// destroyed once no call is running, not under a call that still uses one.
+let callsRunning = 0
 
 /** Claude may open files it works on only when I said so in its settings. */
 const opensFiles = (): boolean => useChat.getState().settings?.openEditedFiles === true
@@ -648,15 +651,20 @@ const TOOLS: Record<string, (args: Args) => Promise<Result>> = {
     if (!accepted) throw new ToolError(REJECTED)
 
     let result: EditResult
+    let before: CanvasData
+    let after: CanvasData
     const doc = openCanvas(path)?.doc
     if (doc) {
-      const current = doc.getState().data
-      result = applyChanges(current, changes)
+      before = doc.getState().data
+      result = applyChanges(before, changes)
       // One undo step; a drag of mine going on meanwhile keeps working.
-      doc.getState().change((d) => (d === current ? result.data : applyChanges(d, changes).data))
+      doc.getState().change((d) => (d === before ? result.data : applyChanges(d, changes).data))
+      after = doc.getState().data
     } else {
-      result = applyChanges(canvasFrom(await window.api.vault.readText(path)), changes)
-      await window.api.vault.writeText(path, formatCanvas(result.data))
+      before = canvasFrom(await window.api.vault.readText(path))
+      result = applyChanges(before, changes)
+      after = result.data
+      await window.api.vault.writeText(path, formatCanvas(after))
     }
     const renamed = [...result.added].filter(([mine, real]) => mine !== real)
     return {
@@ -665,7 +673,8 @@ const TOOLS: Record<string, (args: Args) => Promise<Result>> = {
         ...renamed.map(([mine, real]) => `Your id ${mine} was taken; it is ${real}.`),
         ...result.errors,
         'Look at it with screenshot to check the layout.'
-      ].join('\n')
+      ].join('\n'),
+      drawn: { path, before: formatCanvas(before), after: formatCanvas(after) }
     }
   },
 
@@ -1039,14 +1048,17 @@ const TOOLS: Record<string, (args: Args) => Promise<Result>> = {
 export async function runTool(call: ToolCall): Promise<ToolReply> {
   const tool = TOOLS[call.name]
   if (!tool) return { id: call.id, ok: false, text: `Unknown tool ${call.name}` }
+  callsRunning++
   try {
     return { id: call.id, ok: true, ...(await tool(call.args)) }
   } catch (err) {
     if (!(err instanceof ToolError)) console.error(`[tool ${call.name}]`, err)
     return { id: call.id, ok: false, text: (err as Error).message }
   } finally {
-    const tasks = closedTasks
-    closedTasks = []
-    tasks.forEach((t) => void t.destroy())
+    if (--callsRunning === 0) {
+      const tasks = closedTasks
+      closedTasks = []
+      tasks.forEach((t) => void t.destroy())
+    }
   }
 }

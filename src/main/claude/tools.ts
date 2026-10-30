@@ -98,8 +98,12 @@ function toResult(reply: ToolReply): CallToolResult {
   return { content, isError: !reply.ok }
 }
 
-/** The app tools from SPEC section 6, as an in-process MCP server. */
-export function appToolServer(sdk: Sdk, call: CallTool): McpSdkServerConfigWithInstance {
+/** The app tools from SPEC section 6, as an in-process MCP server; `only` these names. */
+export function appToolServer(
+  sdk: Sdk,
+  call: CallTool,
+  only: string[] = CHAT_TOOLS
+): McpSdkServerConfigWithInstance {
   const run =
     (name: string) =>
     async (args: Record<string, unknown>): Promise<CallToolResult> =>
@@ -327,20 +331,62 @@ export function appToolServer(sdk: Sdk, call: CallTool): McpSdkServerConfigWithI
     ),
     sdk.tool(
       'update_playbook',
-      "Replaces the playbook of a skill that learns a course (/uml) with this new version: what you learned from the course's slides and transcripts, and my rules from my feedback. List in learned the slide decks and transcripts (vault paths) you read for it this time, so they are not offered again.",
+      'Replaces what the /uml playbook of the course says the lecturer does with this new ' +
+        'version, merged with what you learned now. My rules are kept apart (add_rule).',
       {
         skill: z.enum(['uml']),
         course: z.string().optional().describe('Name of the top folder, if not the current one'),
-        playbook: z.string().describe('The whole playbook, Markdown'),
-        learned: z.array(z.string()).optional().describe('Vault paths of files read this time')
+        playbook: z.string().describe('The whole playbook, Markdown')
       },
       run('update_playbook')
+    ),
+    sdk.tool(
+      'add_rule',
+      'Adds one of my rules to the /uml playbook of a course: something I told you, what my ' +
+        'changes to your diagrams show I want, or feedback the lecturer or a teaching assistant ' +
+        "gave on my work (with from). Rules come before the lecturer's slides. When it " +
+        'contradicts a rule, the newer one wins: pass replaces; an empty rule removes that one.',
+      {
+        skill: z.enum(['uml']),
+        course: z.string().optional().describe('Name of the top folder, if not the current one'),
+        rule: z
+          .string()
+          .describe('One short line, like "No getters and setters in class diagrams"'),
+        replaces: z.string().optional().describe('The text of the rule this one replaces'),
+        from: z
+          .string()
+          .optional()
+          .describe(
+            'Who it comes from when not from me, and where: "the TA, feedback on iteration 1" ' +
+              'or "the lecturer, Q&A 6 Nov"'
+          )
+      },
+      run('add_rule')
     )
   ]
-  return sdk.createSdkMcpServer({ name: SERVER_NAME, version: '1.0.0', tools })
+  return sdk.createSdkMcpServer({
+    name: SERVER_NAME,
+    version: '1.0.0',
+    tools: tools.filter((t) => only.includes(t.name))
+  })
 }
 
-export const APP_TOOLS = [
+const mcpName = (name: string): string => `mcp__${SERVER_NAME}__${name}`
+
+/** A learning run reads the course and writes only the playbook. */
+export const LEARN_TOOLS = [
+  'read_pdf_text',
+  'read_pdf_page',
+  'list_annotations',
+  'read_canvas',
+  'read_summary',
+  'update_playbook',
+  'add_rule'
+]
+export const LEARN_TOOL_NAMES = LEARN_TOOLS.map(mcpName)
+
+// Only a learning run rewrites a playbook; the chat adds my rules one at a time.
+const CHAT_TOOLS = [
   'get_current_view',
   'read_pdf_page',
   'read_pdf_text',
@@ -362,5 +408,6 @@ export const APP_TOOLS = [
   'preview_pdf_export',
   'goto',
   'remember',
-  'update_playbook'
-].map((name) => `mcp__${SERVER_NAME}__${name}`)
+  'add_rule'
+]
+export const APP_TOOLS = CHAT_TOOLS.map(mcpName)

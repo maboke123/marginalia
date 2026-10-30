@@ -6,7 +6,7 @@ export interface Skill {
   label: string
   steps: string
   /**
-   * The skill learns each course from its slides and transcripts, and from my feedback; its
+   * The skill learns each course from its files and from my feedback (Learner in main); its
    * playbook for the course goes along in the context.
    */
   learns?: true
@@ -63,46 +63,24 @@ of a lecture.
     name: 'uml',
     label: 'Draw UML diagrams from a description or user story, the way this course does it',
     learns: true,
-    modes: [
-      {
-        name: 'learn',
-        label: "Learn this course's way of modelling from its slides and transcripts"
-      },
-      { name: 'review', label: 'Check a diagram the way the lecturer would' }
-    ],
+    modes: [{ name: 'review', label: 'Check a diagram the way the lecturer would' }],
     steps: `You model the way the lecturer of this course does. The context has your playbook
-for this course: what you learned from its slides and transcripts, and my rules from my
-feedback. It comes before general UML habits; my rules come before the lecturer's.
-
-If my message is "/uml learn", learn instead of drawing:
-L1. The context lists the files of the course not learned yet, in course order. Take the
-    first lessons among them (a lesson is one folder), at most 3 per run.
-L2. Slides: read_pdf_text, then read_pdf_page for the slides where the point is in a drawing
-    (most UML slides): the notation is in the picture, not the text. Transcripts: Read them
-    and take what the lecturer stresses, why a convention is used, mistakes they warn about,
-    exam and project hints, and how they get from a description or user story to a model.
-L3. Merge what you learned into the playbook, with these sections: ## How the lecturer
-    models (the steps they follow), ## Notation, ## Mistakes to avoid, ## Project and exam,
-    ## My rules, ## Learned (one line per lesson: folder and topic). One bullet per
-    convention, with its source: [slide 12](<vault path#page=12>) or (Transcript name 12:34).
-    Merge what repeats, keep it under about 250 lines, keep My rules exactly.
-L4. Save with update_playbook after each lesson, with the files you read (also those with
-    nothing about modelling) in learned, so they are not offered again.
-L5. Reply with what you learned in a few bullets and how many files are left ("/uml learn"
-    again goes on). Draw nothing.
+for this course: what the lecturer does, learned by itself from the slides, transcripts,
+notes and canvases of the course, and my rules, from what I told you and how I changed your
+diagrams. The playbook comes before general UML habits; my rules come before the lecturer.
 
 If my message is "/uml review", or I ask whether a diagram is right: check the diagram on the
 open canvas (read_canvas and screenshot) the way the lecturer would grade it. List what is
-wrong or missing, each with the convention from the playbook (and its source) and the fix,
-most important first; then what is good. Change nothing unless I ask.
+wrong or missing, each with the convention from my rules or the playbook (and its source)
+and the fix, most important first; then what is good. Change nothing unless I ask.
 
 Otherwise, model the system I describe (in my message, a user story, a note, an exercise PDF
 or the canvas I have open) as UML on a canvas:
 1. Find the source: my message, else the selected boxes or text on the open canvas, else the
    exercise I name. Read it fully (read_pdf_text, read_summary, read_canvas).
-2. Follow the playbook: the lecturer's steps (for a user story, say, first a domain model),
-   notation and the mistakes to avoid. Where it says nothing, use standard UML. When the
-   playbook is empty, say once that "/uml learn" lets you follow this course's conventions.
+2. Follow my rules and the playbook: the lecturer's steps (for a user story, say, first a
+   domain model), notation and the mistakes to avoid. Where they say nothing, use standard
+   UML.
 3. Decide which diagrams the question asks for (class diagram by default; use case, state or
    activity when asked). For a class diagram:
    - classes from the nouns that have their own data or behaviour; attributes with types; the
@@ -129,8 +107,11 @@ or the canvas I have open) as UML on a canvas:
    and what the description left open.
 
 Whenever I correct what you made or tell you to do or not do something (now or in a later
-message), add it to My rules with update_playbook: one short line, replacing a line it
-contradicts. If it goes against the lecturer's convention, say so once, then follow me.`
+message), add a rule with add_rule: one short line, with replaces when it contradicts a rule
+that is there (the newer one wins; say which one it replaced). If it goes against the
+lecturer's convention, say so once, then follow me. When I pass on feedback from the lecturer
+or a teaching assistant, add each general point with from (who, and on what). The context
+also lists what I changed in your diagrams since you drew them: take those in the same way.`
   },
   {
     name: 'exercise',

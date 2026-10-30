@@ -241,37 +241,55 @@ export interface Packet {
   images: ChatImage[]
   /** "path#page" of the slide image attached, if one was. */
   imageKey: string | null
+  /** For ChatRequest.offer: the playbook part carried my changes to its diagrams. */
+  offer: string | null
+}
+
+/** A learning skill's playbook for the course of the chat, and my changes to its diagrams. */
+async function playbookContext(
+  skill: string,
+  course: string
+): Promise<{ lines: string[]; offer: string | null }> {
+  if (!course) {
+    return { lines: ['No course is open, so there is no playbook: use standard UML.'], offer: null }
+  }
+  const book = await window.api.claude.playbookContext(skill, course).catch(() => null)
+  if (!book) return { lines: [], offer: null }
+  const lines = [
+    `Your /${skill} playbook for the course ${course}. What the lecturer does, learned from ` +
+      'the files of the course:',
+    '<playbook>',
+    book.text.trim() || '(empty: nothing learned yet)',
+    '</playbook>',
+    'My rules, which come before the lecturer (change them with add_rule):',
+    '<rules>',
+    book.rules.trim() || '(none yet)',
+    '</rules>'
+  ]
+  if (book.started) {
+    lines.push(
+      `This is the first /${skill} in this course: it now learns the course in the background ` +
+        `(${book.pending} files, one lesson at a time, then new files by themselves). Say so in ` +
+        'one sentence; until it has, use standard UML.'
+    )
+  } else if (book.pending) {
+    lines.push(`It is still learning: ${book.pending} files of the course are not taken in yet.`)
+  }
+  if (book.edits.length) {
+    lines.push('Since you drew them, I changed your diagrams like this:')
+    for (const e of book.edits) lines.push(`- ${e.path}:`, ...e.changes.map((c) => `    - ${c}`))
+    lines.push(
+      'Each change to what you drew is a correction. One that holds in general (not only for ' +
+        'that one system) becomes a rule with add_rule, unless My rules say it already.'
+    )
+  }
+  return { lines, offer: book.offer }
 }
 
 /**
  * The context packet (SPEC section 6) for the chosen chips, in front of the question.
  * The slide image is left out when the previous message already carried the same page.
  */
-/** A learning skill's playbook for the course of the chat, and what it has not read yet. */
-async function playbookContext(skill: string, course: string): Promise<string[]> {
-  if (!course) return ['No course is open, so there is no playbook: use standard UML.']
-  const book = await window.api.claude.playbook(skill, course).catch(() => null)
-  if (!book) return []
-  const lines = [
-    `Your /${skill} playbook for the course ${course} (keep it up to date with update_playbook):`,
-    '<playbook>',
-    book.text.trim() || '(empty: nothing learned yet)',
-    '</playbook>'
-  ]
-  if (!book.pending.length) {
-    lines.push(`You learned from all ${book.learned} slide decks and transcripts of the course.`)
-    return lines
-  }
-  const shown = book.pending.slice(0, 40)
-  lines.push(
-    `Files of the course not learned yet: ${book.pending.length} of ${book.learned + book.pending.length}, in course order:`,
-    ...shown.map((p) => `- ${p}`)
-  )
-  if (book.pending.length > shown.length)
-    lines.push(`- and ${book.pending.length - shown.length} more`)
-  return lines
-}
-
 export async function buildPacket(
   chat: string,
   chips: Chip[],
@@ -346,8 +364,9 @@ export async function buildPacket(
 
   const skill = skillOf(question)
   if (skill) lines.push(`Skill /${skill.name}: follow these steps for my message.`, skill.steps)
-  if (skill?.learns) lines.push(...(await playbookContext(skill.name, chat.split('/')[0])))
+  const book = skill?.learns ? await playbookContext(skill.name, chat.split('/')[0]) : null
+  if (book) lines.push(...book.lines)
 
   lines.push(CONTEXT_END, '', question)
-  return { text: lines.join('\n'), images, imageKey }
+  return { text: lines.join('\n'), images, imageKey, offer: book?.offer ?? null }
 }

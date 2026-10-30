@@ -4,6 +4,7 @@ import {
   MODELS,
   type ChatInfo,
   type EffortChoice,
+  type LearnStatus,
   type ModelChoice,
   type Playbook
 } from '../../../shared/claude'
@@ -762,7 +763,61 @@ function ChatInput({ chat, busy }: { chat: string; busy: boolean }): React.JSX.E
   )
 }
 
-/** What /uml learned per course, from the slides, transcripts and my feedback; editable. */
+const when = (at: number): string =>
+  new Date(at).toLocaleString('en-GB', {
+    day: 'numeric',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit'
+  })
+
+/** A playbook text I can edit; saved when I leave the box. */
+function PlaybookText({
+  label,
+  part,
+  rows,
+  placeholder,
+  course,
+  saved,
+  onSaved
+}: {
+  label: string
+  part: 'text' | 'rules'
+  rows: number
+  placeholder: string
+  course: string
+  saved: string | null
+  onSaved(text: string): void
+}): React.JSX.Element {
+  const [draft, setDraft] = useState<string | null>(null)
+  return (
+    <label className="playbook-part">
+      <span className="muted">{label}</span>
+      <textarea
+        rows={rows}
+        value={draft ?? saved ?? ''}
+        disabled={saved === null}
+        placeholder={placeholder}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={() => {
+          if (saved !== null && draft !== null && draft !== saved) {
+            const text = draft.trim()
+            void window.api.claude
+              .setPlaybook('uml', course, part, text)
+              .then(() => onSaved(text && `${text}\n`))
+              .catch((err: Error) => useApp.getState().showError(err.message))
+          }
+          setDraft(null)
+        }}
+      />
+    </label>
+  )
+}
+
+/**
+ * What /uml knows per course: what the lecturer does, learned by itself from the course files,
+ * and my rules. Both editable.
+ */
 function PlaybookField(): React.JSX.Element {
   const nodes = useApp((s) => s.nodes)
   const activeFile = useApp((s) => s.activeFile)
@@ -774,61 +829,132 @@ function PlaybookField(): React.JSX.Element {
   // Kept with its course, so another course shows nothing until its playbook is loaded.
   const [loaded, setLoaded] = useState<{ course: string; book: Playbook } | null>(null)
   const book = loaded?.course === course ? loaded.book : null
-  const setBook = (next: Playbook): void => setLoaded({ course, book: next })
-  const [draft, setDraft] = useState<string | null>(null)
+  const [status, setStatus] = useState<LearnStatus | null>(null)
+  const [version, setVersion] = useState(0)
+
+  useEffect(() => {
+    void window.api.claude.learningStatus().then(setStatus)
+    return window.api.claude.onLearning((next) => {
+      setStatus(next)
+      // A lesson is done: show what it learned.
+      setVersion((v) => v + 1)
+    })
+  }, [])
 
   useEffect(() => {
     if (course) {
       void window.api.claude.playbook('uml', course).then((b) => setLoaded({ course, book: b }))
     }
-  }, [course])
+  }, [course, version])
 
   if (!courses.length) return <></>
-  const total = book ? book.learned + book.pending.length : 0
+  const run = status?.course === course ? status : null
+  const act = (fn: () => Promise<void>): void =>
+    void fn()
+      .then(() => setVersion((v) => v + 1))
+      .catch((err: Error) => useApp.getState().showError(err.message))
+  const last = book?.log[0]
   return (
     <div className="field">
       <span>/uml playbook</span>
-      <div className="claude-instructions">
-        <select
-          aria-label="Playbook of"
-          value={course}
-          onChange={(e) => {
-            setDraft(null)
-            setCourse(e.target.value)
-          }}
-        >
+      <div className="claude-instructions playbook">
+        <select aria-label="Playbook of" value={course} onChange={(e) => setCourse(e.target.value)}>
           {courses.map((c) => (
             <option key={c} value={c}>
               {c}
             </option>
           ))}
         </select>
-        <textarea
-          aria-label="Playbook"
+        {book && !book.learning && (
+          <div className="playbook-status">
+            <p>
+              Not learning this course. When you start (or send the first /uml in it), it reads
+              every slide deck, transcript, note and canvas of it, one lesson per Claude run, and
+              then keeps up with new and changed files by itself. Each lesson uses about as much of
+              your Claude usage as a long chat message.
+            </p>
+            <button
+              className="text-button"
+              onClick={() => act(() => window.api.claude.setLearning('uml', course, true))}
+            >
+              Learn this course
+            </button>
+          </div>
+        )}
+        {book?.learning && (
+          <div className="playbook-status" aria-live="polite">
+            {run ? (
+              <p>
+                Learning {run.lesson.split('/').pop() || course} (lesson {run.done + 1} of{' '}
+                {run.total})...
+              </p>
+            ) : (
+              <p>
+                Learned from {book.learned} of the {book.total} files of this course.
+                {book.pending.length
+                  ? ' New slides and transcripts are taken in about 10 minutes after they arrive,' +
+                    ' notes, canvases and annotations an hour after you last changed them.'
+                  : ' It is up to date.'}
+              </p>
+            )}
+            {run ? (
+              <button
+                className="text-button"
+                onClick={() => act(() => window.api.claude.stopLearning())}
+              >
+                Stop
+              </button>
+            ) : (
+              book.pending.length > 0 && (
+                <button
+                  className="text-button"
+                  onClick={() => act(() => window.api.claude.learnNow('uml', course))}
+                >
+                  Learn {book.pending.length} now
+                </button>
+              )
+            )}
+          </div>
+        )}
+        {book?.error && !run && <p className="playbook-error">Stopped: {book.error}</p>}
+        {last && (
+          <p className="muted playbook-last">
+            Last learned from {last.lesson.split('/').pop() || course}, {when(last.at)}:{' '}
+            {last.summary || 'nothing new about modelling.'}
+          </p>
+        )}
+        <PlaybookText
+          key={`text:${course}`}
+          label="What the lecturer does"
+          part="text"
           rows={8}
-          value={draft ?? book?.text ?? ''}
-          disabled={!book}
-          placeholder={'Nothing learned yet. Send "/uml learn" in a chat of this course.'}
-          onChange={(e) => setDraft(e.target.value)}
-          onBlur={() => {
-            if (book && draft !== null && draft !== book.text) {
-              const text = draft.trim()
-              void window.api.claude
-                .setPlaybook('uml', course, text)
-                .then(() => setBook({ ...book, text: text && `${text}\n` }))
-                .catch((err: Error) => useApp.getState().showError(err.message))
-            }
-            setDraft(null)
-          }}
+          placeholder="Nothing learned yet."
+          course={course}
+          saved={book?.text ?? null}
+          onSaved={(text) => book && setLoaded({ course, book: { ...book, text } })}
         />
-        <p className="muted">
-          {book &&
-            (total
-              ? `Learned from ${book.learned} of the ${total} slide decks and transcripts of this course. `
-              : 'This course has no slides or transcripts yet. ')}
-          /uml follows it and adds your corrections to My rules. &quot;/uml learn&quot; reads what
-          it has not read yet. Only on this computer, not in your vault.
-        </p>
+        <PlaybookText
+          key={`rules:${course}`}
+          label="My rules"
+          part="rules"
+          rows={4}
+          placeholder="Your rules: what you tell /uml, what your changes to its diagrams show, and feedback from the lecturer or a TA (marked with who said it). They come before the slides."
+          course={course}
+          saved={book?.rules ?? null}
+          onSaved={(rules) => book && setLoaded({ course, book: { ...book, rules } })}
+        />
+        <div className="playbook-status">
+          <p className="muted">Only on this computer, not in your vault.</p>
+          {book?.learning && (
+            <button
+              className="text-button"
+              title="Keeps what it learned; /uml still uses it"
+              onClick={() => act(() => window.api.claude.setLearning('uml', course, false))}
+            >
+              Stop learning this course
+            </button>
+          )}
+        </div>
       </div>
     </div>
   )

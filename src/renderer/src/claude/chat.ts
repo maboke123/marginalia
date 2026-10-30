@@ -171,8 +171,10 @@ function describeTool(name: string, input: Record<string, unknown>): string {
       return input.about === 'me'
         ? 'Updated what it remembers about you'
         : `Updated what it remembers about ${input.course || 'this course'}`
-    case 'update_playbook':
-      return `Updated its /${input.skill} playbook for ${input.course || 'this course'}`
+    case 'add_rule':
+      return input.rule
+        ? `Added to your /${input.skill} rules: ${input.rule}${input.from ? ` (from ${input.from})` : ''}`
+        : `Removed a /${input.skill} rule: ${input.replaces}`
     case 'Read':
       return `Read ${file}`
     case 'Glob':
@@ -337,7 +339,8 @@ export const useChat = create<ChatState>((set, get) => {
         await window.api.claude.send({
           chat,
           text: packet.text,
-          images: [...packet.images, ...images.map((i) => i.image)]
+          images: [...packet.images, ...images.map((i) => i.image)],
+          ...(packet.offer && { offer: packet.offer })
         })
       } catch (err) {
         if (get().running === chat) onEvent(chat, { type: 'done', error: (err as Error).message })

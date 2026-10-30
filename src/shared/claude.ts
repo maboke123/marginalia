@@ -49,6 +49,8 @@ export interface ChatRequest {
   /** The question, with the context packet in front of it. */
   text: string
   images: ChatImage[]
+  /** The packet carried my changes to /uml's diagrams (PlaybookContext.offer): seen once answered. */
+  offer?: string
 }
 
 export interface CompleteRequest {
@@ -89,15 +91,55 @@ export interface ToolReply {
   ok: boolean
   text: string
   image?: ChatImage
+  /** A canvas Claude changed, before and after (JSON Canvas text), so my later edits show. */
+  drawn?: { path: string; before: string; after: string }
 }
 
-/** What a skill learned for one course (see PlaybookStore in main). */
+/** What a skill that learns (/uml) knows of one course (see PlaybookStore in main). */
 export interface Playbook {
+  /** What the lecturer does, learned from the files of the course. */
   text: string
-  /** How many of the course's slide decks and transcripts it has read. */
+  /** My rules, from what I told it and how I changed its diagrams; they come first. */
+  rules: string
+  /** It learns this course: all files once, then what is new or changed. */
+  learning: boolean
+  /** Files of the course it took in, of all of them. */
   learned: number
-  /** Those it has not read yet, or that changed since, in the order of the course. */
+  total: number
+  /** Files not taken in yet, or changed since, in the order of the course. */
   pending: string[]
+  /** What the last runs learned, newest first. */
+  log: LearnLog[]
+  /** Why the last run stopped early. */
+  error: string | null
+}
+
+export interface LearnLog {
+  at: number
+  lesson: string
+  summary: string
+}
+
+/** A learning run going on. */
+export interface LearnStatus {
+  skill: string
+  course: string
+  lesson: string
+  /** Lessons done of this run, and how many it has. */
+  done: number
+  total: number
+}
+
+/** The playbook as a /uml message gets it, with my changes to its diagrams not seen yet. */
+export interface PlaybookContext {
+  text: string
+  rules: string
+  /** This message started learning the course (the first /uml in it). */
+  started: boolean
+  pending: number
+  edits: { path: string; changes: string[] }[]
+  /** Hand back with the message (ChatRequest.offer) so `edits` count as seen once answered. */
+  offer: string | null
 }
 
 /** The context packet travels in front of each question, between these markers. */

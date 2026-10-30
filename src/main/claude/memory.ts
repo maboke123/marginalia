@@ -42,6 +42,14 @@ export class MemoryStore {
     await writeFileAtomic(file, trimmed.slice(0, this.max) + '\n')
   }
 
+  /** A renamed notebook keeps its note. */
+  async rename(from: string, to: string): Promise<void> {
+    if (!from || !to || from.includes('/') || to.includes('/')) return
+    const target = this.fileOf(to)
+    if (await fs.stat(target).catch(() => null)) return
+    await fs.rename(this.fileOf(from), target).catch(() => {})
+  }
+
   /** Every note there is: '' (about me) first, then the courses that have one. */
   async all(): Promise<Record<string, string>> {
     const out: Record<string, string> = { '': await this.read('') }

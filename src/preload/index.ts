@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
-import type { ChatEvent, ToolCall } from '../shared/claude'
+import type { ChatEvent, LearnStatus, ToolCall } from '../shared/claude'
 import type {
   IpcResult,
   MarginaliaApi,
@@ -142,7 +142,18 @@ const api: MarginaliaApi = {
     memory: () => invoke('claude:memory'),
     setMemory: (course, note) => invoke('claude:setMemory', course, note),
     playbook: (skill, course) => invoke('claude:playbook', skill, course),
-    setPlaybook: (skill, course, text) => invoke('claude:setPlaybook', skill, course, text),
+    setPlaybook: (skill, course, part, text) =>
+      invoke('claude:setPlaybook', skill, course, part, text),
+    setLearning: (skill, course, on) => invoke('claude:setLearning', skill, course, on),
+    learnNow: (skill, course) => invoke('claude:learnNow', skill, course),
+    stopLearning: () => invoke('claude:stopLearning'),
+    learningStatus: () => invoke('claude:learningStatus'),
+    onLearning: (listener) => {
+      const handler = (_e: unknown, status: LearnStatus | null): void => listener(status)
+      ipcRenderer.on('claude:learning', handler)
+      return () => ipcRenderer.removeListener('claude:learning', handler)
+    },
+    playbookContext: (skill, course) => invoke('claude:playbookContext', skill, course),
     onEvent: (listener) => {
       const handler = (_e: unknown, chat: string, event: ChatEvent): void => listener(chat, event)
       ipcRenderer.on('claude:event', handler)

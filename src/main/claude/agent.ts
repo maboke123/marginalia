@@ -4,8 +4,8 @@ import type { StoredClaudeSettings } from '../config'
 import { claudeEnvironment, claudeExecutable } from './cli'
 import { moveSession, projectsDir } from './sessions'
 import { toChatEvents, type StreamState } from './events'
-import { SYSTEM_APPEND, withInstructions, withMemory, type Memory } from './prompt'
-import { APP_TOOLS, appToolServer, type CallTool } from './tools'
+import { LEARN_PROMPT, SYSTEM_APPEND, withInstructions, withMemory, type Memory } from './prompt'
+import { APP_TOOLS, appToolServer, LEARN_TOOL_NAMES, LEARN_TOOLS, type CallTool } from './tools'
 
 export interface AgentInput {
   /** The vault root; Claude's built-in tools only read inside it. */
@@ -169,6 +169,65 @@ export const claudeComplete: Complete = async (input) => {
       ),
       tools: [],
       settingSources: [],
+      persistSession: false,
+      abortController,
+      env: agentEnvironment(input.apiKey),
+      pathToClaudeCodeExecutable: claudeExecutable()
+    }
+  })
+  try {
+    for await (const message of query) {
+      if (message.type !== 'result') continue
+      if (message.subtype !== 'success')
+        throw new Error(message.errors.join('\n') || 'Claude stopped early')
+      if (message.is_error) throw new Error(message.result)
+      return message.result
+    }
+    throw new Error('No answer')
+  } finally {
+    query.close()
+  }
+}
+
+export interface LearnInput {
+  cwd: string
+  text: string
+  settings: StoredClaudeSettings
+  memory: Memory
+  apiKey: string | null
+  callTool: CallTool
+  signal: AbortSignal
+}
+
+/** One learning run, apart from every chat: a lesson in, a few lines on what it learned out. */
+export type Learn = (input: LearnInput) => Promise<string>
+
+export const claudeLearn: Learn = async (input) => {
+  const sdk = await import('@anthropic-ai/claude-agent-sdk')
+  const allowed = new Set(LEARN_TOOL_NAMES)
+  const abortController = new AbortController()
+  input.signal.addEventListener('abort', () => abortController.abort(), { once: true })
+  const query = sdk.query({
+    prompt: oneMessage(input.text, []),
+    options: {
+      cwd: input.cwd,
+      model: input.settings.model === 'default' ? undefined : input.settings.model,
+      effort: input.settings.effort === 'default' ? undefined : input.settings.effort,
+      systemPrompt: withMemory(
+        withInstructions(LEARN_PROMPT, input.settings.instructions),
+        input.memory,
+        null
+      ),
+      settingSources: [],
+      tools: READ_TOOLS,
+      mcpServers: { marginalia: appToolServer(sdk, input.callTool, LEARN_TOOLS) },
+      // As in the chat: reads inside the vault only, and only the tools of a learning run.
+      permissionMode: 'default',
+      canUseTool: async (name, toolInput) =>
+        allowed.has(name)
+          ? { behavior: 'allow', updatedInput: toolInput }
+          : { behavior: 'deny', message: 'A learning run only reads the course.' },
+      // A lesson of slides and a transcript would make a long conversation nobody goes back to.
       persistSession: false,
       abortController,
       env: agentEnvironment(input.apiKey),

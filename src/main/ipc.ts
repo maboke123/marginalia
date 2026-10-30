@@ -50,7 +50,9 @@ const info = (root: string): VaultInfo => ({ root, name: path.basename(root) })
 export function registerIpc(
   getWindow: () => BrowserWindow | null,
   config: ConfigStore,
-  dataDir: string
+  dataDir: string,
+  /** Renames, moves and trashes in the vault, for what is kept about it elsewhere. */
+  onRemap?: (from: string, to: string | null) => Promise<void>
 ): () => Vault | null {
   let vault: Vault | null = null
   let search: SearchIndex | null = null
@@ -61,7 +63,7 @@ export function registerIpc(
     if (!stat?.isDirectory()) throw new VaultError(`Folder not found: ${root}`)
     await stopWatching?.()
     await search?.flush()
-    vault = new Vault(root, (p) => shell.trashItem(p))
+    vault = new Vault(root, (p) => shell.trashItem(p), onRemap)
     // One cache per vault, named after its path, outside the vault so it is not synced.
     const id = createHash('sha1').update(root.toLowerCase()).digest('hex').slice(0, 16)
     search = new SearchIndex(vault, path.join(dataDir, 'search', `${id}.json`))

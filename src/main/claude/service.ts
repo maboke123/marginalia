@@ -1,7 +1,7 @@
 import { randomUUID } from 'crypto'
 import fs from 'fs/promises'
 import path from 'path'
-import { BrowserWindow, ipcMain, safeStorage } from 'electron'
+import { app, BrowserWindow, ipcMain, safeStorage } from 'electron'
 import { pathToFileURL } from 'url'
 import type {
   CompleteRequest,
@@ -12,6 +12,7 @@ import type {
   ClaudeSettings,
   ClaudeSettingsUpdate,
   Playbook,
+  PlaybookContext,
   ToolReply
 } from '../../shared/claude'
 import { claudeSettings, type ConfigStore } from '../config'
@@ -23,13 +24,25 @@ import {
   claudeAgent,
   claudeComplete,
   claudeHandOff,
+  claudeLearn,
   type Agent,
   type Complete,
-  type HandOff
+  type HandOff,
+  type Learn
 } from './agent'
 import { storedApiKey } from './cli'
 import { courseOf, courseOfFile, type MemoryStore } from './memory'
-import { courseSources, notLearned, type PlaybookStore } from './playbook'
+import { Learner } from './learner'
+import {
+  afterDrawing,
+  courseSources,
+  editsOf,
+  editsTaken,
+  LEARNING_SKILLS,
+  notLearned,
+  type Part,
+  type PlaybookStore
+} from './playbook'
 import type { Memory } from './prompt'
 import { toHistory } from './events'
 import { findSession, projectsDir } from './sessions'
@@ -40,6 +53,7 @@ interface AgentModule {
   agent: Agent
   complete?: Complete
   handOff?: HandOff
+  learn?: Learn
   history?(sessionId: string): Promise<ChatHistoryItem[]>
 }
 
@@ -50,6 +64,7 @@ async function loadAgent(): Promise<AgentModule> {
     agent: claudeAgent,
     complete: claudeComplete,
     handOff: claudeHandOff,
+    learn: claudeLearn,
     // Without a folder: a chat continued in VS Code is saved with that folder's conversations.
     history: async (sessionId) => {
       const sdk = await import('@anthropic-ai/claude-agent-sdk')
@@ -60,6 +75,10 @@ async function loadAgent(): Promise<AgentModule> {
 
 const STALE_SESSION = /no conversation found/i
 const STOP_GRACE_MS = 1500
+// The first look a while after start, then every few minutes; a look without new files only
+// reads the folder.
+const LEARN_FIRST_MS = 2 * 60_000
+const LEARN_EVERY_MS = 5 * 60_000
 
 /** The folder and the folders around it, nearest first. */
 function foldersUp(folder: string): string[] {
@@ -81,9 +100,17 @@ export function registerClaude(
 ): void {
   const agentModule = loadAgent()
   let running: AbortController | null = null
-  // The section of the running chat: remember writes about its course by default.
-  let runningChat = ''
-  const pendingTools = new Map<string, (reply: ToolReply) => void>()
+  // A chat and a learning run may both wait on the renderer; each call knows whose it is.
+  const pendingTools = new Map<string, { resolve(reply: ToolReply): void; signal: AbortSignal }>()
+
+  /** Answers the calls still waiting for a chat or run that ended or stopped. */
+  function stopTools(signal: AbortSignal | undefined): void {
+    for (const [id, call] of pendingTools) {
+      if (call.signal !== signal) continue
+      pendingTools.delete(id)
+      call.resolve({ id, ok: false, text: 'Stopped' })
+    }
+  }
 
   function vault(): Vault {
     const v = getVault()
@@ -92,14 +119,14 @@ export function registerClaude(
   }
 
   ipcMain.on('claude:tool-reply', (_event, reply: ToolReply) => {
-    pendingTools.get(reply.id)?.(reply)
+    pendingTools.get(reply.id)?.resolve(reply)
     pendingTools.delete(reply.id)
   })
 
-  async function remember(args: Record<string, unknown>): Promise<ToolReply> {
+  // The memory and the playbooks write about the course of the chat (or run) by default.
+  async function remember(args: Record<string, unknown>, current: string): Promise<ToolReply> {
     const id = randomUUID()
-    const course =
-      args.about === 'me' ? '' : String(args.course ?? '').trim() || courseOf(runningChat)
+    const course = args.about === 'me' ? '' : String(args.course ?? '').trim() || current
     if (args.about !== 'me' && !course) {
       return { id, ok: false, text: 'Name the course: no course is open' }
     }
@@ -115,51 +142,122 @@ export function registerClaude(
     }
   }
 
-  /** The playbook of a skill for a course, with the files of the course it has not read. */
+  /** What a skill knows of a course, and from which of its files. */
   async function playbookOf(skill: string, course: string): Promise<Playbook> {
-    const [text, learned, sources] = await Promise.all([
-      playbooks.read(skill, course),
-      playbooks.learned(skill, course),
+    const [text, rules, state, sources] = await Promise.all([
+      playbooks.read(skill, course, 'text'),
+      playbooks.read(skill, course, 'rules'),
+      playbooks.state(skill, course),
       course ? courseSources(vault(), course) : {}
     ])
-    const pending = notLearned(sources, learned)
-    return { text, learned: Object.keys(sources).length - pending.length, pending }
+    const pending = notLearned(sources, state.learned).map((p) => p.path)
+    const total = Object.keys(sources).length
+    return {
+      text,
+      rules,
+      learning: state.learning,
+      learned: total - pending.length,
+      total,
+      pending,
+      log: state.log,
+      error: state.error
+    }
   }
 
-  async function updatePlaybook(args: Record<string, unknown>): Promise<ToolReply> {
+  // My changes to its diagrams that a /uml message carries, taken in once Claude answered it
+  // (a message that fails shows them again next time).
+  const offers = new Map<string, { skill: string; course: string; seen: Record<string, string> }>()
+
+  /**
+   * The playbook for a /uml message, with my changes to its diagrams since it last saw them.
+   * The first /uml in a course starts learning it.
+   */
+  async function playbookContext(skill: string, course: string): Promise<PlaybookContext> {
+    const v = vault()
+    let state = await playbooks.state(skill, course)
+    const started = !state.learning
+    if (started) {
+      state = await playbooks.update(skill, course, (st) => ({ ...st, learning: true }))
+      if (!learner.status()) startLearning(skill, course)
+    }
+    const [text, rules] = await Promise.all([
+      playbooks.read(skill, course, 'text'),
+      playbooks.read(skill, course, 'rules')
+    ])
+    const edits: PlaybookContext['edits'] = []
+    const seen: Record<string, string> = {}
+    for (const file of Object.keys(state.drawn)) {
+      const current = await fs.readFile(v.resolve(file), 'utf8').catch(() => null)
+      const changes = current === null ? null : editsOf(state, file, current)
+      if (current !== null && changes?.length) {
+        edits.push({ path: file, changes })
+        seen[file] = current
+      }
+    }
+    let offer: string | null = null
+    if (edits.length) {
+      for (const [id, o] of offers) if (o.skill === skill && o.course === course) offers.delete(id)
+      offer = randomUUID()
+      offers.set(offer, { skill, course, seen })
+    }
+    const pending = notLearned(await courseSources(v, course), state.learned).length
+    return { text, rules, started, pending, edits, offer }
+  }
+
+  async function takeOffer(id: string): Promise<void> {
+    const offer = offers.get(id)
+    offers.delete(id)
+    if (offer) await playbooks.update(offer.skill, offer.course, (st) => editsTaken(st, offer.seen))
+  }
+
+  async function updatePlaybook(
+    args: Record<string, unknown>,
+    current: string
+  ): Promise<ToolReply> {
     const id = randomUUID()
     const skill = String(args.skill ?? 'uml')
-    const course = String(args.course ?? '').trim() || courseOf(runningChat)
+    const course = String(args.course ?? '').trim() || current
     if (!course) return { id, ok: false, text: 'Name the course: no course is open' }
     try {
-      await playbooks.write(skill, course, String(args.playbook ?? ''))
-      const read = Array.isArray(args.learned) ? args.learned.map(String) : []
-      const sources = await courseSources(vault(), course)
-      const known = read.filter((file) => sources[file])
-      if (known.length) {
-        await playbooks.markLearned(
-          skill,
-          course,
-          Object.fromEntries(known.map((file) => [file, sources[file]]))
-        )
-      }
-      const { pending } = await playbookOf(skill, course)
-      const unknown = read.filter((file) => !sources[file])
-      return {
-        id,
-        ok: true,
-        text: [
-          `Saved the /${skill} playbook for ${course}.`,
-          unknown.length ? `Not files of this course: ${unknown.join(', ')}.` : '',
-          pending.length
-            ? `${pending.length} files of the course are not learned yet.`
-            : 'Every slide deck and transcript of the course is learned.'
-        ]
-          .filter(Boolean)
-          .join(' ')
-      }
+      await playbooks.write(skill, course, 'text', String(args.playbook ?? ''))
+      return { id, ok: true, text: `Saved the /${skill} playbook for ${course}.` }
     } catch (err) {
       return { id, ok: false, text: (err as Error).message }
+    }
+  }
+
+  async function addRule(args: Record<string, unknown>, current: string): Promise<ToolReply> {
+    const id = randomUUID()
+    const skill = String(args.skill ?? 'uml')
+    const course = String(args.course ?? '').trim() || current
+    if (!course) return { id, ok: false, text: 'Name the course: no course is open' }
+    const rule = String(args.rule ?? '').trim()
+    const replaces = args.replaces === undefined ? undefined : String(args.replaces)
+    const from = args.from === undefined ? undefined : String(args.from)
+    try {
+      const { found } = await playbooks.addRule(skill, course, rule, replaces, from)
+      const what = !found
+        ? `There was no rule like "${replaces}"; ${rule ? 'added it as a new one' : 'nothing removed'}`
+        : !rule
+          ? 'Removed the rule'
+          : replaces
+            ? 'Replaced the rule'
+            : 'Added the rule'
+      return { id, ok: true, text: `${what} in the /${skill} playbook for ${course}.` }
+    } catch (err) {
+      return { id, ok: false, text: (err as Error).message }
+    }
+  }
+
+  /** Keeps the canvases Claude draws in a course being learned, so my later changes show. */
+  async function noteDrawing(drawn: NonNullable<ToolReply['drawn']>): Promise<void> {
+    const course = courseOfFile(drawn.path)
+    if (!course) return
+    for (const skill of LEARNING_SKILLS) {
+      if (!(await playbooks.state(skill, course)).learning) continue
+      await playbooks.update(skill, course, (st) =>
+        afterDrawing(st, drawn.path, drawn.before, drawn.after)
+      )
     }
   }
 
@@ -168,25 +266,60 @@ export function registerClaude(
     return { me, course, courseNote }
   }
 
-  // The memory and the playbooks live in main; every other tool runs in the renderer.
-  const callTool: CallTool = (name, args) =>
-    name === 'remember'
-      ? remember(args)
-      : name === 'update_playbook'
-        ? updatePlaybook(args)
-        : rendererTool(name, args)
+  /** The tools of a chat or a learning run: the memory and the playbooks live in main. */
+  const toolsFor =
+    (signal: AbortSignal, course: string): CallTool =>
+    async (name, args) => {
+      if (name === 'remember') return remember(args, course)
+      if (name === 'update_playbook') return updatePlaybook(args, course)
+      if (name === 'add_rule') return addRule(args, course)
+      const reply = await rendererTool(name, args, signal)
+      if (reply.ok && reply.drawn) await noteDrawing(reply.drawn).catch(console.error)
+      return reply
+    }
 
-  const rendererTool: CallTool = (name, args) =>
+  // Every other tool runs in the renderer, where the open documents are.
+  const rendererTool = (
+    name: string,
+    args: Record<string, unknown>,
+    signal: AbortSignal
+  ): Promise<ToolReply> =>
     new Promise((resolve) => {
       const id = randomUUID()
       const win = getWindow()
-      if (!win || !running || running.signal.aborted) {
+      if (!win || signal.aborted) {
         resolve({ id, ok: false, text: 'Stopped' })
         return
       }
-      pendingTools.set(id, resolve)
+      pendingTools.set(id, { resolve, signal })
+      signal.addEventListener('abort', () => stopTools(signal), { once: true })
       win.webContents.send('claude:tool', { id, name, args })
     })
+
+  const learner = new Learner({
+    playbooks,
+    vault: getVault,
+    learn: async () => (await agentModule).learn,
+    tools: toolsFor,
+    input: async (course) => ({
+      settings: (await config.read()).claude,
+      memory: await memoryFor(course),
+      apiKey: await storedApiKey(config)
+    }),
+    emit: (status) => getWindow()?.webContents.send('claude:learning', status)
+  })
+  setTimeout(() => void learner.tick(), LEARN_FIRST_MS)
+  setInterval(() => void learner.tick(), LEARN_EVERY_MS)
+  app.on('before-quit', () => learner.stop())
+
+  /** Starts a run in the background; a run of another course has to finish first. */
+  function startLearning(skill: string, course: string): void {
+    const current = learner.status()
+    if (current && current.course !== course) {
+      throw new VaultError(`Still learning ${current.course}; try again when it is done`)
+    }
+    void learner.run(skill, course, false).catch((err) => console.error('[learn]', err))
+  }
 
   async function settings(): Promise<ClaudeSettings> {
     const { claude, apiKey } = await config.read()
@@ -218,7 +351,6 @@ export function registerClaude(
     const v = vault()
     const controller = new AbortController()
     running = controller
-    runningChat = request.chat
     const emit = (event: ChatEvent): void =>
       getWindow()?.webContents.send('claude:event', request.chat, event)
 
@@ -238,7 +370,7 @@ export function registerClaude(
           settings: claude,
           memory: await memoryFor(courseOf(request.chat)),
           apiKey,
-          callTool,
+          callTool: toolsFor(controller.signal, courseOf(request.chat)),
           signal: controller.signal,
           onSession: (id) => void v.setChatSession(request.chat, id).catch(console.error)
         })
@@ -270,6 +402,8 @@ export function registerClaude(
           sessionId = null
           continue
         }
+        if (request.offer && done && !done.error)
+          await takeOffer(request.offer).catch(console.error)
         emit(done ?? { type: 'done', error: controller.signal.aborted ? undefined : 'No answer' })
         return
       }
@@ -281,8 +415,7 @@ export function registerClaude(
       })
     } finally {
       running = null
-      for (const [id, resolve] of pendingTools) resolve({ id, ok: false, text: 'Stopped' })
-      pendingTools.clear()
+      stopTools(controller.signal)
     }
   })
 
@@ -321,8 +454,6 @@ export function registerClaude(
 
   handle('claude:stop', () => {
     running?.abort()
-    for (const [id, resolve] of pendingTools) resolve({ id, ok: false, text: 'Stopped' })
-    pendingTools.clear()
   })
 
   handle('claude:history', async (chat: string) => {
@@ -382,9 +513,20 @@ export function registerClaude(
   handle('claude:memory', () => memory.all())
   handle('claude:setMemory', (course: string, note: string) => memory.write(course, note))
   handle('claude:playbook', (skill: string, course: string) => playbookOf(skill, course))
-  handle('claude:setPlaybook', (skill: string, course: string, text: string) =>
-    playbooks.write(skill, course, text)
+  handle('claude:setPlaybook', (skill: string, course: string, part: Part, text: string) =>
+    playbooks.write(skill, course, part === 'rules' ? 'rules' : 'text', text)
   )
+  handle('claude:playbookContext', (skill: string, course: string) =>
+    playbookContext(skill, course)
+  )
+  handle('claude:setLearning', async (skill: string, course: string, on: boolean) => {
+    await playbooks.update(skill, course, (st) => ({ ...st, learning: on }))
+    if (on) startLearning(skill, course)
+    else if (learner.status()?.course === course) learner.stop()
+  })
+  handle('claude:learnNow', (skill: string, course: string) => startLearning(skill, course))
+  handle('claude:stopLearning', () => learner.stop())
+  handle('claude:learningStatus', () => learner.status())
 
   handle('claude:newChat', (chat: string) => vault().setChatSession(chat, null))
 }

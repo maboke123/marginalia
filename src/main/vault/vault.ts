@@ -189,7 +189,9 @@ export class Vault {
 
   constructor(
     readonly root: string,
-    private readonly trashItem: TrashFn
+    private readonly trashItem: TrashFn,
+    /** What is kept about vault paths outside the vault (Claude's playbooks) follows too. */
+    private readonly onRemap?: (from: string, to: string | null) => Promise<void>
   ) {}
 
   resolve(rel: string): string {
@@ -944,7 +946,8 @@ export class Vault {
    * Keeps remembered pages, conversations and PDF-note links attached to files and sections
    * that were renamed, moved (also via a parent folder) or trashed.
    */
-  private remapState(from: string, to: string | null): Promise<void> {
+  private async remapState(from: string, to: string | null): Promise<void> {
+    await this.onRemap?.(from, to).catch((err) => console.error('[remap]', err))
     return this.updateData<VaultState>(STATE_FILE, (state) => {
       const lastPage = remapKeys(state.lastPage, from, to)
       const chats = remapKeys(state.chats, from, to)

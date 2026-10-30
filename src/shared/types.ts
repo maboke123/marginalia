@@ -12,7 +12,9 @@ import type {
   ChatRequest,
   ClaudeSettings,
   ClaudeSettingsUpdate,
+  LearnStatus,
   Playbook,
+  PlaybookContext,
   ToolCall,
   ToolReply
 } from './claude'
@@ -231,12 +233,21 @@ export interface MarginaliaApi {
     memory(): Promise<Record<string, string>>
     /** Replaces one note; empty text removes it. */
     setMemory(course: string, note: string): Promise<void>
-    /**
-     * What a skill (/uml) learned for a course, how many of the course's slide decks and
-     * transcripts it read, and the ones it has not (in the order of the course).
-     */
+    /** What a skill (/uml) learned for a course and from which of its files. */
     playbook(skill: string, course: string): Promise<Playbook>
-    setPlaybook(skill: string, course: string, text: string): Promise<void>
+    setPlaybook(skill: string, course: string, part: 'text' | 'rules', text: string): Promise<void>
+    /** Starts learning a course (all of it now, then what changes), or stops for good. */
+    setLearning(skill: string, course: string, on: boolean): Promise<void>
+    /** Takes in what is not learned yet now, also files that are still changing. */
+    learnNow(skill: string, course: string): Promise<void>
+    stopLearning(): Promise<void>
+    learningStatus(): Promise<LearnStatus | null>
+    onLearning(listener: (status: LearnStatus | null) => void): () => void
+    /**
+     * For a /uml message; the first one in a course starts learning it. Its `offer` goes along
+     * with the message, so my changes to its diagrams count as seen once Claude answered.
+     */
+    playbookContext(skill: string, course: string): Promise<PlaybookContext>
     onEvent(listener: (chat: string, event: ChatEvent) => void): () => void
     onToolCall(listener: (call: ToolCall) => void): () => void
     replyTool(reply: ToolReply): void

@@ -2434,6 +2434,47 @@ button.claude-proposal-label:hover {
   margin-bottom: 6px;
 }
 
+.playbook {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.playbook select {
+  align-self: flex-start;
+  margin-bottom: 0;
+}
+
+.playbook-status {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.playbook-status p,
+.playbook p {
+  margin: 0;
+}
+
+.playbook-status .text-button {
+  flex: none;
+}
+
+.playbook-part {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.playbook-error {
+  color: var(--danger);
+}
+
+.playbook-last {
+  white-space: pre-wrap;
+}
+
 .claude-login p {
   margin: 5px 0 8px;
 }

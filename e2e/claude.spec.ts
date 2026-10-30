@@ -397,58 +397,102 @@ test('Claude remembers how I like things, per course, and I can edit it', async 
     .toBe('- Likes short summaries with one example\n')
 })
 
-test('/uml learns the course lesson by lesson and keeps my rules', async () => {
+test('/uml learns the course by itself, and from my rules and my changes to its diagrams', async () => {
   const skills = path.join(env.userData, 'skills', 'uml', 'courses')
+  const shop = path.join(env.vault, section, 'Shop.canvas')
   await fs.writeFile(
     path.join(env.vault, section, 'Transcript 2026-10-06 10-30.md'),
     '# Transcript 6 October 2026, 10:30\n\n**00:12** Start with the domain model.\n'
   )
+  await fs.writeFile(shop, '{"nodes":[],"edges":[]}\n')
   await fs.copyFile(slides, path.join(env.vault, 'Machine Learning/B3 Ensembles/ensembles.pdf'))
   await openSlides()
 
-  // The picker offers the modes; learning takes the first lesson of the course.
+  // Nothing is learned until I start it; then it goes through the course lesson by lesson.
   await page.keyboard.press('Control+L')
-  await page.getByRole('textbox', { name: 'Message to Claude' }).fill('/uml')
-  await expect(page.getByRole('option', { name: /\/uml learn/ })).toBeVisible()
-  await expect(page.getByRole('option', { name: /\/uml review/ })).toBeVisible()
-  await ask('/uml learn')
-  await expect(answers().last()).toHaveText(
-    'Saved the /uml playbook for Machine Learning. 1 files of the course are not learned yet.'
-  )
-  await expect(page.locator('.claude-tool').last()).toContainText(
-    'Updated its /uml playbook for this course'
-  )
-  const first = (await readLog()).at(-1)!
-  expect(first.text).toContain('Skill /uml: follow these steps')
-  expect(first.text).toContain('(empty: nothing learned yet)')
-  expect(first.text).toContain('Files of the course not learned yet: 3 of 3, in course order:')
-  expect(await fs.readFile(path.join(skills, 'Machine Learning.md'), 'utf8')).toContain(
-    '- Domain model first'
-  )
-  const learned = JSON.parse(
-    await fs.readFile(path.join(skills, 'Machine Learning.learned.json'), 'utf8')
-  )
-  expect(Object.keys(learned).sort()).toEqual([
-    `${section}/Transcript 2026-10-06 10-30.md`,
-    `${section}/slides.pdf`
-  ])
-
-  // The next /uml has the playbook along; a rule I give stays in it.
-  await ask('/uml an order has lines, never put getters in a class')
-  await expect(answers().last()).toHaveText('Playbook: - Domain model first slide 1')
-  await expect
-    .poll(() => fs.readFile(path.join(skills, 'Machine Learning.md'), 'utf8'))
-    .toContain('- Never put getters in a class')
-
-  // Settings show it for the course on screen, with how much it learned.
   await page.getByRole('button', { name: 'Claude settings' }).click()
   await expect(page.getByRole('combobox', { name: 'Playbook of' })).toHaveValue('Machine Learning')
-  await expect(page.getByRole('textbox', { name: 'Playbook', exact: true })).toHaveValue(
-    /Never put getters in a class/
+  await expect(page.getByText(/^Not learning this course\./)).toBeVisible()
+  await page.getByRole('button', { name: 'Learn this course' }).scrollIntoViewIfNeeded()
+  await page.screenshot({ path: path.join('test-results', 'claude-playbook-start.png') })
+  await page.getByRole('button', { name: 'Learn this course' }).click()
+  const status = page.getByText(/Learned from \d+ of the \d+ files of this course\. It is up/)
+  await expect(status).toBeVisible()
+  await status.scrollIntoViewIfNeeded()
+  await page.screenshot({ path: path.join('test-results', 'claude-playbook-learned.png') })
+  await expect(page.getByRole('textbox', { name: 'What the lecturer does' })).toHaveValue(
+    '- Domain model first (Machine Learning/B2 Decision trees)\n' +
+      '- Domain model first (Machine Learning/B3 Ensembles)\n'
   )
-  await expect(page.getByText('Learned from 2 of the 3 slide decks and transcripts')).toBeVisible()
-  await page.getByRole('textbox', { name: 'Playbook', exact: true }).scrollIntoViewIfNeeded()
+  await expect(page.getByText('Last learned from B3 Ensembles')).toBeVisible()
+  const runs = (await readLog()).filter((e) => e.question === 'learn')
+  expect(runs).toHaveLength(2)
+  expect(runs[0].text).toContain(`- ${section}/slides.pdf (slides or other PDF, new)`)
+  expect(runs[0].text).toContain(`- ${section}/Transcript 2026-10-06 10-30.md (transcript, new)`)
+  expect(runs[0].text).toContain(`- ${section}/Shop.canvas (my diagram, new)`)
+  expect((runs[0] as LogEntry & { read: boolean }).read).toBe(true)
+  await page.getByRole('button', { name: 'Done' }).click()
+
+  // A /uml message has the playbook and my rules along; a rule I give is kept.
+  const input = page.getByRole('textbox', { name: 'Message to Claude' })
+  await input.fill('/uml')
+  await expect(page.locator('.claude-picker li', { hasText: '/uml review' })).toBeVisible()
+  await ask('/uml draw an order with its lines, never put getters in a class')
+  await page
+    .locator('.claude-proposal')
+    .getByRole('button', { name: 'Accept', exact: true })
+    .click()
+  await expect(answers().last()).toHaveText(
+    'Playbook: - Domain model first (Machine Learning/B2 Decision trees) Rules: (none yet)'
+  )
+  await expect
+    .poll(() => fs.readFile(path.join(skills, 'Machine Learning.rules.md'), 'utf8'))
+    .toBe('- Never put getters in a class\n')
+
+  // I change its aggregation into a composition; the next /uml sees that, once.
+  const drawn = JSON.parse(await fs.readFile(shop, 'utf8'))
+  expect(drawn.edges).toHaveLength(1)
+  drawn.edges[0].relation = 'composition'
+  await fs.writeFile(shop, JSON.stringify(drawn))
+  await ask('/uml what next')
+  await expect(answers()).toHaveCount(2)
+  const packet = (await readLog()).at(-1)!.text
+  expect(packet).toContain('Since you drew them, I changed your diagrams like this:')
+  expect(packet).toContain('- The arrow "Order" -> "OrderLine": aggregation became composition')
+  await expect
+    .poll(() => fs.readFile(path.join(skills, 'Machine Learning.rules.md'), 'utf8'))
+    .toBe('- Never put getters in a class\n- Order lines are a composition\n')
+  await ask('/uml and now')
+  await expect(answers()).toHaveCount(3)
+  expect((await readLog()).at(-1)!.text).not.toContain('Since you drew them')
+
+  await page.getByRole('button', { name: 'Claude settings' }).click()
+  await expect(page.getByRole('textbox', { name: 'My rules' })).toHaveValue(
+    '- Never put getters in a class\n- Order lines are a composition\n'
+  )
+  await page.getByRole('textbox', { name: 'My rules' }).scrollIntoViewIfNeeded()
   await page.screenshot({ path: path.join('test-results', 'claude-playbook.png') })
+})
+
+test('the first /uml in a course starts learning it; feedback rules say who gave them', async () => {
+  const skills = path.join(env.userData, 'skills', 'uml', 'courses')
+  await openSlides()
+  await ask('/uml the TA said never use aggregation for order lines')
+  await expect(answers()).toHaveCount(1)
+  const packet = (await readLog()).find((e) => e.question.startsWith('/uml'))!.text
+  expect(packet).toContain('This is the first /uml in this course: it now learns the course')
+  await expect
+    .poll(() => fs.readFile(path.join(skills, 'Machine Learning.rules.md'), 'utf8'))
+    .toBe('- Never use aggregation for order lines (from the TA, iteration 1)\n')
+  await expect(page.locator('.claude-tool').last()).toContainText(
+    'Added to your /uml rules: Never use aggregation for order lines (from the TA, iteration 1)'
+  )
+
+  // It learned the course by itself, without "Learn this course".
+  await expect.poll(async () => (await readLog()).some((e) => e.question === 'learn')).toBe(true)
+  await page.getByRole('button', { name: 'Claude settings' }).click()
+  await expect(page.getByText(/Learned from \d+ of the \d+ files of this course/)).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Stop learning this course' })).toBeVisible()
 })
 
 test('text in the chat can be selected, copied and asked about', async () => {
@@ -1022,8 +1066,8 @@ test('/summary runs a skill that writes a new note linked to the slides', async 
   const input = page.getByRole('textbox', { name: 'Message to Claude' })
   await page.keyboard.press('Control+L')
   await input.fill('/')
-  // Four skills, and /uml learn and /uml review.
-  await expect(page.locator('.claude-picker li')).toHaveCount(6)
+  // Four skills, and /uml review.
+  await expect(page.locator('.claude-picker li')).toHaveCount(5)
   await input.press('Enter')
   await expect(input).toHaveValue('/summary ')
   await input.press('Enter')

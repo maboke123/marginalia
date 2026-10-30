@@ -169,32 +169,37 @@ export async function* agent(input) {
       text: 'Information gain'
     })
     yield { type: 'text', text: reply.ok ? 'Highlighted it.' : reply.text }
-  } else if (question.startsWith('/uml learn')) {
-    // Learns the first lesson among the files the context says are not learned yet.
-    const pending = (input.text.split('Files of the course not learned yet').pop() ?? '')
-      .split('\n')
-      .filter((l) => l.startsWith('- '))
-      .map((l) => l.slice(2))
-    const lesson = pending[0]?.split('/').slice(0, -1).join('/')
-    const learned = pending.filter((p) => p.startsWith(`${lesson}/`))
-    yield { type: 'tool', name: 'update_playbook', input: { skill: 'uml' } }
-    const reply = await input.callTool('update_playbook', {
-      skill: 'uml',
-      playbook: `## How the lecturer models\n- Domain model first [slide 1](<${learned[0]}#page=1>)\n\n## My rules\n`,
-      learned
-    })
-    yield { type: 'text', text: reply.text }
   } else if (question.startsWith('/uml')) {
-    // Says what came along: the playbook, and whether a rule was given.
-    const book = /<playbook>\n([\s\S]*?)\n<\/playbook>/.exec(input.text)?.[1] ?? 'none'
+    // Says what came along, adds a rule I give, draws, and takes in my changes to its diagram.
+    const book = match(input.text, /<playbook>\n([\s\S]*?)\n<\/playbook>/) ?? 'none'
+    const rules = match(input.text, /<rules>\n([\s\S]*?)\n<\/rules>/) ?? 'none'
     const rule = /never (.+)$/i.exec(question)?.[1]
     if (rule) {
-      await input.callTool('update_playbook', {
-        skill: 'uml',
-        playbook: `${book}\n- Never ${rule}`
+      // "the TA said never ..." is feedback: the rule says who gave it.
+      const from = /the TA said/i.test(question) ? { from: 'the TA, iteration 1' } : {}
+      const args = { skill: 'uml', rule: `Never ${rule}`, ...from }
+      yield { type: 'tool', name: 'add_rule', input: args }
+      await input.callTool('add_rule', args)
+    }
+    if (/aggregation became composition/.test(input.text)) {
+      await input.callTool('add_rule', { skill: 'uml', rule: 'Order lines are a composition' })
+    }
+    if (/draw/i.test(question)) {
+      const file = 'Machine Learning/B2 Decision trees/Shop.canvas'
+      yield { type: 'tool', name: 'edit_canvas', input: { file } }
+      await input.callTool('edit_canvas', {
+        file,
+        changes: [
+          { op: 'add_box', id: 'order', shape: 'class', text: 'Order\n---\n- id: int' },
+          { op: 'add_box', id: 'line', shape: 'class', text: 'OrderLine\n---\n- quantity: int' },
+          { op: 'add_arrow', from: 'order', to: 'line', relation: 'aggregation' }
+        ]
       })
     }
-    yield { type: 'text', text: `Playbook: ${book.split('\n')[1] ?? book}` }
+    yield {
+      type: 'text',
+      text: `Playbook: ${book.split('\n')[0]} Rules: ${rules.split('\n')[0]}`
+    }
   } else if (/^remember/i.test(question)) {
     // "remember: <note>" saves the course note, "remember me: <note>" the one about me.
     const about = /^remember me/i.test(question) ? 'me' : 'course'
@@ -225,6 +230,21 @@ export async function* agent(input) {
     memory: input.memory
   })
   yield { type: 'done' }
+}
+
+/** A learning run over one lesson, like claudeLearn: reads a PDF, merges, saves. */
+export async function learn(input) {
+  const lesson = match(input.text, /^Course: .+\. Lesson: (.+)\.$/m)
+  const pdf = match(input.text, /^- (.+\.pdf) \(/m)
+  const read = pdf ? await input.callTool('read_pdf_text', { file: pdf }) : null
+  const book = match(input.text, /<playbook>\n([\s\S]*?)\n<\/playbook>/) ?? ''
+  const before = book.startsWith('(empty') ? '' : `${book}\n`
+  await input.callTool('update_playbook', {
+    skill: 'uml',
+    playbook: `${before}- Domain model first (${lesson})`
+  })
+  await record('learn', { text: input.text, question: 'learn', read: read?.ok ?? null })
+  return `- Domain model first, from ${lesson.split('/').pop()}`
 }
 
 /** Earlier messages of a session, like the real agent reads them from Claude Code's transcripts. */
