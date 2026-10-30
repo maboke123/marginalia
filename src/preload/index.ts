@@ -96,6 +96,8 @@ const api: MarginaliaApi = {
     },
     unmuteMic: () => invoke('record:unmuteMic'),
     pickRecording: () => invoke('transcribe:pickRecording'),
+    importText: (request) => invoke('transcribe:importText', request),
+    linkByText: (note, slides) => invoke('transcribe:linkByText', note, slides),
     transcribeFile: (request) => invoke('transcribe:file', request),
     transcribeRecorded: (request) => invoke('transcribe:recorded', request),
     transcribePending: () => invoke('transcribe:pending'),

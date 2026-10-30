@@ -178,7 +178,7 @@ export function Sidebar(): React.JSX.Element {
           },
           {
             label: 'Import a transcript of this...',
-            hint: 'Recorded by someone else; its slide links come here',
+            hint: 'Recorded by someone else, or captions (.vtt, .srt, .txt); linked to these slides',
             onSelect: () => void pickAndImport(parentOf(node.path), node.path)
           }
         )
@@ -197,6 +197,11 @@ export function Sidebar(): React.JSX.Element {
         items.push({
           label: 'Transcribe the recording',
           onSelect: () => useFiles.getState().transcribeRecorded(node.path)
+        })
+        items.push({
+          label: 'Link to the slides by its words',
+          hint: 'For when the slide on your screen was not the one being discussed',
+          onSelect: () => void useFiles.getState().linkByText(node.path)
         })
         items.push({
           label: 'Transcription queue',

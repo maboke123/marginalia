@@ -3,6 +3,7 @@ export type NodeKind = 'notebook' | 'section' | 'markdown' | 'pdf' | 'canvas'
 import type { AnnotationFile, LoadedAnnotations } from './annotations'
 import type { AppSettings, TranscribeLanguage } from './settings'
 import type { SlideThumb } from './slideMatch'
+import type { SlideText } from './textMatch'
 import type {
   CompleteRequest,
   ChatEvent,
@@ -170,6 +171,13 @@ export interface MarginaliaApi {
     unmuteMic(): Promise<('unmuted' | 'raised')[]>
     /** Asks for a video or audio file; null when cancelled. */
     pickRecording(): Promise<string | null>
+    /**
+     * Imports a transcript made elsewhere (.vtt, .srt, .txt) as a transcript note, its
+     * paragraphs linked to the slides their words match; returns the note and its deck.
+     */
+    importText(request: ImportTranscriptRequest): Promise<{ note: string; pdf: string | null }>
+    /** Links each timed paragraph to the slide its words match; returns how many got one. */
+    linkByText(note: string, slides: SlideText[]): Promise<number>
     /** Queues a recording file for transcription; returns the job id. Progress via onJob. */
     transcribeFile(request: TranscribeFileRequest): Promise<string>
     /** Queues a transcript recorded without live transcription; returns the job id. */
@@ -279,6 +287,17 @@ export interface LiveChunk {
   marker?: string
   /** Text of that slide, so course terms are spelled right. */
   prompt?: string
+}
+
+/** A transcript made elsewhere (a lecturer's video captions, say), to import into `folder`. */
+export interface ImportTranscriptRequest {
+  folder: string
+  /** Absolute path of the .vtt, .srt or .txt file. */
+  source: string
+  /** Dropped on this PDF: the transcript is about this deck. */
+  pdf?: string
+  /** The text of every slide it may be about, to link its paragraphs to them. */
+  slides: SlideText[]
 }
 
 export interface TranscribeFileRequest {

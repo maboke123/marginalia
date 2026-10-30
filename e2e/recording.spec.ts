@@ -1,7 +1,7 @@
 import { expect, test, type ElectronApplication, type Locator, type Page } from '@playwright/test'
 import { execFileSync } from 'child_process'
 import { promises as fs } from 'fs'
-import { PDFDocument } from 'pdf-lib'
+import { PDFDocument, StandardFonts } from 'pdf-lib'
 import path from 'path'
 import { createEnv, fakeLog, launch, makeSlides, type TestEnv } from './helpers'
 
@@ -585,4 +585,60 @@ test("a friend's transcript comes in from the slides' menu, linked to them", asy
   expect(state.notes[`${section}/slides.pdf`]).toContain(`${section}/${name}`)
   await page.locator('.cm-link-text', { hasText: 'slide 2' }).click()
   await expect(page.getByRole('textbox', { name: 'Page' })).toHaveValue('2')
+})
+
+test("the lecturer's captions come in from the slides' menu, each paragraph on its slide", async () => {
+  await start()
+  const doc = await PDFDocument.create()
+  const font = await doc.embedFont(StandardFonts.Helvetica)
+  for (const text of [
+    'GRASP: general responsibility assignment software patterns',
+    'Information expert: the class that has the information',
+    'Creator: B creates A when B contains or aggregates A'
+  ]) {
+    doc.addPage([960, 540]).drawText(text, { x: 40, y: 300, size: 24, font })
+  }
+  await fs.writeFile(path.join(env.vault, section, 'GRASP.pdf'), await doc.save())
+  const captions = path.join(env.dir, 'GRASP lecture.vtt')
+  await fs.writeFile(
+    captions,
+    [
+      'WEBVTT',
+      '',
+      '00:00:01.000 --> 00:00:05.000',
+      'Today the GRASP patterns: general responsibility assignment.',
+      '',
+      '00:01:00.000 --> 00:01:05.000',
+      'The information expert is the class that has the information.',
+      '',
+      '00:02:00.000 --> 00:02:05.000',
+      'The creator: B creates A when B contains A.',
+      ''
+    ].join('\n')
+  )
+  await app.evaluate(({ dialog }, file) => {
+    dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [file] })
+  }, captions)
+  await row('GRASP.pdf').click({ button: 'right' })
+  await page.getByRole('menuitem', { name: /Import a transcript of this/ }).click()
+
+  const editor = page.locator('.md-editor')
+  await expect(editor).toContainText('The information expert is the class')
+  const name = 'Transcript GRASP lecture.md'
+  const file = path.join(env.vault, section, name)
+  const text = await fs.readFile(file, 'utf8')
+  expect(text).toContain('**00:01** · [slide 1](GRASP.pdf#page=1) Today the GRASP patterns')
+  expect(text).toContain('**01:00** · [slide 2](GRASP.pdf#page=2) The information expert')
+  expect(text).toContain('**02:00** · [slide 3](GRASP.pdf#page=3) The creator')
+  const state = JSON.parse(
+    await fs.readFile(path.join(env.vault, '.marginalia', 'state.json'), 'utf8')
+  )
+  expect(state.notes[`${section}/GRASP.pdf`]).toContain(`${section}/${name}`)
+
+  // A transcript whose links all point at one slide gets them from its words.
+  await fs.writeFile(file, text.replace(/#page=\d/g, '#page=1').replace(/slide \d/g, 'slide 1'))
+  await row('Transcript GRASP lecture').click({ button: 'right' })
+  await page.getByRole('menuitem', { name: 'Link to the slides by its words' }).click()
+  await expect(page.getByText('Linked 3 paragraphs to the slides their words match')).toBeVisible()
+  expect(await fs.readFile(file, 'utf8')).toContain('[slide 3](GRASP.pdf#page=3) The creator')
 })

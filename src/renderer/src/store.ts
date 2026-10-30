@@ -17,6 +17,8 @@ import {
 } from './lib/grid'
 import { canvasFrom } from '../../shared/canvas'
 import { noteHtml } from './lib/notePdf'
+import { slideCandidates } from './transcribe/candidates'
+import { slideTexts } from './transcribe/slideTexts'
 import {
   childrenOf,
   findNode,
@@ -235,6 +237,11 @@ interface AppState {
     pdf?: string,
     recordings?: string[]
   ): Promise<string[]>
+  /**
+   * Transcripts made elsewhere (.vtt, .srt, .txt: a lecturer's video captions) into `parent`
+   * or the current section, each paragraph linked to the slide its words match.
+   */
+  importTranscripts(sources: string[], parent?: string, pdf?: string): Promise<void>
 }
 
 // Which folders are open is a per-machine convenience, so it lives in localStorage
@@ -770,6 +777,28 @@ export const useApp = create<AppState>((set, get) => {
       expandAncestors(imported.notes[0])
       get().openFile(imported.notes[0])
       return imported.recordings
+    },
+
+    async importTranscripts(sources, parent, pdf) {
+      const target = parent ?? currentFolder()
+      if (!target) {
+        get().showError('Select a notebook or section to import into')
+        return
+      }
+      get().showNotice('Finding the slides of the transcript...')
+      const slides = await slideTexts(slideCandidates(get().nodes, { folder: target, pdf }))
+      const notes: string[] = []
+      for (const source of sources) {
+        const imported = await attempt(() =>
+          window.api.transcribe.importText({ folder: target, source, pdf, slides })
+        )
+        if (imported) notes.push(imported.note)
+      }
+      get().showNotice(null)
+      if (!notes.length) return
+      await get().refresh()
+      expandAncestors(notes[0])
+      get().openFile(notes[0])
     },
 
     async create(item, parent) {

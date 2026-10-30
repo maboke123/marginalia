@@ -3,6 +3,7 @@ import { randomUUID } from 'crypto'
 import { promises as fs } from 'fs'
 import path from 'path'
 import type {
+  ImportTranscriptRequest,
   LiveChunk,
   PendingRecordings,
   TranscribeFileRequest,
@@ -12,6 +13,7 @@ import type {
   TranscribeStatus,
   VaultNode
 } from '../../shared/types'
+import type { SlideText } from '../../shared/textMatch'
 import type { ConfigStore } from '../config'
 import type { Handle } from '../ipc'
 import { VaultError } from '../vault/names'
@@ -21,7 +23,8 @@ import { transcribeFile, type FileJob } from './fileJob'
 import { pruneCheckpoints } from './pieces'
 import { LiveSession, timelineName } from './live'
 import { fixMicrophone, type MicFix } from './mic'
-import { audioOf, NOT_TRANSCRIBED, type SlideMoment } from './transcript'
+import { importTranscriptFile, linkByText } from './importText'
+import { audioOf, untranscribed as notTranscribed, type SlideMoment } from './transcript'
 import type { Segment } from './transcript'
 
 /**
@@ -211,6 +214,19 @@ export function registerTranscription(
     return result.canceled ? null : result.filePaths[0]
   })
 
+  handle('transcribe:importText', (request: ImportTranscriptRequest) => {
+    const vault = getVault()
+    if (!vault) throw new VaultError('No vault is open')
+    return importTranscriptFile(vault, request)
+  })
+
+  handle('transcribe:linkByText', (note: string, slides: SlideText[]) => {
+    const vault = getVault()
+    if (!vault) throw new VaultError('No vault is open')
+    if (note === live?.transcript) throw new VaultError('This lecture is still being recorded')
+    return linkByText(vault, note, slides)
+  })
+
   handle('transcribe:file', (request: TranscribeFileRequest) =>
     queueJob(request, path.basename(request.source))
   )
@@ -374,7 +390,7 @@ export function registerTranscription(
 
   const untranscribed = async (vault: Vault, note: string): Promise<boolean> => {
     const text = await vault.readText(note).catch(() => '')
-    return text.includes(NOT_TRANSCRIBED) && !!audioOf(text)
+    return notTranscribed(text)
   }
 
   /** The order I put recordings in that are not started yet; others follow in tree order. */

@@ -305,7 +305,7 @@ export function registerIpc(
       title: 'Import notes or a transcript',
       properties: ['openFile', 'multiSelections'],
       filters: [
-        { name: 'Notes and transcripts', extensions: ['md'] },
+        { name: 'Notes and transcripts', extensions: ['md', 'vtt', 'srt', 'txt'] },
         {
           name: 'With the recording',
           extensions: ['md', 'webm', 'opus', 'ogg', 'm4a', 'mp3', 'wav', 'flac', 'aac']

@@ -20,7 +20,8 @@ import {
   slideMarker,
   transcriptHeader,
   transcriptName,
-  transcriptParagraph
+  transcriptParagraph,
+  untranscribed
 } from './transcript'
 import { wavFromPcm } from './wav'
 
@@ -242,5 +243,29 @@ describe('a transcript from another laptop', () => {
     const adopted = adoptTranscript(FRIEND, 'ML/les_5/T.md', null, 'assets/recording (2).webm')
     expect(adopted).toContain('(Lecture%205%20-%20Trees.pdf#page=1)')
     expect(audioOf(adopted)).toBe('assets/recording (2).webm')
+  })
+
+  it('reads links to a deck with parentheses in its name', () => {
+    const text = '**00:00** · [slide 31](10-11%20comp-graphs%20(PoML)%202026.pdf#page=31) x'
+    expect(linkedPdfNames(text)).toEqual(['10-11 comp-graphs (PoML) 2026.pdf'])
+    expect(adoptTranscript(text, 'ML/a/T.md', 'ML/a/graphs.pdf', null)).toBe(
+      '**00:00** · [slide 31](graphs.pdf#page=31) x'
+    )
+  })
+})
+
+describe('a transcript without text yet', () => {
+  const header = transcriptHeader({
+    date: new Date(2026, 9, 9, 10, 37),
+    source: 'Recorded live with the microphone.',
+    audio: 'assets/recording-2026-10-09_10-37-45.webm'
+  })
+
+  it('is marked so, or only has its header', () => {
+    expect(untranscribed(`${header}\n${NOT_TRANSCRIBED}\n`)).toBe(true)
+    expect(untranscribed(header)).toBe(true)
+    expect(untranscribed(`${header}\n**00:02** Good morning.\n`)).toBe(false)
+    // Without a recording there is nothing to transcribe.
+    expect(untranscribed('# Transcript GRASP\n\nImported from GRASP.vtt.\n')).toBe(false)
   })
 })

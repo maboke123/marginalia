@@ -3,6 +3,7 @@ import type { TranscribeJob } from '../../../shared/types'
 import { useApp } from '../store'
 import { slideCandidates } from './candidates'
 import { lessonFolder } from './recording'
+import { slideTexts } from './slideTexts'
 import { slideThumbs } from './thumbs'
 
 /** What ffmpeg can read that a lecture recording is likely to be (as in main's service.ts). */
@@ -32,6 +33,8 @@ interface FilesState {
   transcribe(folder?: string | null, source?: string, pdf?: string): Promise<void>
   /** A transcript recorded in the app, from its kept audio. */
   transcribeRecorded(note: string): void
+  /** Links each paragraph of a transcript to the slide its words match. */
+  linkByText(note: string): Promise<void>
   offer(note: string): void
   dismissOffer(note: string): void
   /** `linkSlides`: find the slides a video shows, for links in the transcript. */
@@ -88,6 +91,20 @@ export const useFiles = create<FilesState>((set, get) => {
     transcribeRecorded(note) {
       get().dismissOffer(note)
       set({ choosing: { kind: 'recorded', note } })
+    },
+
+    async linkByText(note) {
+      const app = useApp.getState()
+      app.showNotice('Finding the slides of the transcript...')
+      try {
+        const folder = note.split('/').slice(0, -1).join('/')
+        const slides = await slideTexts(slideCandidates(app.nodes, { folder }))
+        const linked = await window.api.transcribe.linkByText(note, slides)
+        app.showNotice(`Linked ${linked} paragraphs to the slides their words match`)
+      } catch (err) {
+        app.showNotice(null)
+        app.showError(`Could not link the transcript: ${(err as Error).message}`)
+      }
     },
 
     offer: (note) => set({ offers: [...get().offers.filter((n) => n !== note), note] }),

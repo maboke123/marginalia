@@ -35,9 +35,14 @@ export function transcriptHeader(opts: { date: Date; source: string; audio?: str
 
 /**
  * One paragraph: when it was said, the slide on screen (a Markdown link, if any), then the
- * text. Whisper's segments of one chunk run together into one paragraph.
+ * text. Whisper's segments of one chunk run together into one paragraph. An imported
+ * transcript without times starts with the slide.
  */
-export function transcriptParagraph(at: number, segments: Segment[], marker?: string): string {
+export function transcriptParagraph(
+  at: number | null,
+  segments: Segment[],
+  marker?: string
+): string {
   const text = segments
     .map((s) => s.text.trim())
     .filter(Boolean)
@@ -46,6 +51,7 @@ export function transcriptParagraph(at: number, segments: Segment[], marker?: st
     // Spoken text is plain text: "$5" must not start a formula, nor "*" emphasis.
     .replace(/[\\`*_[\]<$~#|]/g, '\\$&')
   if (!text) return ''
+  if (at === null) return `\n${marker ? `${marker} ` : ''}${text}\n`
   return `\n**${clock(at)}**${marker ? ` · ${marker}` : ''} ${text}\n`
 }
 
@@ -75,6 +81,17 @@ export function paragraphs(
 /** Stands in a transcript recorded without live transcription, until it is transcribed. */
 export const NOT_TRANSCRIBED =
   '*Not transcribed yet. Right-click this note in the sidebar and choose "Transcribe the recording".*'
+
+/**
+ * A transcript with a kept recording and no text yet: marked so, or only its header (a live
+ * transcription that wrote nothing).
+ */
+export function untranscribed(note: string): boolean {
+  if (!audioOf(note)) return false
+  if (note.includes(NOT_TRANSCRIBED)) return true
+  const header = headerOf(note)
+  return header !== null && !note.slice(header.length).trim()
+}
 
 /** Which slide was open from when on, during a recording. */
 export interface SlideMoment {
@@ -142,7 +159,8 @@ export function recordedOn(text: string): Date | null {
   return new Date(Number(m[3]), month, Number(m[1]), Number(m[4]), Number(m[5]))
 }
 
-const SLIDE_LINK = /\[slide (\d+)\]\(([^)\s]*?\.pdf)#page=(\d+)\)/gi
+// A PDF name may hold parentheses ("comp-graphs (PoML).pdf"); encodeURIComponent keeps them.
+const SLIDE_LINK = /\[slide (\d+)\]\(((?:[^()\s]|\([^()\s]*\))*?\.pdf)#page=(\d+)\)/gi
 
 /** File names of the PDFs a transcript's slide links point at, like "B2 trees.pdf". */
 export function linkedPdfNames(text: string): string[] {
