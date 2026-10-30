@@ -470,6 +470,26 @@ h2 {
   white-space: nowrap;
 }
 
+.menu-item.with-note {
+  height: auto;
+  padding-top: 5px;
+  padding-bottom: 5px;
+}
+
+.menu-label {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.menu-item .menu-note {
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.35;
+  white-space: normal;
+}
+
 .menu-hint {
   overflow: hidden;
   color: var(--text-muted);

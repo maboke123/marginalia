@@ -145,7 +145,7 @@ export function Sidebar(): React.JSX.Element {
         },
         {
           label: 'Import notes or a transcript...',
-          hint: 'A transcript a friend recorded, say',
+          hint: "A friend's transcript, or the lecturer's (.vtt, .srt, .txt): linked to the slides",
           onSelect: () => void pickAndImport(node.path)
         },
         { separator: true }

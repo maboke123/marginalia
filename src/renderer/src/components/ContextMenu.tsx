@@ -67,18 +67,25 @@ export function ContextMenu({ x, y, items, onClose, className }: Props): React.J
       {items.map((item, i) => {
         if ('separator' in item) return <div key={i} className="menu-separator" />
         if ('custom' in item) return <div key={i}>{item.custom}</div>
+        // A shortcut ("F2", "Ctrl+Shift+I") sits on the right; a sentence goes under the label,
+        // where it has room instead of being cut off.
+        const note = item.hint?.includes(' ') ? item.hint : null
+        const classes = ['menu-item', item.danger && 'danger', note && 'with-note']
         return (
           <button
             key={i}
             role="menuitem"
-            className={item.danger ? 'menu-item danger' : 'menu-item'}
+            className={classes.filter(Boolean).join(' ')}
             onClick={() => {
               onClose()
               item.onSelect()
             }}
           >
-            <span>{item.label}</span>
-            {item.hint && <span className="menu-hint">{item.hint}</span>}
+            <span className="menu-label">
+              {item.label}
+              {note && <span className="menu-note">{note}</span>}
+            </span>
+            {item.hint && !note && <span className="menu-hint">{item.hint}</span>}
           </button>
         )
       })}
