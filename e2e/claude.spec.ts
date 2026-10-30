@@ -408,23 +408,38 @@ test('/uml learns the course by itself, and from my rules and my changes to its 
   await fs.copyFile(slides, path.join(env.vault, 'Machine Learning/B3 Ensembles/ensembles.pdf'))
   await openSlides()
 
-  // Nothing is learned until I start it; then it goes through the course lesson by lesson.
+  // Nothing is learned until I pick the one course; then it goes through it lesson by lesson.
   await page.keyboard.press('Control+L')
   await page.getByRole('button', { name: 'Claude settings' }).click()
-  await expect(page.getByRole('combobox', { name: 'Playbook of' })).toHaveValue('Machine Learning')
-  await expect(page.getByText(/^Not learning this course\./)).toBeVisible()
+  await expect(page.getByRole('combobox', { name: 'Course to learn' })).toHaveValue(
+    'Machine Learning'
+  )
   await page.getByRole('button', { name: 'Learn this course' }).scrollIntoViewIfNeeded()
   await page.screenshot({ path: path.join('test-results', 'claude-playbook-start.png') })
   await page.getByRole('button', { name: 'Learn this course' }).click()
-  const status = page.getByText(/Learned from \d+ of the \d+ files of this course\. It is up/)
-  await expect(status).toBeVisible()
-  await status.scrollIntoViewIfNeeded()
+  await expect(page.getByText('Up to date.')).toBeVisible()
+  // No other course can be picked any more.
+  await expect(page.getByRole('combobox', { name: 'Course to learn' })).toBeHidden()
+  await expect(page.locator('.playbook-course')).toHaveText('Machine Learning')
+  await expect(page.locator('.playbook-files > summary')).toHaveText(
+    /^Files: (\d+) of \1 taken in$/
+  )
+  await expect(page.locator('.playbook-lesson li', { hasText: 'slides.pdf' })).toContainText(
+    'Taken in'
+  )
+  await page.getByText('Its notes of this lesson').first().click()
+  await expect(page.locator('.playbook-notes .playbook-markdown').first()).toContainText(
+    'Domain model first'
+  )
+  await page.locator('.playbook-files').scrollIntoViewIfNeeded()
   await page.screenshot({ path: path.join('test-results', 'claude-playbook-learned.png') })
-  await expect(page.getByRole('textbox', { name: 'What the lecturer does' })).toHaveValue(
+  await expect(
+    page.getByRole('textbox', { name: /^Summary that goes along with \/uml/ })
+  ).toHaveValue(
     '- Domain model first (Machine Learning/B2 Decision trees)\n' +
       '- Domain model first (Machine Learning/B3 Ensembles)\n'
   )
-  await expect(page.getByText('Last learned from B3 Ensembles')).toBeVisible()
+  await expect(page.getByText('What the last run changed (B3 Ensembles')).toBeVisible()
   const runs = (await readLog()).filter((e) => e.question === 'learn')
   expect(runs).toHaveLength(2)
   expect(runs[0].text).toContain(`- ${section}/slides.pdf (slides or other PDF, new)`)
@@ -474,25 +489,33 @@ test('/uml learns the course by itself, and from my rules and my changes to its 
   await page.screenshot({ path: path.join('test-results', 'claude-playbook.png') })
 })
 
-test('the first /uml in a course starts learning it; feedback rules say who gave them', async () => {
+test('/uml learns only its one course; feedback rules say who gave them', async () => {
   const skills = path.join(env.userData, 'skills', 'uml', 'courses')
+  await fs.mkdir(skills, { recursive: true })
+  const learns = (course: string): Promise<void> =>
+    fs.writeFile(path.join(skills, `${course}.json`), JSON.stringify({ learning: true }))
   await openSlides()
-  await ask('/uml the TA said never use aggregation for order lines')
+
+  // Another course learns: this one gets no playbook, and a rule here is refused.
+  await learns('Design of Software Systems')
+  await ask('/uml never use aggregation for order lines')
   await expect(answers()).toHaveCount(1)
   const packet = (await readLog()).find((e) => e.question.startsWith('/uml'))!.text
-  expect(packet).toContain('This is the first /uml in this course: it now learns the course')
+  expect(packet).toContain('/uml learns only the course Design of Software Systems')
+  expect(packet).not.toContain('<playbook>')
+  await expect(fs.readFile(path.join(skills, 'Machine Learning.rules.md'))).rejects.toThrow()
+
+  // In the course it learns, feedback the TA gave becomes a rule that says so.
+  await fs.rm(path.join(skills, 'Design of Software Systems.json'))
+  await learns('Machine Learning')
+  await ask('/uml the TA said never use aggregation for order lines')
+  await expect(answers()).toHaveCount(2)
   await expect
     .poll(() => fs.readFile(path.join(skills, 'Machine Learning.rules.md'), 'utf8'))
     .toBe('- Never use aggregation for order lines (from the TA, iteration 1)\n')
   await expect(page.locator('.claude-tool').last()).toContainText(
     'Added to your /uml rules: Never use aggregation for order lines (from the TA, iteration 1)'
   )
-
-  // It learned the course by itself, without "Learn this course".
-  await expect.poll(async () => (await readLog()).some((e) => e.question === 'learn')).toBe(true)
-  await page.getByRole('button', { name: 'Claude settings' }).click()
-  await expect(page.getByText(/Learned from \d+ of the \d+ files of this course/)).toBeVisible()
-  await expect(page.getByRole('button', { name: 'Stop learning this course' })).toBeVisible()
 })
 
 test('text in the chat can be selected, copied and asked about', async () => {

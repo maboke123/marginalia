@@ -171,6 +171,10 @@ function describeTool(name: string, input: Record<string, unknown>): string {
       return input.about === 'me'
         ? 'Updated what it remembers about you'
         : `Updated what it remembers about ${input.course || 'this course'}`
+    case 'read_lesson_notes':
+      return input.lesson
+        ? `Read its /uml notes of ${String(input.lesson).split('/').pop()}`
+        : 'Listed its /uml notes per lesson'
     case 'add_rule':
       return input.rule
         ? `Added to your /${input.skill} rules: ${input.rule}${input.from ? ` (from ${input.from})` : ''}`

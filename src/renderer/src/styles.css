@@ -2395,7 +2395,6 @@ button.claude-proposal-label:hover {
   gap: 12px;
   flex: 1;
   min-height: 0;
-  max-width: 560px;
   padding: 12px 16px;
   overflow-y: auto;
 }
@@ -2491,8 +2490,76 @@ button.claude-proposal-label:hover {
   color: var(--danger);
 }
 
-.playbook-last {
-  white-space: pre-wrap;
+.playbook-course {
+  font-weight: 600;
+}
+
+.playbook-status p {
+  color: var(--text-muted);
+}
+
+.playbook details > summary {
+  width: fit-content;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.playbook details > summary:hover {
+  color: var(--text);
+}
+
+.playbook-markdown {
+  max-height: 320px;
+  margin-top: 4px;
+  padding: 6px 10px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.playbook-lesson {
+  margin: 8px 0 0 14px;
+}
+
+.playbook p.playbook-lesson-name {
+  margin-bottom: 2px;
+  font-weight: 600;
+}
+
+.playbook-lesson ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.playbook-lesson li {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 1px 0;
+}
+
+.playbook-lesson li span:first-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.playbook-lesson li span:last-child {
+  flex: none;
+}
+
+.playbook-lesson li.taken span:last-child {
+  color: var(--text-muted);
+}
+
+.playbook-lesson li.waiting span:last-child {
+  font-weight: 600;
+}
+
+.playbook-notes {
+  margin-top: 2px;
 }
 
 .claude-login p {

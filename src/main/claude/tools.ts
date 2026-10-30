@@ -341,6 +341,22 @@ export function appToolServer(
       run('update_playbook')
     ),
     sdk.tool(
+      'save_lesson_notes',
+      'Saves the detailed notes of the lesson this learning run is about, replacing its earlier ' +
+        'notes: everything it teaches about modelling, with every nuance, example and source.',
+      { notes: z.string().describe('The whole notes of this lesson, Markdown') },
+      run('save_lesson_notes')
+    ),
+    sdk.tool(
+      'read_lesson_notes',
+      'Reads the detailed /uml notes of a lesson of the course (all nuances, examples and ' +
+        'sources; the playbook is their summary). Without a lesson, lists the lessons with notes.',
+      {
+        lesson: z.string().optional().describe('The lesson folder, like "les_4" or its vault path')
+      },
+      run('read_lesson_notes')
+    ),
+    sdk.tool(
       'add_rule',
       'Adds one of my rules to the /uml playbook of a course: something I told you, what my ' +
         'changes to your diagrams show I want, or feedback the lecturer or a teaching assistant ' +
@@ -380,6 +396,8 @@ export const LEARN_TOOLS = [
   'list_annotations',
   'read_canvas',
   'read_summary',
+  'save_lesson_notes',
+  'read_lesson_notes',
   'update_playbook',
   'add_rule'
 ]
@@ -408,6 +426,7 @@ const CHAT_TOOLS = [
   'preview_pdf_export',
   'goto',
   'remember',
+  'read_lesson_notes',
   'add_rule'
 ]
 export const APP_TOOLS = CHAT_TOOLS.map(mcpName)

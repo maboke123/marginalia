@@ -34,11 +34,16 @@ const WHY: Record<Pending['why'], string> = {
   annotations: 'only my annotations on it changed'
 }
 
-/** The message of a learning run: the files of one lesson, the playbook so far, my rules. */
+/**
+ * The message of a learning run: the files of one lesson, its notes so far, the playbook so
+ * far, my rules, and which other lessons have notes.
+ */
 export function learnMessage(input: {
   course: string
   folder: string
   files: LessonFile[]
+  notes: string
+  others: string[]
   playbook: string
   rules: string
 }): string {
@@ -53,6 +58,13 @@ export function learnMessage(input: {
     }
   }
   lines.push(
+    '',
+    'Your notes of this lesson so far:',
+    '<lesson_notes>',
+    input.notes.trim() || '(none: this lesson is new to you)',
+    '</lesson_notes>',
+    '',
+    `Other lessons with notes (read_lesson_notes): ${input.others.join(', ') || 'none yet'}`,
     '',
     'The playbook so far:',
     '<playbook>',
@@ -71,8 +83,8 @@ interface LearnerDeps {
   playbooks: PlaybookStore
   vault(): Vault | null
   learn(): Promise<Learn | undefined>
-  /** The app tools for a run, with this course as the default. */
-  tools(signal: AbortSignal, course: string): CallTool
+  /** The app tools for a run, with this course as the default and this lesson's notes. */
+  tools(signal: AbortSignal, course: string, lesson: string): CallTool
   input(course: string): Promise<Pick<LearnInput, 'settings' | 'memory' | 'apiKey'>>
   emit(status: LearnStatus | null): void
 }
@@ -180,15 +192,28 @@ export class Learner {
     }
     let summary = ''
     if (files.length) {
-      const [playbook, rules] = await Promise.all([
+      const [playbook, rules, notes] = await Promise.all([
         playbooks.read(skill, course, 'text'),
-        playbooks.read(skill, course, 'rules')
+        playbooks.read(skill, course, 'rules'),
+        playbooks.allNotes(skill, course)
       ])
+      const others = notes
+        .filter((n) => n.lesson !== lesson.folder)
+        .map((n) => n.lesson.split('/').pop() ?? n.lesson)
+      const mine = notes.find((n) => n.lesson === lesson.folder)?.text ?? ''
       summary = await learn({
         cwd: vault.root,
-        text: learnMessage({ course, folder: lesson.folder, files, playbook, rules }),
+        text: learnMessage({
+          course,
+          folder: lesson.folder,
+          files,
+          notes: mine,
+          others,
+          playbook,
+          rules
+        }),
         ...(await this.deps.input(course)),
-        callTool: this.deps.tools(signal, course),
+        callTool: this.deps.tools(signal, course, lesson.folder),
         signal
       })
     }
@@ -200,7 +225,7 @@ export class Learner {
         if (sources[file.path]) learned[file.path] = sources[file.path].stamp
       }
       const log = files.length
-        ? [{ at: Date.now(), lesson: lesson.folder, summary: summary.trim().slice(0, 1500) }]
+        ? [{ at: Date.now(), lesson: lesson.folder, summary: summary.trim().slice(0, 3000) }]
         : []
       return { ...next, learned, log: [...log, ...next.log] }
     })

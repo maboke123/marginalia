@@ -13,6 +13,7 @@ import type {
   ClaudeSettingsUpdate,
   Playbook,
   PlaybookContext,
+  PlaybookFile,
   ToolReply
 } from '../../shared/claude'
 import { claudeSettings, type ConfigStore } from '../config'
@@ -41,7 +42,8 @@ import {
   LEARNING_SKILLS,
   notLearned,
   type Part,
-  type PlaybookStore
+  type PlaybookStore,
+  type Skipped
 } from './playbook'
 import type { Memory } from './prompt'
 import { toHistory } from './events'
@@ -142,23 +144,44 @@ export function registerClaude(
     }
   }
 
-  /** What a skill knows of a course, and from which of its files. */
-  async function playbookOf(skill: string, course: string): Promise<Playbook> {
-    const [text, rules, state, sources] = await Promise.all([
+  /** The one course a skill learns (only one may: learning others by accident costs usage). */
+  async function learningCourse(skill: string): Promise<string | null> {
+    return (await playbooks.learning(skill))[0] ?? null
+  }
+
+  /** What a skill knows of the course it learns, and which files it took in. */
+  async function playbookOf(skill: string): Promise<Playbook | null> {
+    const course = await learningCourse(skill)
+    if (!course) return null
+    const skipped: Skipped[] = []
+    const [text, rules, state, sources, notes] = await Promise.all([
       playbooks.read(skill, course, 'text'),
       playbooks.read(skill, course, 'rules'),
       playbooks.state(skill, course),
-      course ? courseSources(vault(), course) : {}
+      courseSources(vault(), course, skipped),
+      playbooks.allNotes(skill, course)
     ])
-    const pending = notLearned(sources, state.learned).map((p) => p.path)
+    const pending = new Map(notLearned(sources, state.learned).map((p) => [p.path, p.why]))
+    const left = new Map(skipped.map((s) => [s.path, s.why]))
+    const files: PlaybookFile[] = []
+    // Skipped files after the others; the settings group them per lesson.
+    for (const path of [...Object.keys(sources), ...left.keys()]) {
+      const source = sources[path]
+      files.push({
+        path,
+        kind: source?.kind ?? (left.get(path) === 'empty' ? 'note' : 'transcript'),
+        status: source ? (pending.get(path) ?? 'learned') : left.get(path)!
+      })
+    }
     const total = Object.keys(sources).length
     return {
+      course,
       text,
       rules,
-      learning: state.learning,
-      learned: total - pending.length,
+      learned: total - pending.size,
       total,
-      pending,
+      files,
+      notes,
       log: state.log,
       error: state.error
     }
@@ -168,22 +191,27 @@ export function registerClaude(
   // (a message that fails shows them again next time).
   const offers = new Map<string, { skill: string; course: string; seen: Record<string, string> }>()
 
-  /**
-   * The playbook for a /uml message, with my changes to its diagrams since it last saw them.
-   * The first /uml in a course starts learning it.
-   */
+  /** The playbook for a /uml message, with my changes to its diagrams since it last saw them. */
   async function playbookContext(skill: string, course: string): Promise<PlaybookContext> {
     const v = vault()
-    let state = await playbooks.state(skill, course)
-    const started = !state.learning
-    if (started) {
-      state = await playbooks.update(skill, course, (st) => ({ ...st, learning: true }))
-      if (!learner.status()) startLearning(skill, course)
+    const learns = await learningCourse(skill)
+    const none = {
+      course: learns,
+      text: '',
+      rules: '',
+      notes: [],
+      pending: 0,
+      edits: [],
+      offer: null
     }
-    const [text, rules] = await Promise.all([
+    if (!course || course !== learns) return none
+    const [text, rules, state, all] = await Promise.all([
       playbooks.read(skill, course, 'text'),
-      playbooks.read(skill, course, 'rules')
+      playbooks.read(skill, course, 'rules'),
+      playbooks.state(skill, course),
+      playbooks.allNotes(skill, course)
     ])
+    const notes = all.map((n) => ({ lesson: n.lesson, chars: n.text.length }))
     const edits: PlaybookContext['edits'] = []
     const seen: Record<string, string> = {}
     for (const file of Object.keys(state.drawn)) {
@@ -201,7 +229,16 @@ export function registerClaude(
       offers.set(offer, { skill, course, seen })
     }
     const pending = notLearned(await courseSources(v, course), state.learned).length
-    return { text, rules, started, pending, edits, offer }
+    return { course, text, rules, notes, pending, edits, offer }
+  }
+
+  /** Why a playbook of `course` may not be written, if it may not: only one course has one. */
+  async function notLearnedHere(skill: string, course: string): Promise<string | null> {
+    const learns = await learningCourse(skill)
+    if (course === learns) return null
+    return learns
+      ? `Only ${learns} has a /${skill} playbook, not ${course}: nothing saved.`
+      : `No course has a /${skill} playbook yet: nothing saved.`
   }
 
   async function takeOffer(id: string): Promise<void> {
@@ -218,6 +255,8 @@ export function registerClaude(
     const skill = String(args.skill ?? 'uml')
     const course = String(args.course ?? '').trim() || current
     if (!course) return { id, ok: false, text: 'Name the course: no course is open' }
+    const refused = await notLearnedHere(skill, course)
+    if (refused) return { id, ok: false, text: refused }
     try {
       await playbooks.write(skill, course, 'text', String(args.playbook ?? ''))
       return { id, ok: true, text: `Saved the /${skill} playbook for ${course}.` }
@@ -231,6 +270,8 @@ export function registerClaude(
     const skill = String(args.skill ?? 'uml')
     const course = String(args.course ?? '').trim() || current
     if (!course) return { id, ok: false, text: 'Name the course: no course is open' }
+    const refused = await notLearnedHere(skill, course)
+    if (refused) return { id, ok: false, text: refused }
     const rule = String(args.rule ?? '').trim()
     const replaces = args.replaces === undefined ? undefined : String(args.replaces)
     const from = args.from === undefined ? undefined : String(args.from)
@@ -247,6 +288,48 @@ export function registerClaude(
     } catch (err) {
       return { id, ok: false, text: (err as Error).message }
     }
+  }
+
+  /** A learning run saves the detailed notes of its own lesson. */
+  async function saveNotes(
+    args: Record<string, unknown>,
+    course: string,
+    lesson?: string
+  ): Promise<ToolReply> {
+    const id = randomUUID()
+    if (!lesson) return { id, ok: false, text: 'Only a learning run saves lesson notes' }
+    const refused = await notLearnedHere('uml', course)
+    if (refused) return { id, ok: false, text: refused }
+    try {
+      await playbooks.writeNotes('uml', course, lesson, String(args.notes ?? ''))
+      return { id, ok: true, text: `Saved the notes of ${lesson.split('/').pop()}.` }
+    } catch (err) {
+      return { id, ok: false, text: (err as Error).message }
+    }
+  }
+
+  /** The detailed notes of a lesson of the course /uml learns, or the list of lessons. */
+  async function readNotes(args: Record<string, unknown>): Promise<ToolReply> {
+    const id = randomUUID()
+    const course = await learningCourse('uml')
+    if (!course) return { id, ok: false, text: 'No course is being learned' }
+    const all = await playbooks.allNotes('uml', course)
+    const name = (lesson: string): string => lesson.split('/').pop() ?? lesson
+    const asked = String(args.lesson ?? '')
+      .trim()
+      .toLowerCase()
+    if (!asked) {
+      const list = all.map((n) => `- ${name(n.lesson)} (${n.lesson}): ${n.text.length} characters`)
+      return { id, ok: true, text: list.length ? list.join('\n') : 'No lesson notes yet.' }
+    }
+    const found = all.find(
+      (n) => n.lesson.toLowerCase() === asked || name(n.lesson).toLowerCase() === asked
+    )
+    if (!found) {
+      const names = all.map((n) => name(n.lesson)).join(', ') || 'none yet'
+      return { id, ok: false, text: `No notes for "${args.lesson}". Lessons with notes: ${names}` }
+    }
+    return { id, ok: true, text: found.text || '(empty)' }
   }
 
   /** Keeps the canvases Claude draws in a course being learned, so my later changes show. */
@@ -268,11 +351,13 @@ export function registerClaude(
 
   /** The tools of a chat or a learning run: the memory and the playbooks live in main. */
   const toolsFor =
-    (signal: AbortSignal, course: string): CallTool =>
+    (signal: AbortSignal, course: string, lesson?: string): CallTool =>
     async (name, args) => {
       if (name === 'remember') return remember(args, course)
       if (name === 'update_playbook') return updatePlaybook(args, course)
       if (name === 'add_rule') return addRule(args, course)
+      if (name === 'save_lesson_notes') return saveNotes(args, course, lesson)
+      if (name === 'read_lesson_notes') return readNotes(args)
       const reply = await rendererTool(name, args, signal)
       if (reply.ok && reply.drawn) await noteDrawing(reply.drawn).catch(console.error)
       return reply
@@ -512,19 +597,32 @@ export function registerClaude(
 
   handle('claude:memory', () => memory.all())
   handle('claude:setMemory', (course: string, note: string) => memory.write(course, note))
-  handle('claude:playbook', (skill: string, course: string) => playbookOf(skill, course))
-  handle('claude:setPlaybook', (skill: string, course: string, part: Part, text: string) =>
-    playbooks.write(skill, course, part === 'rules' ? 'rules' : 'text', text)
-  )
+  handle('claude:playbook', (skill: string) => playbookOf(skill))
+  handle('claude:setPlaybook', async (skill: string, course: string, part: Part, text: string) => {
+    const refused = await notLearnedHere(skill, course)
+    if (refused) throw new VaultError(refused)
+    await playbooks.write(skill, course, part === 'rules' ? 'rules' : 'text', text)
+  })
   handle('claude:playbookContext', (skill: string, course: string) =>
     playbookContext(skill, course)
   )
   handle('claude:setLearning', async (skill: string, course: string, on: boolean) => {
-    await playbooks.update(skill, course, (st) => ({ ...st, learning: on }))
-    if (on) startLearning(skill, course)
-    else if (learner.status()?.course === course) learner.stop()
+    // One course learns at a time, for good: starting one stops the others.
+    const others = on ? (await playbooks.learning(skill)).filter((c) => c !== course) : []
+    for (const other of [...others, ...(on ? [] : [course])]) {
+      await playbooks.update(skill, other, (st) => ({ ...st, learning: false }))
+      if (learner.status()?.course === other) learner.stop()
+    }
+    if (on) {
+      await playbooks.update(skill, course, (st) => ({ ...st, learning: true }))
+      startLearning(skill, course)
+    }
   })
-  handle('claude:learnNow', (skill: string, course: string) => startLearning(skill, course))
+  handle('claude:learnNow', async (skill: string, course: string) => {
+    if (await notLearnedHere(skill, course))
+      throw new VaultError(`/${skill} does not learn ${course}`)
+    startLearning(skill, course)
+  })
   handle('claude:stopLearning', () => learner.stop())
   handle('claude:learningStatus', () => learner.status())
 

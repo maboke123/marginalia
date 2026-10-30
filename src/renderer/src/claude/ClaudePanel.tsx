@@ -6,7 +6,8 @@ import {
   type EffortChoice,
   type LearnStatus,
   type ModelChoice,
-  type Playbook
+  type Playbook,
+  type PlaybookFile
 } from '../../../shared/claude'
 import type { VaultNode } from '../../../shared/types'
 import { ContextMenu, type MenuItem } from '../components/ContextMenu'
@@ -814,21 +815,112 @@ function PlaybookText({
   )
 }
 
+const FILE_STATUS: Record<PlaybookFile['status'], string> = {
+  learned: 'Taken in',
+  new: 'Not yet',
+  changed: 'Changed, not yet',
+  annotations: 'New annotations, not yet',
+  'not transcribed': 'No text yet',
+  empty: 'Empty'
+}
+
+/** Markdown Claude wrote (a run's summary, lesson notes), shown in a box that scrolls. */
+function MarkdownBox({ text }: { text: string }): React.JSX.Element {
+  const html = useMemo(() => renderChatMarkdown(text), [text])
+  return <RenderedHtml className="claude-answer playbook-markdown" html={html} surface="app" />
+}
+
+/** The files of the course per lesson: which ones /uml took in, and its notes of each lesson. */
+function PlaybookFiles({ book }: { book: Playbook }): React.JSX.Element {
+  const lessons = new Map<string, PlaybookFile[]>()
+  for (const file of book.files) {
+    const folder = file.path.split('/').slice(0, -1).join('/')
+    lessons.set(folder, [...(lessons.get(folder) ?? []), file])
+  }
+  const notes = new Map(book.notes.map((n) => [n.lesson, n.text]))
+  const name = (path: string): string => path.split('/').pop() ?? path
+  return (
+    <details className="playbook-files" open>
+      <summary>
+        Files: {book.learned} of {book.total} taken in
+      </summary>
+      {[...lessons].map(([folder, files]) => {
+        const text = notes.get(folder)
+        return (
+          <div key={folder} className="playbook-lesson">
+            <p className="playbook-lesson-name">{name(folder)}</p>
+            <ul>
+              {files.map((file) => (
+                <li key={file.path} className={file.status === 'learned' ? 'taken' : 'waiting'}>
+                  <span title={file.path}>{name(file.path)}</span>
+                  <span>{FILE_STATUS[file.status]}</span>
+                </li>
+              ))}
+            </ul>
+            {text && (
+              <details className="playbook-notes">
+                <summary>
+                  Its notes of this lesson ({text.length.toLocaleString('en-GB')} characters)
+                </summary>
+                <MarkdownBox text={text} />
+              </details>
+            )}
+          </div>
+        )
+      })}
+    </details>
+  )
+}
+
+/** Picks the one course /uml learns, when none is learned yet. */
+function PlaybookStart({ onStarted }: { onStarted(): void }): React.JSX.Element {
+  const nodes = useApp((s) => s.nodes)
+  const courses = nodes.filter((n) => n.kind === 'notebook').map((n) => n.name)
+  const [course, setCourse] = useState(courses[0] ?? '')
+  if (!courses.length) return <></>
+  return (
+    <div className="field">
+      <span>/uml playbook</span>
+      <div className="claude-instructions playbook">
+        <p>
+          /uml learns one course: it reads every slide deck, transcript, note and canvas of it, one
+          lesson per Claude run, and then keeps up with new and changed files by itself.
+        </p>
+        <div className="playbook-status">
+          <select
+            aria-label="Course to learn"
+            value={course}
+            onChange={(e) => setCourse(e.target.value)}
+          >
+            {courses.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </select>
+          <button
+            className="text-button"
+            onClick={() =>
+              void window.api.claude
+                .setLearning('uml', course, true)
+                .then(onStarted)
+                .catch((err: Error) => useApp.getState().showError(err.message))
+            }
+          >
+            Learn this course
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 /**
- * What /uml knows per course: what the lecturer does, learned by itself from the course files,
- * and my rules. Both editable.
+ * What /uml knows of the one course it learns: the summary that goes along with /uml, my
+ * rules (both editable), and which files it took in, with its notes per lesson.
  */
 function PlaybookField(): React.JSX.Element {
-  const nodes = useApp((s) => s.nodes)
-  const activeFile = useApp((s) => s.activeFile)
-  const courses = nodes.filter((n) => n.kind === 'notebook').map((n) => n.name)
-  const [course, setCourse] = useState(() => {
-    const current = activeFile?.split('/')[0] ?? ''
-    return courses.includes(current) ? current : (courses[0] ?? '')
-  })
-  // Kept with its course, so another course shows nothing until its playbook is loaded.
-  const [loaded, setLoaded] = useState<{ course: string; book: Playbook } | null>(null)
-  const book = loaded?.course === course ? loaded.book : null
+  const [book, setBook] = useState<Playbook | null | undefined>(undefined)
   const [status, setStatus] = useState<LearnStatus | null>(null)
   const [version, setVersion] = useState(0)
 
@@ -842,119 +934,88 @@ function PlaybookField(): React.JSX.Element {
   }, [])
 
   useEffect(() => {
-    if (course) {
-      void window.api.claude.playbook('uml', course).then((b) => setLoaded({ course, book: b }))
-    }
-  }, [course, version])
+    void window.api.claude
+      .playbook('uml')
+      .then(setBook)
+      .catch(() => setBook(null))
+  }, [version])
 
-  if (!courses.length) return <></>
+  if (book === undefined) return <></>
+  if (book === null) return <PlaybookStart onStarted={() => setVersion((v) => v + 1)} />
+  const { course } = book
   const run = status?.course === course ? status : null
+  const pending = book.total - book.learned
   const act = (fn: () => Promise<void>): void =>
     void fn()
       .then(() => setVersion((v) => v + 1))
       .catch((err: Error) => useApp.getState().showError(err.message))
-  const last = book?.log[0]
+  const last = book.log[0]
+  const waiting =
+    `${pending} ${pending === 1 ? 'file is' : 'files are'} not taken in yet. New slides and ` +
+    'transcripts follow about 10 minutes after they arrive, notes, canvases and annotations an ' +
+    'hour after your last change.'
   return (
     <div className="field">
       <span>/uml playbook</span>
       <div className="claude-instructions playbook">
-        <select aria-label="Playbook of" value={course} onChange={(e) => setCourse(e.target.value)}>
-          {courses.map((c) => (
-            <option key={c} value={c}>
-              {c}
-            </option>
-          ))}
-        </select>
-        {book && !book.learning && (
-          <div className="playbook-status">
-            <p>
-              Not learning this course. When you start (or send the first /uml in it), it reads
-              every slide deck, transcript, note and canvas of it, one lesson per Claude run, and
-              then keeps up with new and changed files by itself. Each lesson uses about as much of
-              your Claude usage as a long chat message.
-            </p>
+        <p className="playbook-course">{course}</p>
+        <div className="playbook-status" aria-live="polite">
+          <p>
+            {run
+              ? `Learning ${run.lesson.split('/').pop() || course} (lesson ${run.done + 1} of ${run.total})...`
+              : pending
+                ? waiting
+                : 'Up to date.'}
+          </p>
+          {run ? (
             <button
               className="text-button"
-              onClick={() => act(() => window.api.claude.setLearning('uml', course, true))}
+              onClick={() => act(() => window.api.claude.stopLearning())}
             >
-              Learn this course
+              Stop
             </button>
-          </div>
-        )}
-        {book?.learning && (
-          <div className="playbook-status" aria-live="polite">
-            {run ? (
-              <p>
-                Learning {run.lesson.split('/').pop() || course} (lesson {run.done + 1} of{' '}
-                {run.total})...
-              </p>
-            ) : (
-              <p>
-                Learned from {book.learned} of the {book.total} files of this course.
-                {book.pending.length
-                  ? ' New slides and transcripts are taken in about 10 minutes after they arrive,' +
-                    ' notes, canvases and annotations an hour after you last changed them.'
-                  : ' It is up to date.'}
-              </p>
-            )}
-            {run ? (
+          ) : (
+            pending > 0 && (
               <button
                 className="text-button"
-                onClick={() => act(() => window.api.claude.stopLearning())}
+                onClick={() => act(() => window.api.claude.learnNow('uml', course))}
               >
-                Stop
+                Learn {pending} now
               </button>
-            ) : (
-              book.pending.length > 0 && (
-                <button
-                  className="text-button"
-                  onClick={() => act(() => window.api.claude.learnNow('uml', course))}
-                >
-                  Learn {book.pending.length} now
-                </button>
-              )
-            )}
-          </div>
-        )}
-        {book?.error && !run && <p className="playbook-error">Stopped: {book.error}</p>}
+            )
+          )}
+        </div>
+        {book.error && !run && <p className="playbook-error">Stopped: {book.error}</p>}
         {last && (
-          <p className="muted playbook-last">
-            Last learned from {last.lesson.split('/').pop() || course}, {when(last.at)}:{' '}
-            {last.summary || 'nothing new about modelling.'}
-          </p>
+          <details className="playbook-last">
+            <summary>
+              What the last run changed ({last.lesson.split('/').pop() || course}, {when(last.at)})
+            </summary>
+            <MarkdownBox text={last.summary || 'Nothing new about modelling.'} />
+          </details>
         )}
+        <PlaybookFiles book={book} />
         <PlaybookText
           key={`text:${course}`}
-          label="What the lecturer does"
+          label="Summary that goes along with /uml (the details are in the notes per lesson)"
           part="text"
-          rows={8}
+          rows={10}
           placeholder="Nothing learned yet."
           course={course}
-          saved={book?.text ?? null}
-          onSaved={(text) => book && setLoaded({ course, book: { ...book, text } })}
+          saved={book.text}
+          onSaved={(text) => setBook({ ...book, text })}
         />
         <PlaybookText
           key={`rules:${course}`}
           label="My rules"
           part="rules"
-          rows={4}
-          placeholder="Your rules: what you tell /uml, what your changes to its diagrams show, and feedback from the lecturer or a TA (marked with who said it). They come before the slides."
+          rows={5}
+          placeholder="How you like /uml to work, and feedback from the lecturer or a TA (marked with who said it). The course comes first; a rule changes a course convention only when it says so."
           course={course}
-          saved={book?.rules ?? null}
-          onSaved={(rules) => book && setLoaded({ course, book: { ...book, rules } })}
+          saved={book.rules}
+          onSaved={(rules) => setBook({ ...book, rules })}
         />
-        <div className="playbook-status">
-          <p className="muted">Only on this computer, not in your vault.</p>
-          {book?.learning && (
-            <button
-              className="text-button"
-              title="Keeps what it learned; /uml still uses it"
-              onClick={() => act(() => window.api.claude.setLearning('uml', course, false))}
-            >
-              Stop learning this course
-            </button>
-          )}
-        </div>
+        <p className="muted">Only on this computer, not in your vault.</p>
       </div>
     </div>
   )

@@ -239,6 +239,7 @@ export async function learn(input) {
   const read = pdf ? await input.callTool('read_pdf_text', { file: pdf }) : null
   const book = match(input.text, /<playbook>\n([\s\S]*?)\n<\/playbook>/) ?? ''
   const before = book.startsWith('(empty') ? '' : `${book}\n`
+  await input.callTool('save_lesson_notes', { notes: `- Domain model first, said in ${lesson}` })
   await input.callTool('update_playbook', {
     skill: 'uml',
     playbook: `${before}- Domain model first (${lesson})`

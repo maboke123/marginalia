@@ -95,19 +95,34 @@ export interface ToolReply {
   drawn?: { path: string; before: string; after: string }
 }
 
-/** What a skill that learns (/uml) knows of one course (see PlaybookStore in main). */
+/** A file of the course and whether /uml took it in. */
+export interface PlaybookFile {
+  path: string
+  kind: 'pdf' | 'transcript' | 'note' | 'canvas'
+  /**
+   * Taken in as it is now; new or changed since (or, a PDF, only my annotations changed), so
+   * still to come; or left out for now: a transcript without text yet, an empty note.
+   */
+  status: 'learned' | 'new' | 'changed' | 'annotations' | 'not transcribed' | 'empty'
+}
+
+/**
+ * What /uml knows of the one course it learns (see PlaybookStore in main): all its files once,
+ * then what is new or changed.
+ */
 export interface Playbook {
+  course: string
   /** What the lecturer does, learned from the files of the course. */
   text: string
-  /** My rules, from what I told it and how I changed its diagrams; they come first. */
+  /** My rules: how I like it to work, and feedback from the lecturer or a TA. */
   rules: string
-  /** It learns this course: all files once, then what is new or changed. */
-  learning: boolean
-  /** Files of the course it took in, of all of them. */
+  /** Files of the course it took in, of all it learns from. */
   learned: number
   total: number
-  /** Files not taken in yet, or changed since, in the order of the course. */
-  pending: string[]
+  /** Every file of the course, in the order of the course. */
+  files: PlaybookFile[]
+  /** The detailed notes per lesson folder, which the playbook sums up. */
+  notes: { lesson: string; text: string }[]
   /** What the last runs learned, newest first. */
   log: LearnLog[]
   /** Why the last run stopped early. */
@@ -132,10 +147,12 @@ export interface LearnStatus {
 
 /** The playbook as a /uml message gets it, with my changes to its diagrams not seen yet. */
 export interface PlaybookContext {
+  /** The one course /uml learns; when it is not the course of the chat, the rest is empty. */
+  course: string | null
   text: string
   rules: string
-  /** This message started learning the course (the first /uml in it). */
-  started: boolean
+  /** The lessons with detailed notes, which Claude reads when it needs them. */
+  notes: { lesson: string; chars: number }[]
   pending: number
   edits: { path: string; changes: string[] }[]
   /** Hand back with the message (ChatRequest.offer) so `edits` count as seen once answered. */

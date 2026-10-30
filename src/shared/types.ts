@@ -233,10 +233,13 @@ export interface MarginaliaApi {
     memory(): Promise<Record<string, string>>
     /** Replaces one note; empty text removes it. */
     setMemory(course: string, note: string): Promise<void>
-    /** What a skill (/uml) learned for a course and from which of its files. */
-    playbook(skill: string, course: string): Promise<Playbook>
+    /** What a skill (/uml) learned of the one course it learns, and from which files; null before one is picked. */
+    playbook(skill: string): Promise<Playbook | null>
     setPlaybook(skill: string, course: string, part: 'text' | 'rules', text: string): Promise<void>
-    /** Starts learning a course (all of it now, then what changes), or stops for good. */
+    /**
+     * Starts learning a course (all of it now, then what changes), instead of any other: only
+     * one course learns. Or stops for good.
+     */
     setLearning(skill: string, course: string, on: boolean): Promise<void>
     /** Takes in what is not learned yet now, also files that are still changing. */
     learnNow(skill: string, course: string): Promise<void>

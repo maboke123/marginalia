@@ -141,7 +141,7 @@ const api: MarginaliaApi = {
     openInCode: (folder) => invoke('claude:openInCode', folder),
     memory: () => invoke('claude:memory'),
     setMemory: (course, note) => invoke('claude:setMemory', course, note),
-    playbook: (skill, course) => invoke('claude:playbook', skill, course),
+    playbook: (skill) => invoke('claude:playbook', skill),
     setPlaybook: (skill, course, part, text) =>
       invoke('claude:setPlaybook', skill, course, part, text),
     setLearning: (skill, course, on) => invoke('claude:setLearning', skill, course, on),

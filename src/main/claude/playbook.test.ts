@@ -10,8 +10,11 @@ import {
   editsOf,
   editsTaken,
   lessonsOf,
+  MAX_NOTES,
+  MAX_PLAYBOOK,
   notLearned,
   PlaybookStore,
+  type Skipped,
   withRule,
   type CourseState
 } from './playbook'
@@ -82,6 +85,44 @@ describe('PlaybookStore', () => {
     )
     await store.addRule('uml', 'DSS', '', 'Name every association')
     expect(await store.read('uml', 'DSS', 'rules')).toBe('- Getters only for derived attributes\n')
+  })
+
+  it('refuses a playbook or rules that are too long instead of cutting them off', async () => {
+    await store.write('uml', 'DSS', 'text', '- Short')
+    const long = `- ${'x'.repeat(MAX_PLAYBOOK)}`
+    await expect(store.write('uml', 'DSS', 'text', long)).rejects.toThrow(
+      /The playbook is 40,002 characters, more than the 40,000 it may have. Nothing was saved/
+    )
+    expect(await store.read('uml', 'DSS', 'text')).toBe('- Short\n')
+  })
+
+  it('keeps detailed notes per lesson, apart from the playbook', async () => {
+    expect(await store.readNotes('uml', 'DSS', 'DSS/les_1')).toBe('')
+    await store.writeNotes('uml', 'DSS', 'DSS/les_1', '## Use cases\n- Actors outside the boundary')
+    await store.writeNotes('uml', 'DSS', 'DSS/les_4', '## GRASP\n- Creator')
+    await store.writeNotes('uml', 'DSS', 'DSS/les_1', '## Use cases\n- Include and extend')
+    expect(await store.readNotes('uml', 'DSS', 'DSS/les_1')).toBe(
+      '## Use cases\n- Include and extend\n'
+    )
+    expect((await store.allNotes('uml', 'DSS')).map((n) => n.lesson)).toEqual([
+      'DSS/les_1',
+      'DSS/les_4'
+    ])
+    expect(await fs.readdir(path.join(dir, 'skills', 'uml', 'notes', 'DSS'))).toEqual([
+      'les_1.md',
+      'les_4.md'
+    ])
+    await expect(
+      store.writeNotes('uml', 'DSS', 'DSS/les_4', 'x'.repeat(MAX_NOTES + 1))
+    ).rejects.toThrow('The notes of les_4 is')
+
+    // A renamed lesson and a renamed course keep their notes.
+    await store.update('uml', 'DSS', (s) => ({ ...s, learning: true }))
+    await store.remap('DSS/les_4', 'DSS/les_4 GRASP')
+    await store.remap('DSS', 'Design')
+    expect(await store.readNotes('uml', 'Design', 'Design/les_4 GRASP')).toBe(
+      '## GRASP\n- Creator\n'
+    )
   })
 
   it('remembers which courses it learns', async () => {
@@ -187,12 +228,18 @@ describe('course sources', () => {
     )
     await write('DSS/les_2/Shop.canvas', canvas([]))
     await write('ML/B2/slides.pdf', 'pdf')
-    const sources = await courseSources(vault, 'DSS')
+    const skipped: Skipped[] = []
+    const sources = await courseSources(vault, 'DSS', skipped)
     expect(Object.entries(sources).map(([p, s]) => [p, s.kind])).toEqual([
       ['DSS/les_1/1 Intro.pdf', 'pdf'],
       ['DSS/les_1/Summary.md', 'note'],
       ['DSS/les_1/Transcript 2026-09-24 10-30.md', 'transcript'],
       ['DSS/les_2/Shop.canvas', 'canvas']
+    ])
+    expect(skipped).toEqual([
+      { path: 'DSS/les_1/Empty.md', why: 'empty' },
+      { path: 'DSS/les_1/Transcript 2026-09-25 10-30.md', why: 'not transcribed' },
+      { path: 'DSS/les_1/Transcript 2026-09-26 10-30.md', why: 'not transcribed' }
     ])
   })
 
@@ -231,6 +278,7 @@ describe('my changes to the canvases Claude drew', () => {
     learned: {},
     drawn: {},
     edits: {},
+    notes: {},
     log: [],
     error: null
   }

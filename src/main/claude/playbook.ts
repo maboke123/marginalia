@@ -6,11 +6,16 @@ import type { LearnLog } from '../../shared/claude'
 import type { VaultNode } from '../../shared/types'
 import { NOT_TRANSCRIBED, untranscribed } from '../transcribe/transcript'
 import { writeFileAtomic } from '../vault/atomic'
-import { validateName, VaultError } from '../vault/names'
+import { uniqueName, validateName, VaultError } from '../vault/names'
 import type { Vault } from '../vault/vault'
 
-/** A playbook goes into the prompt only when its skill runs, so it may be longer than memory. */
-export const MAX_PLAYBOOK = 20_000
+/**
+ * The playbook is the summary that goes along with every message of its skill; the prompt asks
+ * for 30,000 characters and this leaves room before a save is refused. The details stay in the
+ * notes per lesson, which Claude reads when it needs them.
+ */
+export const MAX_PLAYBOOK = 40_000
+export const MAX_NOTES = 60_000
 export const MAX_RULES = 6000
 const MAX_LOG = 10
 
@@ -28,6 +33,8 @@ export interface CourseState {
   drawn: Record<string, string>
   /** My changes to a canvas from before Claude changed it again, not taken in yet. */
   edits: Record<string, string[]>
+  /** Lesson folder vault path -> file of its detailed notes, in `<skill>/notes/<course>/`. */
+  notes: Record<string, string>
   log: LearnLog[]
   error: string | null
 }
@@ -37,6 +44,7 @@ const EMPTY_STATE: CourseState = {
   learned: {},
   drawn: {},
   edits: {},
+  notes: {},
   log: [],
   error: null
 }
@@ -50,6 +58,7 @@ function stateFrom(raw: unknown): CourseState {
     learned: record(r.learned),
     drawn: record(r.drawn),
     edits: record(r.edits),
+    notes: record(r.notes),
     log: Array.isArray(r.log) ? r.log.slice(0, MAX_LOG) : [],
     error: typeof r.error === 'string' ? r.error : null
   }
@@ -63,14 +72,25 @@ async function readText(file: string): Promise<string> {
   }
 }
 
-async function writeText(file: string, text: string, max: number): Promise<void> {
+/**
+ * Refuses a text that is too long rather than cutting it off: a playbook cut in the middle lost
+ * whole sections, and the next run could not get them back.
+ */
+async function writeText(file: string, text: string, max: number, what: string): Promise<void> {
   const trimmed = text.trim()
   if (!trimmed) {
     await fs.rm(file, { force: true })
     return
   }
+  if (trimmed.length > max) {
+    throw new VaultError(
+      `${what} is ${trimmed.length.toLocaleString('en-US')} characters, more than the ` +
+        `${max.toLocaleString('en-US')} it may have. Nothing was saved: merge and shorten it, ` +
+        'then save it again.'
+    )
+  }
   await fs.mkdir(path.dirname(file), { recursive: true })
-  await writeFileAtomic(file, trimmed.slice(0, max) + '\n')
+  await writeFileAtomic(file, trimmed + '\n')
 }
 
 // Who a rule comes from when it is not me: "- No getters (from the TA, project feedback)".
@@ -123,8 +143,9 @@ export function withRule(
 
 /**
  * What a skill learned per course, kept outside the vault like the memory, in
- * `<skill>/courses/`: `<course>.md` (what the lecturer does), `<course>.rules.md` (my rules)
- * and `<course>.json` (which files it took in, the canvases it drew, what the last runs did).
+ * `<skill>/courses/`: `<course>.md` (what the lecturer does, in short), `<course>.rules.md`
+ * (my rules) and `<course>.json` (which files it took in, the canvases it drew, what the last
+ * runs did); and in `<skill>/notes/<course>/` the detailed notes of each lesson.
  */
 export class PlaybookStore {
   // The learner and the chat both write; one change at a time per course.
@@ -156,8 +177,55 @@ export class PlaybookStore {
   async write(skill: string, course: string, part: Part, text: string): Promise<void> {
     const file = this.file(skill, course, part === 'text' ? '.md' : '.rules.md')
     await this.serial(skill, course, () =>
-      writeText(file, text, part === 'text' ? MAX_PLAYBOOK : MAX_RULES)
+      part === 'text'
+        ? writeText(file, text, MAX_PLAYBOOK, 'The playbook')
+        : writeText(file, text, MAX_RULES, 'My rules')
     )
+  }
+
+  private notesDir(skill: string, course: string): string {
+    this.file(skill, course, '.json')
+    return path.join(this.dir, skill, 'notes', validateName(course))
+  }
+
+  /** The detailed notes of one lesson (its folder's vault path), or ''. */
+  async readNotes(skill: string, course: string, lesson: string): Promise<string> {
+    const name = (await this.state(skill, course)).notes[lesson]
+    return name ? readText(path.join(this.notesDir(skill, course), name)) : ''
+  }
+
+  /** Every lesson with notes, in the order they were first written. */
+  async allNotes(skill: string, course: string): Promise<{ lesson: string; text: string }[]> {
+    const { notes } = await this.state(skill, course)
+    const dir = this.notesDir(skill, course)
+    return Promise.all(
+      Object.entries(notes).map(async ([lesson, name]) => ({
+        lesson,
+        text: await readText(path.join(dir, name))
+      }))
+    )
+  }
+
+  /** Replaces the detailed notes of a lesson; refused when longer than MAX_NOTES. */
+  async writeNotes(skill: string, course: string, lesson: string, text: string): Promise<void> {
+    const dir = this.notesDir(skill, course)
+    const last = lesson.split('/').pop() ?? lesson
+    await this.serial(skill, course, async () => {
+      const state = await this.state(skill, course)
+      let name = state.notes[lesson]
+      if (!name) {
+        await fs.mkdir(dir, { recursive: true })
+        const safe = last.replace(/[<>:"/\\|?*]/g, '-').trim() || 'lesson'
+        name = await uniqueName(dir, safe, '.md')
+      }
+      await writeText(path.join(dir, name), text, MAX_NOTES, `The notes of ${last}`)
+      if (state.notes[lesson] !== name) {
+        const file = this.file(skill, course, '.json')
+        const next = { ...state, notes: { ...state.notes, [lesson]: name } }
+        await fs.mkdir(path.dirname(file), { recursive: true })
+        await writeFileAtomic(file, JSON.stringify(next, null, 2) + '\n')
+      }
+    })
   }
 
   async addRule(
@@ -170,7 +238,7 @@ export class PlaybookStore {
     const file = this.file(skill, course, '.rules.md')
     return this.serial(skill, course, async () => {
       const next = withRule(await readText(file), rule, replaces, from)
-      await writeText(file, next.rules, MAX_RULES)
+      await writeText(file, next.rules, MAX_RULES, 'My rules')
       return next
     })
   }
@@ -229,6 +297,7 @@ export class PlaybookStore {
               .rename(this.file(skill, from, ending), this.file(skill, to, ending))
               .catch(() => {})
           }
+          await fs.rename(this.notesDir(skill, from), this.notesDir(skill, to)).catch(() => {})
         })
         courses[courses.indexOf(from)] = to
       }
@@ -269,7 +338,8 @@ export function remapCourse(
     ...state,
     learned: move(state.learned),
     drawn: move(state.drawn),
-    edits: move(state.edits)
+    edits: move(state.edits),
+    notes: move(state.notes)
   }
   return changed ? next : null
 }
@@ -294,12 +364,22 @@ const TRANSCRIPT = /(^|\/)Transcript [^/]*\.md$/
 const stampOf = (stat: { size: number; mtimeMs: number }): string =>
   `${stat.size}-${Math.round(stat.mtimeMs)}`
 
+/** A file of the course that is not learned from, and why. */
+export interface Skipped {
+  path: string
+  why: 'not transcribed' | 'empty'
+}
+
 /**
  * Every file of a course (a notebook) to learn from, in the order of the sidebar: slides and
  * other PDFs, transcripts, notes and canvases. Transcripts without text yet and empty notes
- * are left out.
+ * are left out, and listed in `skipped` when given.
  */
-export async function courseSources(vault: Vault, course: string): Promise<Record<string, Source>> {
+export async function courseSources(
+  vault: Vault,
+  course: string,
+  skipped?: Skipped[]
+): Promise<Record<string, Source>> {
   const { nodes } = await vault.tree()
   const files: VaultNode[] = []
   const walk = (list: VaultNode[]): void => {
@@ -326,7 +406,14 @@ export async function courseSources(vault: Vault, course: string): Promise<Recor
     } else {
       if (node.kind === 'markdown') {
         const text = await fs.readFile(file, 'utf8').catch(() => '')
-        if (!text.trim() || text.includes(NOT_TRANSCRIBED) || untranscribed(text)) continue
+        if (text.includes(NOT_TRANSCRIBED) || untranscribed(text)) {
+          skipped?.push({ path: node.path, why: 'not transcribed' })
+          continue
+        }
+        if (!text.trim()) {
+          skipped?.push({ path: node.path, why: 'empty' })
+          continue
+        }
       }
       const kind =
         node.kind === 'canvas' ? 'canvas' : TRANSCRIPT.test(node.path) ? 'transcript' : 'note'

@@ -250,38 +250,41 @@ async function playbookContext(
   skill: string,
   course: string
 ): Promise<{ lines: string[]; offer: string | null }> {
-  if (!course) {
-    return { lines: ['No course is open, so there is no playbook: use standard UML.'], offer: null }
-  }
   const book = await window.api.claude.playbookContext(skill, course).catch(() => null)
   if (!book) return { lines: [], offer: null }
+  if (book.course !== course) {
+    const only = book.course
+      ? `/${skill} learns only the course ${book.course}, so ${course || 'this folder'} has no ` +
+        'playbook: use standard UML, and add no rules (they would be refused).'
+      : `/${skill} learns no course yet: use standard UML, and add no rules.`
+    return { lines: [only], offer: null }
+  }
   const lines = [
-    `Your /${skill} playbook for the course ${course}. What the lecturer does, learned from ` +
-      'the files of the course:',
+    `Your /${skill} playbook for the course ${course}: the summary of what the lecturer does, ` +
+      'learned from the files of the course:',
     '<playbook>',
     book.text.trim() || '(empty: nothing learned yet)',
     '</playbook>',
-    'My rules, which come before the lecturer (change them with add_rule):',
+    'My rules (change them with add_rule):',
     '<rules>',
     book.rules.trim() || '(none yet)',
     '</rules>'
   ]
-  if (book.started) {
+  if (book.notes.length) {
     lines.push(
-      `This is the first /${skill} in this course: it now learns the course in the background ` +
-        `(${book.pending} files, one lesson at a time, then new files by themselves). Say so in ` +
-        'one sentence; until it has, use standard UML.'
+      'Your detailed notes per lesson, with every nuance, example and source the playbook sums ' +
+        'up; read one with read_lesson_notes when the question needs detail (a notation, an ' +
+        'example the lecturer worked out, an exercise, the project): ' +
+        book.notes.map((n) => n.lesson.split('/').pop()).join(', ')
     )
-  } else if (book.pending) {
+  }
+  if (book.pending) {
     lines.push(`It is still learning: ${book.pending} files of the course are not taken in yet.`)
   }
   if (book.edits.length) {
     lines.push('Since you drew them, I changed your diagrams like this:')
     for (const e of book.edits) lines.push(`- ${e.path}:`, ...e.changes.map((c) => `    - ${c}`))
-    lines.push(
-      'Each change to what you drew is a correction. One that holds in general (not only for ' +
-        'that one system) becomes a rule with add_rule, unless My rules say it already.'
-    )
+    lines.push('Take these in as the steps say under Rules.')
   }
   return { lines, offer: book.offer }
 }

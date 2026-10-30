@@ -37,11 +37,12 @@ function learner(now?: () => number): Learner {
     {
       playbooks: store,
       vault: () => vault,
-      // Like Claude: saves a playbook naming the lesson, says what it did.
+      // Like Claude: saves notes and a playbook naming the lesson, says what it did.
       learn: async () => async (input) => {
         runs.push(input)
         if (fail) throw new Error(fail)
         const lesson = /Lesson: (.+)\./.exec(input.text)![1]
+        await store.writeNotes('uml', 'DSS', lesson, `- Notes of ${lesson}`)
         await store.write(
           'uml',
           'DSS',
@@ -105,6 +106,9 @@ describe('Learner', () => {
     expect(runs).toEqual([])
     await learner().run('uml', 'DSS', false)
     expect(runs[0].text).toContain('- DSS/les_2/Notes.md (my note, new)')
+    // A lesson taken in again builds on its own notes, and knows which others have notes.
+    expect(runs[0].text).toContain('<lesson_notes>\n- Notes of DSS/les_2\n</lesson_notes>')
+    expect(runs[0].text).toContain('Other lessons with notes (read_lesson_notes): les_1')
   })
 
   it('takes in new slides and transcripts soon, notes only an hour after my last change', async () => {
