@@ -466,7 +466,7 @@ h2 {
   color: var(--danger);
 }
 
-.menu-item span:first-child {
+.menu-label {
   white-space: nowrap;
 }
 

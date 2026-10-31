@@ -570,6 +570,10 @@ test("a friend's transcript comes in from the slides' menu, linked to them", asy
     dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [file] })
   }, friend)
   await row('slides.pdf').click({ button: 'right' })
+  // Its hint wraps inside the menu instead of running out of it.
+  const menu = (await page.locator('.menu').boundingBox())!
+  const note = (await page.locator('.menu-note', { hasText: 'captions' }).boundingBox())!
+  expect(note.x + note.width).toBeLessThanOrEqual(menu.x + menu.width)
   await page.getByRole('menuitem', { name: /Import a transcript of this/ }).click()
 
   // It opens, its slide link points at these slides and it shows under them.
