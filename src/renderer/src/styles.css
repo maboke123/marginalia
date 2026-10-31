@@ -171,6 +171,19 @@ h2 {
   cursor: pointer;
 }
 
+.icon-button.text-size {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  padding-top: 3px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.icon-button.text-size small {
+  font-size: 11px;
+}
+
 .icon-button:hover {
   background: var(--bg-hover);
   color: var(--text);

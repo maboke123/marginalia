@@ -54,6 +54,7 @@ import {
   connectTarget,
   copyItems,
   duplicateItems,
+  scaleText,
   drawOrder,
   groupAround,
   isEmpty,
@@ -1098,6 +1099,12 @@ function CanvasSurface({
     }))
   }
 
+  const resizeText = (step: 1 | -1): void => {
+    const s = doc.getState()
+    if (!s.selection.nodes.length) return
+    s.change((d) => scaleText(d, s.selection.nodes, step))
+  }
+
   const onKeyDown = (e: React.KeyboardEvent): void => {
     if ((e.target as HTMLElement).closest('input, textarea, select')) return
     const s = doc.getState()
@@ -1114,7 +1121,9 @@ function CanvasSurface({
       s.select({ nodes: s.data.nodes.map((n) => n.id), edges: s.data.edges.map((x) => x.id) })
     } else if (key === 'home') fit()
     else if (ctrl && key === 'd') duplicate()
-    else if (ctrl && key === 'c') void copy(false)
+    else if (ctrl && e.shiftKey && (e.code === 'Period' || e.code === 'Comma')) {
+      resizeText(e.code === 'Period' ? 1 : -1)
+    } else if (ctrl && key === 'c') void copy(false)
     else if (ctrl && key === 'x') void copy(true)
     else if (ctrl && key === 'g') (e.shiftKey ? ungroup : makeGroup)()
     else if (ctrl && key === '0') setCamera((c) => zoomAt(c, 1, size.width / 2, size.height / 2))
@@ -1400,6 +1409,28 @@ function CanvasSurface({
                   />
                 ))}
               </div>
+              {selection.nodes.some((id) => nodeById(data, id)?.type === 'text') && (
+                <>
+                  <button
+                    className="icon-button text-size"
+                    title="Smaller text (Ctrl+Shift+<)"
+                    aria-label="Smaller text"
+                    onPointerDown={(e) => e.preventDefault()}
+                    onClick={() => resizeText(-1)}
+                  >
+                    A<small>-</small>
+                  </button>
+                  <button
+                    className="icon-button text-size"
+                    title="Larger text (Ctrl+Shift+>)"
+                    aria-label="Larger text"
+                    onPointerDown={(e) => e.preventDefault()}
+                    onClick={() => resizeText(1)}
+                  >
+                    A<small>+</small>
+                  </button>
+                </>
+              )}
               {selection.nodes.length > 1 && (
                 <button
                   className="icon-button"

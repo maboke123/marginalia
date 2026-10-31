@@ -21,6 +21,7 @@ import {
   connectTarget,
   copyItems,
   duplicateItems,
+  scaleText,
   drawOrder,
   groupAround,
   moveNodes,
@@ -150,6 +151,22 @@ describe('ops', () => {
     expect(duplicateItems(CANVAS, ['customer']).nodes[0]).toMatchObject({
       x: CANVAS.nodes.find((n) => n.id === 'customer')!.x + 30
     })
+  })
+
+  it('makes text larger or smaller with its box, between half and six times', () => {
+    const larger = scaleText(CANVAS, ['customer', 'domain'], 1)
+    const customer = CANVAS.nodes.find((n) => n.id === 'customer')!
+    expect(larger.nodes.find((n) => n.id === 'customer')).toMatchObject({
+      x: customer.x,
+      width: Math.round(customer.width * 1.2),
+      height: Math.round(customer.height * 1.2),
+      fontScale: 1.2
+    })
+    // Groups have no text to scale.
+    expect(larger.nodes[0]).toBe(CANVAS.nodes[0])
+    let small = CANVAS
+    for (let i = 0; i < 10; i++) small = scaleText(small, ['order'], -1)
+    expect(small.nodes.find((n) => n.id === 'order')).toMatchObject({ fontScale: 0.5 })
   })
 
   it('makes a group around boxes with room for its label', () => {

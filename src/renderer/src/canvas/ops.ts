@@ -238,6 +238,32 @@ export function duplicateItems(
   return copyItems(data, ids, dx, 0)
 }
 
+/** One step of Larger / Smaller text. */
+export const TEXT_STEP = 1.2
+
+/**
+ * Text boxes among `ids` with their text a step larger (1) or smaller (-1). The box grows or
+ * shrinks with it, so the text wraps as before: making a box bigger by hand stays the way to
+ * give the text more room.
+ */
+export function scaleText(data: CanvasData, ids: string[], step: 1 | -1): CanvasData {
+  return {
+    ...data,
+    nodes: data.nodes.map((n) => {
+      if (n.type !== 'text' || !ids.includes(n.id)) return n
+      const was = n.fontScale ?? 1
+      const next = Math.round(Math.min(6, Math.max(0.5, was * TEXT_STEP ** step)) * 100) / 100
+      const ratio = next / was
+      return {
+        ...n,
+        width: Math.round(n.width * ratio),
+        height: Math.round(n.height * ratio),
+        fontScale: next
+      }
+    })
+  }
+}
+
 /** Puts copied items in, placed so their top left lands at (x, y). */
 export function pasteItems(
   data: CanvasData,
