@@ -4,9 +4,9 @@ import { claudeChatUrl, vscodeUrl } from './vscode'
 describe('vscodeUrl', () => {
   it('keeps the drive letter and encodes every folder name', () => {
     expect(
-      vscodeUrl('C:\\Users\\mathi\\Notes\\Ontwerp van Algoritmen\\Randomized algoritmen')
+      vscodeUrl('C:\\Users\\student\\Notes\\Ontwerp van Algoritmen\\Randomized algoritmen')
     ).toBe(
-      'vscode://file/C:/Users/mathi/Notes/Ontwerp%20van%20Algoritmen/Randomized%20algoritmen/?windowId=_blank'
+      'vscode://file/C:/Users/student/Notes/Ontwerp%20van%20Algoritmen/Randomized%20algoritmen/?windowId=_blank'
     )
   })
 

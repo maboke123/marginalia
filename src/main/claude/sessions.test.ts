@@ -27,8 +27,8 @@ async function session(dir: string, withExtra = false): Promise<void> {
 
 describe('projectKey', () => {
   it('names the folder like the CLI does', () => {
-    expect(projectKey('C:\\Users\\mathi\\Notes\\Ontwerp van Algoritmen\\les_2')).toBe(
-      'C--Users-mathi-Notes-Ontwerp-van-Algoritmen-les-2'
+    expect(projectKey('C:\\Users\\student\\Notes\\Ontwerp van Algoritmen\\les_2')).toBe(
+      'C--Users-student-Notes-Ontwerp-van-Algoritmen-les-2'
     )
   })
 
