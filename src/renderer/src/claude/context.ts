@@ -243,23 +243,26 @@ export interface Packet {
   imageKey: string | null
   /** For ChatRequest.offer: the playbook part carried my changes to its diagrams. */
   offer: string | null
+  /** The playbook and rules this packet carried in full, if it did. */
+  playbook: string | null
 }
 
 /** A learning skill's playbook for the course of the chat, and my changes to its diagrams. */
 async function playbookContext(
   skill: string,
-  course: string
-): Promise<{ lines: string[]; offer: string | null }> {
+  course: string,
+  lastPlaybook: string | null
+): Promise<{ lines: string[]; offer: string | null; playbook: string | null }> {
   const book = await window.api.claude.playbookContext(skill, course).catch(() => null)
-  if (!book) return { lines: [], offer: null }
+  if (!book) return { lines: [], offer: null, playbook: null }
   if (book.course !== course) {
     const only = book.course
       ? `/${skill} learns only the course ${book.course}, so ${course || 'this folder'} has no ` +
         'playbook: use standard UML, and add no rules (they would be refused).'
       : `/${skill} learns no course yet: use standard UML, and add no rules.`
-    return { lines: [only], offer: null }
+    return { lines: [only], offer: null, playbook: null }
   }
-  const lines = [
+  const full = [
     `Your /${skill} playbook for the course ${course}: the summary of what the lecturer does, ` +
       'learned from the files of the course:',
     '<playbook>',
@@ -269,6 +272,15 @@ async function playbookContext(
     '<rules>',
     book.rules.trim() || '(none yet)',
     '</rules>'
+  ].join('\n')
+  // About 10,000 tokens: sent again only when it changed, else every /uml message of a chat
+  // would carry another copy that each later turn reads again.
+  const same = full === lastPlaybook
+  const lines = [
+    same
+      ? `Your /${skill} playbook for the course ${course} and my rules are as in my earlier ` +
+        `/${skill} message in this chat.`
+      : full
   ]
   if (book.notes.length) {
     lines.push(
@@ -286,7 +298,7 @@ async function playbookContext(
     for (const e of book.edits) lines.push(`- ${e.path}:`, ...e.changes.map((c) => `    - ${c}`))
     lines.push('Take these in as the steps say under Rules.')
   }
-  return { lines, offer: book.offer }
+  return { lines, offer: book.offer, playbook: same ? null : full }
 }
 
 /**
@@ -297,7 +309,8 @@ export async function buildPacket(
   chat: string,
   chips: Chip[],
   question: string,
-  lastImage: string | null
+  lastImage: string | null,
+  lastPlaybook: string | null = null
 ): Promise<Packet> {
   const { pdfView, pdfSelection, noteCursor } = useApp.getState()
   const ids = new Set(chips.map((c) => c.id))
@@ -367,9 +380,17 @@ export async function buildPacket(
 
   const skill = skillOf(question)
   if (skill) lines.push(`Skill /${skill.name}: follow these steps for my message.`, skill.steps)
-  const book = skill?.learns ? await playbookContext(skill.name, chat.split('/')[0]) : null
+  const book = skill?.learns
+    ? await playbookContext(skill.name, chat.split('/')[0], lastPlaybook)
+    : null
   if (book) lines.push(...book.lines)
 
   lines.push(CONTEXT_END, '', question)
-  return { text: lines.join('\n'), images, imageKey, offer: book?.offer ?? null }
+  return {
+    text: lines.join('\n'),
+    images,
+    imageKey,
+    offer: book?.offer ?? null,
+    playbook: book?.playbook ?? null
+  }
 }

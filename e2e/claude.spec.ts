@@ -497,6 +497,12 @@ test('/uml learns the course by itself, and from my rules and my changes to its 
   await ask('/uml and now')
   await expect(answers()).toHaveCount(3)
   expect((await readLog()).at(-1)!.text).not.toContain('Since you drew them')
+  // The chat has the playbook already: it goes along again only when it changed.
+  await ask('/uml one more')
+  await expect(answers()).toHaveCount(4)
+  const again = (await readLog()).at(-1)!.text
+  expect(again).not.toContain('<playbook>')
+  expect(again).toContain('and my rules are as in my earlier /uml message in this chat')
 
   await page.getByRole('button', { name: 'Claude settings' }).click()
   await expect(page.getByRole('textbox', { name: 'My rules' })).toHaveValue(

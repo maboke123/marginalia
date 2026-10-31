@@ -44,9 +44,18 @@ interface Chat {
   loaded: boolean
   /** The slide page whose image was sent last, so the same image is not sent again. */
   lastImage: string | null
+  /** The playbook Claude has in this session, and the one the running message carries. */
+  lastPlaybook: string | null
+  sentPlaybook: string | null
 }
 
-const EMPTY_CHAT: Chat = { messages: [], loaded: false, lastImage: null }
+const EMPTY_CHAT: Chat = {
+  messages: [],
+  loaded: false,
+  lastImage: null,
+  lastPlaybook: null,
+  sentPlaybook: null
+}
 
 interface ChatState {
   open: boolean
@@ -255,6 +264,11 @@ export const useChat = create<ChatState>((set, get) => {
     }
     // done
     for (const decide of [...decisions.values()]) decide(false)
+    update(chat, (c) => ({
+      ...c,
+      lastPlaybook: !event.error && c.sentPlaybook ? c.sentPlaybook : c.lastPlaybook,
+      sentPlaybook: null
+    }))
     updateAnswer(chat, (m) => ({ ...m, ...(event.error ? { error: event.error } : {}) }))
     set({ running: null, acceptingAll: null })
   }
@@ -337,9 +351,13 @@ export const useChat = create<ChatState>((set, get) => {
         images: []
       })
       try {
-        const lastImage = get().chats[chat]?.lastImage ?? null
-        const packet = await buildPacket(chat, chips, question.trim(), lastImage)
-        if (packet.imageKey) update(chat, (c) => ({ ...c, lastImage: packet.imageKey }))
+        const { lastImage = null, lastPlaybook = null } = get().chats[chat] ?? {}
+        const packet = await buildPacket(chat, chips, question.trim(), lastImage, lastPlaybook)
+        update(chat, (c) => ({
+          ...c,
+          lastImage: packet.imageKey ?? c.lastImage,
+          sentPlaybook: packet.playbook
+        }))
         await window.api.claude.send({
           chat,
           text: packet.text,
