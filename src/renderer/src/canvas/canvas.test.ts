@@ -20,6 +20,7 @@ import {
   connect,
   connectTarget,
   copyItems,
+  duplicateItems,
   drawOrder,
   groupAround,
   moveNodes,
@@ -135,6 +136,20 @@ describe('ops', () => {
     expect(pasted.selection.nodes).toHaveLength(2)
     const first = pasted.data.nodes.find((n) => n.id === pasted.selection.nodes[0])!
     expect(first).toMatchObject({ x: 1000, y: 1000 })
+  })
+
+  it('duplicates a group beside itself, so the copy holds only its own boxes', () => {
+    const copies = duplicateItems(CANVAS, ['domain'])
+    expect(copies.nodes).toHaveLength(3)
+    const group = copies.nodes.find((n) => n.type === 'group')!
+    // Past the invoice box on its right, which it would otherwise take in.
+    expect(group).toMatchObject({ x: 1150, y: -50 })
+    const data = { ...CANVAS, nodes: [...CANVAS.nodes, ...copies.nodes] }
+    expect([...movingSet(data, [group.id])].sort()).toEqual(copies.nodes.map((n) => n.id).sort())
+    // A box alone goes a little down and to the right.
+    expect(duplicateItems(CANVAS, ['customer']).nodes[0]).toMatchObject({
+      x: CANVAS.nodes.find((n) => n.id === 'customer')!.x + 30
+    })
   })
 
   it('makes a group around boxes with room for its label', () => {

@@ -53,6 +53,7 @@ import {
   connect,
   connectTarget,
   copyItems,
+  duplicateItems,
   drawOrder,
   groupAround,
   isEmpty,
@@ -1015,7 +1016,7 @@ function CanvasSurface({
   const duplicate = (): void => {
     const s = doc.getState()
     if (!s.selection.nodes.length) return
-    const copies = copyItems(s.data, s.selection.nodes, 30, 30)
+    const copies = duplicateItems(s.data, s.selection.nodes)
     s.change((d) => ({
       ...d,
       nodes: [...d.nodes, ...copies.nodes],

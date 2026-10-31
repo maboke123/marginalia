@@ -213,6 +213,31 @@ export function copyItems(
   return { nodes, edges }
 }
 
+/**
+ * Copies of the chosen items for Duplicate: a little down and right, but a group goes to the
+ * first free spot on its right. Overlapping, the copy's rectangle took in the boxes under it,
+ * and moving the copy then took them along.
+ */
+export function duplicateItems(
+  data: CanvasData,
+  ids: string[]
+): { nodes: CanvasNode[]; edges: CanvasEdge[] } {
+  const chosen = data.nodes.filter((n) => movingSet(data, ids).has(n.id))
+  const box = boundsOf(chosen)
+  if (!box || !chosen.some((n) => n.type === 'group')) return copyItems(data, ids, 30, 30)
+  const overlaps = (dx: number): boolean =>
+    data.nodes.some(
+      (n) =>
+        n.x < box.x + dx + box.width &&
+        n.x + n.width > box.x + dx &&
+        n.y < box.y + box.height &&
+        n.y + n.height > box.y
+    )
+  let dx = box.width + 60
+  while (overlaps(dx)) dx += 60
+  return copyItems(data, ids, dx, 0)
+}
+
 /** Puts copied items in, placed so their top left lands at (x, y). */
 export function pasteItems(
   data: CanvasData,
