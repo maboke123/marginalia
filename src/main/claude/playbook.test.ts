@@ -6,6 +6,7 @@ import { NOT_TRANSCRIBED } from '../transcribe/transcript'
 import { Vault } from '../vault/vault'
 import {
   afterDrawing,
+  applyEdits,
   courseSources,
   editsOf,
   editsTaken,
@@ -125,12 +126,46 @@ describe('PlaybookStore', () => {
     )
   })
 
+  it('changes notes and the playbook with edits, all of them or none', async () => {
+    await store.writeNotes(
+      'uml',
+      'DSS',
+      'DSS/les_1',
+      '## Use cases\n- Actors outside\n\n## Classes'
+    )
+    await store.writeNotes('uml', 'DSS', 'DSS/les_1', [
+      { find: '- Actors outside', replace: '- Actors outside the boundary\n- Include dashed' },
+      { find: '', replace: '## Exam\n- Two sequence diagrams' }
+    ])
+    expect(await store.readNotes('uml', 'DSS', 'DSS/les_1')).toBe(
+      '## Use cases\n- Actors outside the boundary\n- Include dashed\n\n## Classes\n\n' +
+        '## Exam\n- Two sequence diagrams\n'
+    )
+    await store.write('uml', 'DSS', 'text', '- Domain model first')
+    await expect(
+      store.write('uml', 'DSS', 'text', [
+        { find: 'Domain model', replace: 'Use cases' },
+        { find: 'GRASP', replace: 'Creator' }
+      ])
+    ).rejects.toThrow('Edit 2 ("GRASP") is not in the text')
+    expect(await store.read('uml', 'DSS', 'text')).toBe('- Domain model first\n')
+  })
+
   it('remembers which courses it learns', async () => {
     expect(await store.learning('uml')).toEqual([])
     await store.update('uml', 'DSS', (s) => ({ ...s, learning: true }))
     await store.update('uml', 'ML', (s) => ({ ...s, learned: { 'ML/a.pdf': '1-2|' } }))
     expect(await store.learning('uml')).toEqual(['DSS'])
     expect((await store.state('uml', 'ML')).learned).toEqual({ 'ML/a.pdf': '1-2|' })
+  })
+})
+
+describe('applyEdits', () => {
+  it('needs each find exactly once', () => {
+    expect(applyEdits('a b a', [{ find: 'a', replace: 'c' }])).toEqual({
+      error: 'Edit 1 ("a") is in the text more than once: make find longer.'
+    })
+    expect(applyEdits('a b a', [{ find: 'a b', replace: 'c' }])).toEqual({ text: 'c a' })
   })
 })
 
@@ -275,6 +310,7 @@ describe('course sources', () => {
 describe('my changes to the canvases Claude drew', () => {
   const state: CourseState = {
     learning: true,
+    auto: false,
     learned: {},
     drawn: {},
     edits: {},

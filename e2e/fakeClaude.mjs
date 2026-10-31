@@ -245,7 +245,7 @@ export async function learn(input) {
     playbook: `${before}- Domain model first (${lesson})`
   })
   await record('learn', { text: input.text, question: 'learn', read: read?.ok ?? null })
-  return `- Domain model first, from ${lesson.split('/').pop()}`
+  return { summary: `- Domain model first, from ${lesson.split('/').pop()}`, usage: null }
 }
 
 /** Earlier messages of a session, like the real agent reads them from Claude Code's transcripts. */

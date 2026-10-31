@@ -243,6 +243,8 @@ export interface MarginaliaApi {
     setLearning(skill: string, course: string, on: boolean): Promise<void>
     /** Takes in what is not learned yet now, also files that are still changing. */
     learnNow(skill: string, course: string): Promise<void>
+    /** Whether the course takes in new and changed files by itself (off at first). */
+    setAutoLearn(skill: string, course: string, on: boolean): Promise<void>
     stopLearning(): Promise<void>
     learningStatus(): Promise<LearnStatus | null>
     onLearning(listener: (status: LearnStatus | null) => void): () => void

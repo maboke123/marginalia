@@ -9,6 +9,11 @@ export type EffortChoice = (typeof EFFORTS)[number]
 export interface ClaudeSettings {
   model: ModelChoice
   effort: EffortChoice
+  /**
+   * The model of the runs that learn a course for /uml. They read whole lectures and write
+   * long notes, so Opus there took a whole five-hour usage window in an afternoon.
+   */
+  learnModel: ModelChoice
   /** Edits show as a preview with Accept / Reject before they are applied. */
   askBeforeEditing: boolean
   /**
@@ -31,6 +36,7 @@ export type ClaudeSettingsUpdate = Partial<Omit<ClaudeSettings, 'hasApiKey'>> & 
 export const DEFAULT_CLAUDE_SETTINGS: ClaudeSettings = {
   model: 'default',
   effort: 'default',
+  learnModel: 'sonnet',
   askBeforeEditing: true,
   openEditedFiles: false,
   webSearch: false,
@@ -116,6 +122,8 @@ export interface Playbook {
   text: string
   /** My rules: how I like it to work, and feedback from the lecturer or a TA. */
   rules: string
+  /** Takes in new and changed files by itself; off, only "Learn now" does. */
+  auto: boolean
   /** Files of the course it took in, of all it learns from. */
   learned: number
   total: number
@@ -133,6 +141,17 @@ export interface LearnLog {
   at: number
   lesson: string
   summary: string
+  /** What the run used, when Claude said. */
+  usage?: RunUsage
+}
+
+/** Tokens of one Claude run, and what it would cost through the API (USD). */
+export interface RunUsage {
+  /** Read fresh, and read again from the cache (cheaper) on later turns of the run. */
+  input: number
+  cached: number
+  output: number
+  cost: number
 }
 
 /** A learning run going on. */

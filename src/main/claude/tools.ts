@@ -17,6 +17,14 @@ const file = z.string().describe('Vault path with forward slashes, as in the con
 const pdf = file.describe('Vault path of a .pdf file')
 const note = file.describe('Vault path of a .md file')
 const page = z.number().int().min(1).describe('1-based page number')
+const textEdits = z
+  .array(
+    z.object({
+      find: z.string().describe('Text copied exactly from the saved text, found only once there'),
+      replace: z.string()
+    })
+  )
+  .describe('Applied in turn, all or none. An empty find adds replace at the end.')
 const annotationPage = z
   .number()
   .min(1)
@@ -331,20 +339,26 @@ export function appToolServer(
     ),
     sdk.tool(
       'update_playbook',
-      'Replaces what the /uml playbook of the course says the lecturer does with this new ' +
-        'version, merged with what you learned now. My rules are kept apart (add_rule).',
+      'Changes what the /uml playbook of the course says the lecturer does: with edits, only ' +
+        'the lines that change (cheap; use this when it has text), or with playbook, a whole ' +
+        'new version. My rules are kept apart (add_rule).',
       {
         skill: z.enum(['uml']),
         course: z.string().optional().describe('Name of the top folder, if not the current one'),
-        playbook: z.string().describe('The whole playbook, Markdown')
+        playbook: z.string().optional().describe('The whole playbook, Markdown'),
+        edits: textEdits.optional()
       },
       run('update_playbook')
     ),
     sdk.tool(
       'save_lesson_notes',
-      'Saves the detailed notes of the lesson this learning run is about, replacing its earlier ' +
-        'notes: everything it teaches about modelling, with every nuance, example and source.',
-      { notes: z.string().describe('The whole notes of this lesson, Markdown') },
+      'Saves the detailed notes of the lesson this learning run is about: everything it ' +
+        'teaches about modelling, with every nuance, example and source. With edits, only the ' +
+        'lines that change (use this when the lesson has notes), or with notes, all of them.',
+      {
+        notes: z.string().optional().describe('The whole notes of this lesson, Markdown'),
+        edits: textEdits.optional()
+      },
       run('save_lesson_notes')
     ),
     sdk.tool(

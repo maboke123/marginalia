@@ -27,6 +27,8 @@ export type Part = 'text' | 'rules'
 /** What the store keeps per course besides the two texts. */
 export interface CourseState {
   learning: boolean
+  /** Takes in new and changed files by itself; off, only "Learn now" does. */
+  auto: boolean
   /** Vault path -> stamp of the version taken in. */
   learned: Record<string, string>
   /** Canvas vault path -> that canvas as Claude left it, or as it was when last taken in. */
@@ -41,6 +43,7 @@ export interface CourseState {
 
 const EMPTY_STATE: CourseState = {
   learning: false,
+  auto: false,
   learned: {},
   drawn: {},
   edits: {},
@@ -55,6 +58,7 @@ function stateFrom(raw: unknown): CourseState {
     v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, T>) : {}
   return {
     learning: r.learning === true,
+    auto: r.auto === true,
     learned: record(r.learned),
     drawn: record(r.drawn),
     edits: record(r.edits),
@@ -141,6 +145,55 @@ export function withRule(
   return { rules: lines.length ? lines.join('\n') + '\n' : '', found: !target || at !== -1 }
 }
 
+export interface TextEdit {
+  find: string
+  replace: string
+}
+
+/**
+ * The text with the edits applied in turn, or why not (then none is applied): each `find` must
+ * appear exactly once; an empty one adds `replace` at the end. A run that adds one transcript to
+ * a lesson changes a few lines this way instead of writing all its notes again.
+ */
+export function applyEdits(text: string, edits: TextEdit[]): { text: string } | { error: string } {
+  let out = text
+  for (const [i, { find, replace }] of edits.entries()) {
+    if (!find) {
+      out = `${out.trimEnd()}\n\n${replace.trim()}\n`
+      continue
+    }
+    const at = out.indexOf(find)
+    const which = `Edit ${i + 1} ("${find.length > 60 ? `${find.slice(0, 60)}...` : find}")`
+    if (at === -1) return { error: `${which} is not in the text: copy find exactly.` }
+    if (out.includes(find, at + 1)) {
+      return { error: `${which} is in the text more than once: make find longer.` }
+    }
+    out = out.slice(0, at) + replace + out.slice(at + find.length)
+  }
+  return { text: out }
+}
+
+/** A whole new text, or edits to the saved one. */
+export type Change = string | TextEdit[]
+
+/** A tool's whole text or its edits, whichever it gave; null for neither. */
+export function changeFrom(whole: unknown, edits: unknown): Change | null {
+  if (Array.isArray(edits) && edits.length) {
+    return edits.map((e: Record<string, unknown>) => ({
+      find: String(e?.find ?? ''),
+      replace: String(e?.replace ?? '')
+    }))
+  }
+  return typeof whole === 'string' ? whole : null
+}
+
+async function changed(file: string, change: Change): Promise<string> {
+  if (typeof change === 'string') return change
+  const next = applyEdits(await readText(file), change)
+  if ('error' in next) throw new VaultError(`${next.error} Nothing was saved.`)
+  return next.text
+}
+
 /**
  * What a skill learned per course, kept outside the vault like the memory, in
  * `<skill>/courses/`: `<course>.md` (what the lecturer does, in short), `<course>.rules.md`
@@ -174,13 +227,15 @@ export class PlaybookStore {
     return readText(this.file(skill, course, part === 'text' ? '.md' : '.rules.md'))
   }
 
-  async write(skill: string, course: string, part: Part, text: string): Promise<void> {
+  /** Saves a whole new text, or changes the saved one with edits. */
+  async write(skill: string, course: string, part: Part, change: Change): Promise<void> {
     const file = this.file(skill, course, part === 'text' ? '.md' : '.rules.md')
-    await this.serial(skill, course, () =>
-      part === 'text'
+    await this.serial(skill, course, async () => {
+      const text = await changed(file, change)
+      await (part === 'text'
         ? writeText(file, text, MAX_PLAYBOOK, 'The playbook')
-        : writeText(file, text, MAX_RULES, 'My rules')
-    )
+        : writeText(file, text, MAX_RULES, 'My rules'))
+    })
   }
 
   private notesDir(skill: string, course: string): string {
@@ -206,8 +261,8 @@ export class PlaybookStore {
     )
   }
 
-  /** Replaces the detailed notes of a lesson; refused when longer than MAX_NOTES. */
-  async writeNotes(skill: string, course: string, lesson: string, text: string): Promise<void> {
+  /** Replaces or edits the detailed notes of a lesson; refused when longer than MAX_NOTES. */
+  async writeNotes(skill: string, course: string, lesson: string, change: Change): Promise<void> {
     const dir = this.notesDir(skill, course)
     const last = lesson.split('/').pop() ?? lesson
     await this.serial(skill, course, async () => {
@@ -218,12 +273,13 @@ export class PlaybookStore {
         const safe = last.replace(/[<>:"/\\|?*]/g, '-').trim() || 'lesson'
         name = await uniqueName(dir, safe, '.md')
       }
-      await writeText(path.join(dir, name), text, MAX_NOTES, `The notes of ${last}`)
+      const file = path.join(dir, name)
+      await writeText(file, await changed(file, change), MAX_NOTES, `The notes of ${last}`)
       if (state.notes[lesson] !== name) {
-        const file = this.file(skill, course, '.json')
+        const json = this.file(skill, course, '.json')
         const next = { ...state, notes: { ...state.notes, [lesson]: name } }
-        await fs.mkdir(path.dirname(file), { recursive: true })
-        await writeFileAtomic(file, JSON.stringify(next, null, 2) + '\n')
+        await fs.mkdir(path.dirname(json), { recursive: true })
+        await writeFileAtomic(json, JSON.stringify(next, null, 2) + '\n')
       }
     })
   }
@@ -354,10 +410,12 @@ export interface Source {
   settled: number
 }
 
-/** New slides and transcripts arrive whole: they are taken in soon. */
-export const ARRIVE_MS = 10 * 60_000
-/** Notes, canvases and annotations I may still be working on: an hour after the last change. */
-export const SETTLE_MS = 60 * 60_000
+/**
+ * A file is learned by itself this long after its last change. A lecture day brings a
+ * recording every hour or so, and a run of a lesson costs about the same however little is new,
+ * so a lesson waits until all of its new files settled (`Learner.pending`).
+ */
+export const SETTLE_MS = 2 * 60 * 60_000
 
 const TRANSCRIPT = /(^|\/)Transcript [^/]*\.md$/
 
@@ -401,7 +459,7 @@ export async function courseSources(
       out[node.path] = {
         kind: 'pdf',
         stamp: `${stampOf(stat)}|${sidecar ? stampOf(sidecar) : ''}`,
-        settled: Math.max(stat.mtimeMs + ARRIVE_MS, sidecar ? sidecar.mtimeMs + SETTLE_MS : 0)
+        settled: Math.max(stat.mtimeMs, sidecar?.mtimeMs ?? 0) + SETTLE_MS
       }
     } else {
       if (node.kind === 'markdown') {
@@ -417,11 +475,7 @@ export async function courseSources(
       }
       const kind =
         node.kind === 'canvas' ? 'canvas' : TRANSCRIPT.test(node.path) ? 'transcript' : 'note'
-      out[node.path] = {
-        kind,
-        stamp: stampOf(stat),
-        settled: stat.mtimeMs + (kind === 'transcript' ? ARRIVE_MS : SETTLE_MS)
-      }
+      out[node.path] = { kind, stamp: stampOf(stat), settled: stat.mtimeMs + SETTLE_MS }
     }
   }
   return out
@@ -453,11 +507,14 @@ export function notLearned(
   return out
 }
 
+/** The lesson of a file: its folder. */
+export const lessonOf = (file: string): string => file.split('/').slice(0, -1).join('/')
+
 /** Pending files grouped per lesson (their folder), in the order of the course. */
 export function lessonsOf(pending: Pending[]): { folder: string; files: Pending[] }[] {
   const out: { folder: string; files: Pending[] }[] = []
   for (const file of pending) {
-    const folder = file.path.split('/').slice(0, -1).join('/')
+    const folder = lessonOf(file.path)
     const lesson = out.find((l) => l.folder === folder)
     if (lesson) lesson.files.push(file)
     else out.push({ folder, files: [file] })

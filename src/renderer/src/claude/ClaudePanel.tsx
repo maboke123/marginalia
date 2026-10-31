@@ -7,7 +7,8 @@ import {
   type LearnStatus,
   type ModelChoice,
   type Playbook,
-  type PlaybookFile
+  type PlaybookFile,
+  type RunUsage
 } from '../../../shared/claude'
 import type { VaultNode } from '../../../shared/types'
 import { ContextMenu, type MenuItem } from '../components/ContextMenu'
@@ -872,6 +873,16 @@ function PlaybookFiles({ book }: { book: Playbook }): React.JSX.Element {
   )
 }
 
+const thousands = (n: number): string => `${Math.round(n / 1000).toLocaleString('en-GB')}k`
+
+function usageLine(u: RunUsage): string {
+  return (
+    `Used ${thousands(u.input + u.cached)} tokens in (${thousands(u.cached)} of them from the ` +
+    `cache, which counts less) and ${thousands(u.output)} out, about ${u.cost.toFixed(2)} at ` +
+    'API prices.'
+  )
+}
+
 /** Picks the one course /uml learns, when none is learned yet. */
 function PlaybookStart({ onStarted }: { onStarted(): void }): React.JSX.Element {
   const nodes = useApp((s) => s.nodes)
@@ -884,7 +895,8 @@ function PlaybookStart({ onStarted }: { onStarted(): void }): React.JSX.Element 
       <div className="claude-instructions playbook">
         <p>
           /uml learns one course: it reads every slide deck, transcript, note and canvas of it, one
-          lesson per Claude run, and then keeps up with new and changed files by itself.
+          lesson per Claude run. That first time takes a lot of usage; afterwards it takes in new
+          files when you ask, or by itself if you turn that on.
         </p>
         <div className="playbook-status">
           <select
@@ -922,6 +934,8 @@ function PlaybookStart({ onStarted }: { onStarted(): void }): React.JSX.Element 
 function PlaybookField(): React.JSX.Element {
   const [book, setBook] = useState<Playbook | null | undefined>(undefined)
   const [status, setStatus] = useState<LearnStatus | null>(null)
+  const settings = useChat((s) => s.settings)
+  const save = useChat((s) => s.saveSettings)
   const [version, setVersion] = useState(0)
 
   useEffect(() => {
@@ -951,9 +965,8 @@ function PlaybookField(): React.JSX.Element {
       .catch((err: Error) => useApp.getState().showError(err.message))
   const last = book.log[0]
   const waiting =
-    `${pending} ${pending === 1 ? 'file is' : 'files are'} not taken in yet. New slides and ` +
-    'transcripts follow about 10 minutes after they arrive, notes, canvases and annotations an ' +
-    'hour after your last change.'
+    `${pending} ${pending === 1 ? 'file is' : 'files are'} not taken in yet.` +
+    (book.auto ? ' A lesson follows 2 hours after the last change to its files.' : '')
   return (
     <div className="field">
       <span>/uml playbook</span>
@@ -986,12 +999,40 @@ function PlaybookField(): React.JSX.Element {
           )}
         </div>
         {book.error && !run && <p className="playbook-error">Stopped: {book.error}</p>}
+        <label className="check">
+          <input
+            type="checkbox"
+            checked={book.auto}
+            onChange={(e) => {
+              const on = e.target.checked
+              setBook({ ...book, auto: on })
+              act(() => window.api.claude.setAutoLearn('uml', course, on))
+            }}
+          />
+          Take in new and changed files by itself
+        </label>
+        {settings && (
+          <label className="playbook-model">
+            Model for learning
+            <select
+              value={settings.learnModel}
+              onChange={(e) => void save({ learnModel: e.target.value as ModelChoice })}
+            >
+              {MODELS.map((m) => (
+                <option key={m} value={m}>
+                  {MODEL_LABELS[m]}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
         {last && (
           <details className="playbook-last">
             <summary>
               What the last run changed ({last.lesson.split('/').pop() || course}, {when(last.at)})
             </summary>
             <MarkdownBox text={last.summary || 'Nothing new about modelling.'} />
+            {last.usage && <p className="muted">{usageLine(last.usage)}</p>}
           </details>
         )}
         <PlaybookFiles book={book} />

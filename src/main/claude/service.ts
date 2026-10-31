@@ -36,6 +36,7 @@ import { courseOf, courseOfFile, type MemoryStore } from './memory'
 import { Learner } from './learner'
 import {
   afterDrawing,
+  changeFrom,
   courseSources,
   editsOf,
   editsTaken,
@@ -178,6 +179,7 @@ export function registerClaude(
       course,
       text,
       rules,
+      auto: state.auto,
       learned: total - pending.size,
       total,
       files,
@@ -257,8 +259,10 @@ export function registerClaude(
     if (!course) return { id, ok: false, text: 'Name the course: no course is open' }
     const refused = await notLearnedHere(skill, course)
     if (refused) return { id, ok: false, text: refused }
+    const change = changeFrom(args.playbook, args.edits)
+    if (change === null) return { id, ok: false, text: 'Give edits or the whole playbook' }
     try {
-      await playbooks.write(skill, course, 'text', String(args.playbook ?? ''))
+      await playbooks.write(skill, course, 'text', change)
       return { id, ok: true, text: `Saved the /${skill} playbook for ${course}.` }
     } catch (err) {
       return { id, ok: false, text: (err as Error).message }
@@ -300,8 +304,10 @@ export function registerClaude(
     if (!lesson) return { id, ok: false, text: 'Only a learning run saves lesson notes' }
     const refused = await notLearnedHere('uml', course)
     if (refused) return { id, ok: false, text: refused }
+    const change = changeFrom(args.notes, args.edits)
+    if (change === null) return { id, ok: false, text: 'Give edits or the whole notes' }
     try {
-      await playbooks.writeNotes('uml', course, lesson, String(args.notes ?? ''))
+      await playbooks.writeNotes('uml', course, lesson, change)
       return { id, ok: true, text: `Saved the notes of ${lesson.split('/').pop()}.` }
     } catch (err) {
       return { id, ok: false, text: (err as Error).message }
@@ -622,6 +628,11 @@ export function registerClaude(
     if (await notLearnedHere(skill, course))
       throw new VaultError(`/${skill} does not learn ${course}`)
     startLearning(skill, course)
+  })
+  handle('claude:setAutoLearn', async (skill: string, course: string, on: boolean) => {
+    if (await notLearnedHere(skill, course))
+      throw new VaultError(`/${skill} does not learn ${course}`)
+    await playbooks.update(skill, course, (st) => ({ ...st, auto: on }))
   })
   handle('claude:stopLearning', () => learner.stop())
   handle('claude:learningStatus', () => learner.status())

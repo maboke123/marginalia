@@ -1,5 +1,5 @@
 import { promises as fs } from 'fs'
-import type { LearnStatus } from '../../shared/claude'
+import type { LearnStatus, RunUsage } from '../../shared/claude'
 import { VaultError } from '../vault/names'
 import type { Vault } from '../vault/vault'
 import type { Learn, LearnInput } from './agent'
@@ -8,6 +8,7 @@ import {
   editsOf,
   editsTaken,
   LEARNING_SKILLS,
+  lessonOf,
   lessonsOf,
   notLearned,
   type Pending,
@@ -111,21 +112,23 @@ export class Learner {
     this.current?.controller.abort()
   }
 
-  /** What is not learned yet; with `now`, only files that settled by then (Source.settled). */
+  /**
+   * What is not learned yet; with `now`, only lessons whose new files all settled by then
+   * (Source.settled), so the recordings of one lecture day go in one run.
+   */
   async pending(vault: Vault, skill: string, course: string, now = Infinity): Promise<Pending[]> {
     const [sources, state] = await Promise.all([
       courseSources(vault, course),
       this.deps.playbooks.state(skill, course)
     ])
-    return notLearned(sources, state.learned).filter(
-      (p) => now === Infinity || sources[p.path].settled <= now
+    const all = notLearned(sources, state.learned)
+    const waiting = new Set(
+      all.filter((p) => sources[p.path].settled > now).map((p) => lessonOf(p.path))
     )
+    return all.filter((p) => !waiting.has(lessonOf(p.path)))
   }
 
-  /**
-   * Learns what is pending; `settled` leaves out files that changed just now (slides and
-   * transcripts 10 minutes, notes, canvases and annotations an hour).
-   */
+  /** Learns what is pending; `settled` leaves out lessons with files that changed lately. */
   async run(skill: string, course: string, settled: boolean): Promise<void> {
     if (this.current) {
       if (this.current.status.course === course && this.current.status.skill === skill) return
@@ -190,7 +193,7 @@ export class Learner {
       // A canvas Claude drew and I left alone teaches nothing.
       if (!edits || edits.length) files.push({ ...file, edits })
     }
-    let summary = ''
+    let ran: { summary: string; usage: RunUsage | null } | null = null
     if (files.length) {
       const [playbook, rules, notes] = await Promise.all([
         playbooks.read(skill, course, 'text'),
@@ -201,7 +204,7 @@ export class Learner {
         .filter((n) => n.lesson !== lesson.folder)
         .map((n) => n.lesson.split('/').pop() ?? n.lesson)
       const mine = notes.find((n) => n.lesson === lesson.folder)?.text ?? ''
-      summary = await learn({
+      ran = await learn({
         cwd: vault.root,
         text: learnMessage({
           course,
@@ -224,21 +227,29 @@ export class Learner {
       for (const file of lesson.files) {
         if (sources[file.path]) learned[file.path] = sources[file.path].stamp
       }
-      const log = files.length
-        ? [{ at: Date.now(), lesson: lesson.folder, summary: summary.trim().slice(0, 3000) }]
+      const log = ran
+        ? [
+            {
+              at: Date.now(),
+              lesson: lesson.folder,
+              summary: ran.summary.trim().slice(0, 3000),
+              ...(ran.usage && { usage: ran.usage })
+            }
+          ]
         : []
       return { ...next, learned, log: [...log, ...next.log] }
     })
   }
 
   /**
-   * For each course being learned: what has settled since the last time. A course whose last
-   * run failed waits an hour, so a reached usage limit is not asked again every few minutes.
+   * For each course that learns by itself: what has settled since the last time. A course whose
+   * last run failed waits an hour, so a reached usage limit is not asked again every few minutes.
    */
   async tick(): Promise<void> {
     if (this.current || !this.deps.vault()) return
     for (const skill of LEARNING_SKILLS) {
       for (const course of await this.deps.playbooks.learning(skill)) {
+        if (!(await this.deps.playbooks.state(skill, course)).auto) continue
         const failed = this.failed.get(`${skill}/${course}`)
         if (failed !== undefined && this.now() - failed < RETRY_MS) continue
         await this.run(skill, course, true).catch((err) => console.error('[learn]', err))

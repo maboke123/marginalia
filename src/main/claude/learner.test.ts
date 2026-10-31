@@ -49,7 +49,10 @@ function learner(now?: () => number): Learner {
           'text',
           `${await store.read('uml', 'DSS', 'text')}- ${lesson}\n`
         )
-        return `- Learned ${lesson}`
+        return {
+          summary: `- Learned ${lesson}`,
+          usage: { input: 9000, cached: 40_000, output: 1500, cost: 0.12 }
+        }
       },
       tools: () => async () => ({ id: '', ok: true, text: '' }),
       input: async () => ({
@@ -91,6 +94,7 @@ describe('Learner', () => {
     const state = await store.state('uml', 'DSS')
     expect(Object.keys(state.learned)).toHaveLength(3)
     expect(state.log.map((l) => l.summary)).toEqual(['- Learned DSS/les_2', '- Learned DSS/les_1'])
+    expect(state.log[0].usage).toEqual({ input: 9000, cached: 40_000, output: 1500, cost: 0.12 })
 
     // Nothing new: no run at all.
     runs = []
@@ -111,18 +115,33 @@ describe('Learner', () => {
     expect(runs[0].text).toContain('Other lessons with notes (read_lesson_notes): les_1')
   })
 
-  it('takes in new slides and transcripts soon, notes only an hour after my last change', async () => {
+  it('waits until a whole lesson settled, so a day of recordings is one run', async () => {
     await learner().run('uml', 'DSS', false)
     runs = []
-    const quarter = 15 * 60_000
-    await write('DSS/les_3/Transcript 7 Patterns.md', '**00:10** The creator pattern.', quarter)
-    await write('DSS/les_3/7 Patterns.pdf', 'pdf', quarter)
-    await write('DSS/les_3/Summary.md', 'Creator: who makes it', quarter)
+    await write('DSS/les_3/7 Patterns.pdf', 'pdf', 3 * SETTLE_MS)
+    await write('DSS/les_3/Transcript 10-30.md', '**00:10** The creator pattern.', SETTLE_MS * 1.5)
+    await write('DSS/les_3/Transcript 11-30.md', '**00:10** The expert pattern.', SETTLE_MS / 2)
+    await write('DSS/les_4/8 GRASP.pdf', 'pdf', 3 * SETTLE_MS)
+    await learner().run('uml', 'DSS', true)
+    expect(runs.map((r) => r.text.split('\n')[0])).toEqual(['Course: DSS. Lesson: DSS/les_4.'])
+
+    runs = []
+    await write('DSS/les_3/Transcript 11-30.md', '**00:10** The expert pattern.', SETTLE_MS * 1.5)
     await learner().run('uml', 'DSS', true)
     expect(runs).toHaveLength(1)
     expect(runs[0].text).toContain('- DSS/les_3/7 Patterns.pdf (slides or other PDF, new)')
-    expect(runs[0].text).toContain('- DSS/les_3/Transcript 7 Patterns.md (transcript, new)')
-    expect(runs[0].text).not.toContain('Summary.md')
+    expect(runs[0].text).toContain('- DSS/les_3/Transcript 10-30.md (transcript, new)')
+    expect(runs[0].text).toContain('- DSS/les_3/Transcript 11-30.md (transcript, new)')
+  })
+
+  it('learns by itself only when that is turned on', async () => {
+    const one = learner()
+    await store.update('uml', 'DSS', (s) => ({ ...s, learning: true }))
+    await one.tick()
+    expect(runs).toEqual([])
+    await store.update('uml', 'DSS', (s) => ({ ...s, auto: true }))
+    await one.tick()
+    expect(runs).toHaveLength(2)
   })
 
   it('shows my changes to a diagram it drew, and skips one I left alone', async () => {
@@ -165,7 +184,7 @@ describe('Learner', () => {
   it('waits an hour before trying again by itself after a run failed', async () => {
     let clock = Date.now()
     const one = learner(() => clock)
-    await store.update('uml', 'DSS', (s) => ({ ...s, learning: true }))
+    await store.update('uml', 'DSS', (s) => ({ ...s, learning: true, auto: true }))
     fail = 'You have reached your usage limit'
     await one.tick()
     expect(runs).toHaveLength(1)

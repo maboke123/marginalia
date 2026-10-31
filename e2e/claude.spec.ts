@@ -453,6 +453,16 @@ test('/uml learns the course by itself, and from my rules and my changes to its 
   expect(runs[0].text).toContain(`- ${section}/Transcript 2026-10-06 10-30.md (transcript, new)`)
   expect(runs[0].text).toContain(`- ${section}/Shop.canvas (my diagram, new)`)
   expect((runs[0] as LogEntry & { read: boolean }).read).toBe(true)
+  // After the first time it learns only when I ask, unless I turn that on.
+  const auto = page.getByRole('checkbox', { name: 'Take in new and changed files by itself' })
+  await expect(auto).not.toBeChecked()
+  await auto.check()
+  await expect
+    .poll(
+      async () =>
+        JSON.parse(await fs.readFile(path.join(skills, 'Machine Learning.json'), 'utf8')).auto
+    )
+    .toBe(true)
   await page.getByRole('button', { name: 'Done' }).click()
 
   // A /uml message has the playbook and my rules along; a rule I give is kept.

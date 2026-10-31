@@ -2500,6 +2500,16 @@ button.claude-proposal-label:hover {
   flex: none;
 }
 
+.playbook-model {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.playbook-model select {
+  width: auto;
+}
+
 .playbook-part {
   display: flex;
   flex-direction: column;

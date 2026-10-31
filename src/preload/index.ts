@@ -146,6 +146,7 @@ const api: MarginaliaApi = {
       invoke('claude:setPlaybook', skill, course, part, text),
     setLearning: (skill, course, on) => invoke('claude:setLearning', skill, course, on),
     learnNow: (skill, course) => invoke('claude:learnNow', skill, course),
+    setAutoLearn: (skill, course, on) => invoke('claude:setAutoLearn', skill, course, on),
     stopLearning: () => invoke('claude:stopLearning'),
     learningStatus: () => invoke('claude:learningStatus'),
     onLearning: (listener) => {

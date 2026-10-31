@@ -1,5 +1,5 @@
 import type { Options, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
-import type { ChatEvent, ChatImage } from '../../shared/claude'
+import type { ChatEvent, ChatImage, RunUsage } from '../../shared/claude'
 import type { StoredClaudeSettings } from '../config'
 import { claudeEnvironment, claudeExecutable } from './cli'
 import { moveSession, projectsDir } from './sessions'
@@ -200,7 +200,10 @@ export interface LearnInput {
 }
 
 /** One learning run, apart from every chat: a lesson in, a few lines on what it learned out. */
-export type Learn = (input: LearnInput) => Promise<string>
+export type Learn = (input: LearnInput) => Promise<{ summary: string; usage: RunUsage | null }>
+
+// Taking notes from a lecture needs no long thinking; high effort mostly made it cost more.
+const LEARN_EFFORT = 'medium'
 
 export const claudeLearn: Learn = async (input) => {
   const sdk = await import('@anthropic-ai/claude-agent-sdk')
@@ -211,8 +214,8 @@ export const claudeLearn: Learn = async (input) => {
     prompt: oneMessage(input.text, []),
     options: {
       cwd: input.cwd,
-      model: input.settings.model === 'default' ? undefined : input.settings.model,
-      effort: input.settings.effort === 'default' ? undefined : input.settings.effort,
+      model: input.settings.learnModel === 'default' ? undefined : input.settings.learnModel,
+      effort: LEARN_EFFORT,
       systemPrompt: withMemory(
         withInstructions(LEARN_PROMPT, input.settings.instructions),
         input.memory,
@@ -240,7 +243,16 @@ export const claudeLearn: Learn = async (input) => {
       if (message.subtype !== 'success')
         throw new Error(message.errors.join('\n') || 'Claude stopped early')
       if (message.is_error) throw new Error(message.result)
-      return message.result
+      const u = message.usage
+      return {
+        summary: message.result,
+        usage: {
+          input: u.input_tokens + u.cache_creation_input_tokens,
+          cached: u.cache_read_input_tokens,
+          output: u.output_tokens,
+          cost: message.total_cost_usd
+        }
+      }
     }
     throw new Error('No answer')
   } finally {

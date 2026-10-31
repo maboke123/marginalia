@@ -24,6 +24,7 @@ export function claudeSettings(raw: unknown): StoredClaudeSettings {
   return {
     model: pick(MODELS, r.model, d.model),
     effort: pick(EFFORTS, r.effort, d.effort),
+    learnModel: pick(MODELS, r.learnModel, d.learnModel),
     askBeforeEditing: typeof r.askBeforeEditing === 'boolean' ? r.askBeforeEditing : true,
     openEditedFiles: r.openEditedFiles === true,
     webSearch: r.webSearch === true,
