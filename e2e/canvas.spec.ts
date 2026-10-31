@@ -802,6 +802,50 @@ test('a moved box snaps to the same space as its neighbours and shows both space
     .toBe(280)
 })
 
+test('two subclasses snap evenly under their superclass; text grows with its box', async () => {
+  const box = (id: string, x: number, y: number): object => ({
+    id,
+    type: 'text',
+    shape: 'class',
+    text: id,
+    x,
+    y,
+    width: 100,
+    height: 50
+  })
+  await fs.writeFile(
+    file('Animals.canvas'),
+    JSON.stringify({
+      nodes: [box('Animal', 200, -200), box('Dog', 0, 0), box('Cat', 420, 0)],
+      edges: []
+    })
+  )
+  await row('Design of Software Systems').click()
+  await row('les_1').click()
+  await row('Animals').click()
+  const cat = page.locator('[data-node="Cat"]')
+  await expect(cat).toBeVisible()
+  const zoom =
+    Number((await page.locator('.canvas-zoom-value').textContent())!.replace('%', '')) / 100
+  // Dog's middle is 200 left of Animal's: Cat's belongs 200 right of it, at x 400.
+  const at = (await cat.boundingBox())!
+  await page.mouse.move(at.x + 20, at.y + 20)
+  await page.mouse.down()
+  await page.mouse.move(at.x + 20 - 23 * zoom, at.y + 20, { steps: 8 })
+  // Animal's middle line, and Dog's top that Cat's lines up with.
+  await expect(page.locator('.canvas-guide')).toHaveCount(2)
+  await page.mouse.up()
+  await expect
+    .poll(async () => (await read('Animals.canvas')).nodes.find((n) => n.id === 'Cat')!.x)
+    .toBe(400)
+
+  // Cat is selected after the move.
+  await page.getByRole('button', { name: 'Larger text' }).click()
+  await expect
+    .poll(async () => (await read('Animals.canvas')).nodes.find((n) => n.id === 'Cat'))
+    .toMatchObject({ width: 120, height: 60, fontScale: 1.2 })
+})
+
 test('an arrow dragged near a box snaps to its side; dots show without selecting', async () => {
   await openShop()
   const line = (await page.locator('[data-node="line"]').boundingBox())!

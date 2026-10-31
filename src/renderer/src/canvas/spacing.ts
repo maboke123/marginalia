@@ -91,3 +91,34 @@ export function snapSpacing(
   }
   return best
 }
+
+/**
+ * Snaps a moved box along one axis so it mirrors a box beside it around the middle of another
+ * box: two subclasses spread evenly under their superclass. `guide` is that middle line.
+ */
+export function snapMirror(
+  box: Rect,
+  others: Rect[],
+  axis: Axis,
+  threshold: number
+): { delta: number; guide: number } | null {
+  const other = across[axis]
+  const middle = (r: Rect): number => start(r, axis) + size(r, axis) / 2
+  const beside = (r: Rect): boolean =>
+    start(r, other) < end(box, other) && end(r, other) > start(box, other)
+  const row = others.filter(beside)
+  const centres = others.filter((r) => !beside(r))
+  let best: { delta: number; guide: number } | null = null
+  for (const sibling of row) {
+    for (const centre of centres) {
+      const guide = middle(centre)
+      // Only around a middle between the two, not off to one side.
+      if ((middle(sibling) - guide) * (middle(box) - guide) >= 0) continue
+      const delta = 2 * guide - middle(sibling) - middle(box)
+      if (Math.abs(delta) <= threshold && (!best || Math.abs(delta) < Math.abs(best.delta))) {
+        best = { delta, guide }
+      }
+    }
+  }
+  return best
+}

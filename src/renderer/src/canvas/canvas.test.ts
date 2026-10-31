@@ -4,7 +4,7 @@ import { fitCamera, toScreen, toWorld, zoomAt, zoomStep } from './camera'
 import { createCanvasDoc } from './doc'
 import { clickScale, makeScaled, templateByName } from './shapes'
 import { sourceRange, wordAround } from './caret'
-import { snapSpacing } from './spacing'
+import { snapMirror, snapSpacing } from './spacing'
 import { inheritedOperations, inOperations, insertOperations, operationName } from './overrides'
 import {
   edgeGeometries,
@@ -531,6 +531,18 @@ describe('equal spacing', () => {
     expect(snapSpacing(box(0, 162), column, 'y', 6)?.delta).toBe(-2)
     expect(snapSpacing(box(283, 300), [box(0), box(140)], 'x', 6)).toBeNull()
     expect(snapSpacing(box(300), [box(0), box(140)], 'x', 6)).toBeNull()
+  })
+
+  it('mirrors a box beside it around the middle of the box above', () => {
+    // Superclass centred at 250; one subclass at 0..100 (middle 50): the other's middle
+    // belongs at 450, so a box at 397..497 moves 3 to the right.
+    const superclass = box(200, -200)
+    expect(snapMirror(box(397, 0), [superclass, box(0, 0)], 'x', 6)).toEqual({
+      delta: 3,
+      guide: 250
+    })
+    // Not when both are on the same side of it.
+    expect(snapMirror(box(97, 0), [box(300, -200), box(0, 0)], 'x', 6)).toBeNull()
   })
 })
 

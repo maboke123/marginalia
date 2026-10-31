@@ -77,7 +77,7 @@ import {
 import { clickScale, makeScaled, TEMPLATES, type Template } from './shapes'
 import { ShapeMenu } from './ShapeMenu'
 import { inheritedOperations } from './overrides'
-import { snapSpacing, type Gap } from './spacing'
+import { snapMirror, snapSpacing, type Gap } from './spacing'
 import { RelationPicker } from './RelationPicker'
 import { relationMeaning, relationSentence } from './relations'
 import { sourceRange } from './caret'
@@ -657,7 +657,11 @@ function CanvasSurface({
   const snapOthers = (start: CanvasData, ids: Set<string>, groups: boolean): CanvasNode[] =>
     start.nodes.filter((n) => !ids.has(n.id) && (groups || n.type !== 'group') && overlaps(near, n))
 
-  // Snapping a moved set of boxes: its edges and middle to those of the other boxes on screen.
+  /**
+   * Snapping a moved set of boxes to the other boxes on screen: edges to edges and middle to
+   * middle (a left edge on another box's middle looked random), mirrored around a box's middle,
+   * or with equal spaces; the smallest move wins.
+   */
   const snapMove = (
     ids: Set<string>,
     start: CanvasData,
@@ -673,23 +677,35 @@ function CanvasSurface({
       ids,
       moving.some((n) => n.type === 'group')
     )
-    const xs = others.flatMap((n) => [n.x, n.x + n.width / 2, n.x + n.width])
-    const ys = others.flatMap((n) => [n.y, n.y + n.height / 2, n.y + n.height])
-    const anchorsX: Anchor[] = [0, box.width / 2, box.width].map((offset) => ({
-      offset,
-      targets: xs
-    }))
-    const anchorsY: Anchor[] = [0, box.height / 2, box.height].map((offset) => ({
-      offset,
-      targets: ys
-    }))
+    const edgesX = others.flatMap((n) => [n.x, n.x + n.width])
+    const edgesY = others.flatMap((n) => [n.y, n.y + n.height])
+    const anchorsX: Anchor[] = [
+      { offset: 0, targets: edgesX },
+      { offset: box.width, targets: edgesX },
+      { offset: box.width / 2, targets: others.map((n) => n.x + n.width / 2) }
+    ]
+    const anchorsY: Anchor[] = [
+      { offset: 0, targets: edgesY },
+      { offset: box.height, targets: edgesY },
+      { offset: box.height / 2, targets: others.map((n) => n.y + n.height / 2) }
+    ]
     const threshold = SNAP_PX / cameraRef.current.zoom
     const sx = snapAxis(box.x + dx, anchorsX, threshold)
     const sy = snapAxis(box.y + dy, anchorsY, threshold)
+    const moved = { ...box, x: box.x + dx, y: box.y + dy }
+    const mirrorX = snapMirror(moved, others, 'x', threshold)
+    if (mirrorX && (sx.guide === null || Math.abs(mirrorX.delta) < Math.abs(sx.pos - moved.x))) {
+      sx.pos = moved.x + mirrorX.delta
+      sx.guide = mirrorX.guide
+    }
+    const mirrorY = snapMirror(moved, others, 'y', threshold)
+    if (mirrorY && (sy.guide === null || Math.abs(mirrorY.delta) < Math.abs(sy.pos - moved.y))) {
+      sy.pos = moved.y + mirrorY.delta
+      sy.guide = mirrorY.guide
+    }
     const result = { dx: sx.pos - box.x, dy: sy.pos - box.y, gx: sx.guide, gy: sy.guide }
     // Equal spaces win over lining up when they need the smaller move.
     const gaps: Gap[] = []
-    const moved = { ...box, x: box.x + dx, y: box.y + dy }
     const spaceX = snapSpacing(moved, others, 'x', threshold)
     if (spaceX && (sx.guide === null || Math.abs(spaceX.delta) < Math.abs(sx.pos - moved.x))) {
       result.dx = dx + spaceX.delta
