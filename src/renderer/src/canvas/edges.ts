@@ -34,8 +34,16 @@ export interface MarkerShape {
   fill: 'none' | 'background' | 'line'
 }
 
+/** The handle on a right-angle arrow that moves its middle piece, along `axis`. */
+export interface BendHandle {
+  at: Point
+  axis: 'x' | 'y'
+}
+
 export interface EdgeGeometry {
   path: string
+  /** Right-angle arrows only. */
+  bend?: BendHandle
   markers: MarkerShape[]
   /** Middle of the curve, for the label. */
   middle: Point
@@ -285,6 +293,48 @@ export function elbowRoute(
   return best!.points
 }
 
+const sideways = (side: Side): boolean => side === 'left' || side === 'right'
+
+/** A right-angle line whose middle piece runs at `bend` (x when it leaves sideways, else y). */
+export function bentRoute(
+  start: Point,
+  startSide: Side,
+  end: Point,
+  endSide: Side,
+  bend: number
+): Point[] {
+  const s = add(start, NORMALS[startSide], STUB)
+  const e = add(end, NORMALS[endSide], STUB)
+  const middle = sideways(startSide)
+    ? [
+        { x: bend, y: s.y },
+        { x: bend, y: e.y }
+      ]
+    : [
+        { x: s.x, y: bend },
+        { x: e.x, y: bend }
+      ]
+  return simplify([start, s, ...middle, e, end])
+}
+
+/**
+ * Where the handle of a right-angle line sits: on its longest piece across `axis` between
+ * the two pieces that meet the boxes, or halfway when it has none.
+ */
+export function bendHandle(points: Point[], fromSide: Side): BendHandle {
+  const axis = sideways(fromSide) ? 'x' : 'y'
+  let best: { at: Point; length: number } | null = null
+  for (let i = 1; i < points.length - 2; i++) {
+    const [a, b] = [points[i], points[i + 1]]
+    if (Math.abs(a[axis] - b[axis]) > 0.01) continue
+    const length = Math.hypot(a.x - b.x, a.y - b.y)
+    if (!best || length > best.length) {
+      best = { at: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }, length }
+    }
+  }
+  return { at: best?.at ?? halfway(points), axis }
+}
+
 /** A straight piece of an arrow. */
 interface Run {
   route: number
@@ -508,6 +558,7 @@ function elbowGeometry(
   const beside = (p: Point, out: Point): Point => add(add(p, out, 22), { x: -out.y, y: out.x }, 14)
   return {
     path: roundedPath(line, hops),
+    bend: bendHandle(points, fromSide),
     markers,
     middle: halfway(points),
     fromLabelAt: beside(start, outA),
@@ -598,7 +649,10 @@ export function edgeGeometries(
     }
     const start = sideAt(from, fromSide, fromEnd.at, fromEnd.shape)
     const end = sideAt(to, toSide, toEnd.at, toEnd.shape)
-    const points = elbowRoute(start, fromSide, end, toSide, boxes, taken)
+    const points =
+      typeof edge.bend === 'number'
+        ? bentRoute(start, fromSide, end, toSide, edge.bend)
+        : elbowRoute(start, fromSide, end, toSide, boxes, taken)
     points.slice(1).forEach((p, i) => taken.push([points[i], p]))
     routes.push(points)
     elbows.push({

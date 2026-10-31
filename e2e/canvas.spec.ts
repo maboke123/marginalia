@@ -28,6 +28,7 @@ interface Saved {
     relation?: string
     toLabel?: string
     route?: string
+    bend?: number
   }[]
 }
 const read = async (name: string): Promise<Saved> =>
@@ -233,6 +234,22 @@ test('an arrow switched to right angles goes around boxes; new arrows look like 
   const d = await page.locator('[data-edge="uses"] .canvas-edge-line').getAttribute('d')
   expect(d).not.toContain('C')
   await page.screenshot({ path: path.join('test-results', 'canvas-elbow.png') })
+
+  // I drag its middle piece elsewhere; Automatic route lets it find its own way again.
+  const handle = page.locator('[data-bend="uses"]')
+  const at = (await handle.boundingBox())!
+  const [hx, hy] = [at.x + at.width / 2, at.y + at.height / 2]
+  const axis = await handle.getAttribute('data-axis')
+  await page.mouse.move(hx, hy)
+  await page.mouse.down()
+  await page.mouse.move(hx + (axis === 'x' ? 60 : 0), hy + (axis === 'y' ? 60 : 0), { steps: 6 })
+  await page.mouse.up()
+  const bent = async (): Promise<unknown> =>
+    (await read('Shop.canvas')).edges.find((e) => e.id === 'uses')!.bend
+  await expect.poll(bent).toEqual(expect.any(Number))
+  expect(await page.locator('[data-edge="uses"] .canvas-edge-line').getAttribute('d')).not.toBe(d)
+  await panel.getByRole('button', { name: 'Automatic route' }).click()
+  await expect.poll(bent).toBeUndefined()
 
   // This arrow becomes the look of new ones.
   await panel.getByRole('button', { name: /^Relation:/ }).click()

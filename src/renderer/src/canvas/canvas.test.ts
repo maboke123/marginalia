@@ -7,6 +7,8 @@ import { sourceRange, wordAround } from './caret'
 import { snapMirror, snapSpacing } from './spacing'
 import { inheritedOperations, inOperations, insertOperations, operationName } from './overrides'
 import {
+  bendHandle,
+  bentRoute,
   edgeGeometries,
   edgeGeometry,
   edgePorts,
@@ -504,6 +506,32 @@ describe('right-angle arrows', () => {
     const elbow = geometryOf({ ...edge, route: 'elbow' as const }, byId)!.path
     expect(elbow).not.toContain('C')
     expect(elbow).toContain('Q')
+  })
+})
+
+describe('a right-angle arrow I route myself', () => {
+  it('runs its middle piece where I dragged it, with the handle on that piece', () => {
+    // Out of the subclass's top, into the superclass's bottom: the middle piece is level.
+    const route = bentRoute({ x: 100, y: 300 }, 'top', { x: 300, y: 100 }, 'bottom', 180)
+    expect(route).toEqual([
+      { x: 100, y: 300 },
+      { x: 100, y: 180 },
+      { x: 300, y: 180 },
+      { x: 300, y: 100 }
+    ])
+    expect(bendHandle(route, 'top')).toEqual({ at: { x: 200, y: 180 }, axis: 'y' })
+  })
+
+  it('keeps that piece when a box moves, until the route is automatic again', () => {
+    const byId = new Map<string, CanvasNode>([
+      ['a', { id: 'a', type: 'text', text: 'A', x: 0, y: 0, width: 100, height: 50 }],
+      ['b', { id: 'b', type: 'text', text: 'B', x: 400, y: 100, width: 100, height: 50 }]
+    ])
+    const edge = { id: 'e', fromNode: 'a', toNode: 'b', route: 'elbow' as const, bend: 260 }
+    expect(edgeGeometries([edge], byId).get('e')!.bend).toMatchObject({ axis: 'x' })
+    expect(edgeGeometries([edge], byId).get('e')!.bend!.at.x).toBe(260)
+    const automatic = { ...edge, bend: undefined }
+    expect(edgeGeometries([automatic], byId).get('e')!.bend!.at.x).not.toBe(260)
   })
 })
 

@@ -199,6 +199,7 @@ type Drag =
     }
   | { kind: 'resize'; id: string; handle: Handle; from: { x: number; y: number }; rect: Rect }
   | { kind: 'connect'; id: string; side: Side }
+  | { kind: 'bend'; id: string; axis: 'x' | 'y' }
   | { kind: 'ink'; points: [number, number, number][] }
 
 export function CanvasView({ path, title }: { path: string; title: string }): React.JSX.Element {
@@ -750,7 +751,11 @@ function CanvasSurface({
         Side | undefined
       const nodeId = target.closest<HTMLElement>('[data-node]')?.dataset.node
       const edgeId = target.closest<HTMLElement>('[data-edge]')?.dataset.edge
-      if (handle && nodeId) {
+      const bend = target.closest<SVGElement>('[data-bend]')?.dataset
+      if (bend?.bend) {
+        s.begin()
+        drag.current = { kind: 'bend', id: bend.bend, axis: bend.axis === 'y' ? 'y' : 'x' }
+      } else if (handle && nodeId) {
         const node = nodeById(s.data, nodeId)!
         s.begin()
         drag.current = { kind: 'resize', id: nodeId, handle, from: at, rect: node }
@@ -881,6 +886,11 @@ function CanvasSurface({
         s.update((data) => updateNode(data, d.id, rect))
         return
       }
+      case 'bend': {
+        const value = Math.round(at[d.axis])
+        s.update((data) => updateEdge(data, d.id, (x) => ({ ...x, route: 'elbow', bend: value })))
+        return
+      }
       case 'move': {
         const dx = at.x - d.from.x
         const dy = at.y - d.from.y
@@ -958,6 +968,8 @@ function CanvasSurface({
         s.select({ nodes: [box.id], edges: [] })
         s.edit(box.id)
       }
+    } else if (d.kind === 'bend') {
+      s.end()
     } else if (d.kind === 'move') {
       setGuides({ x: null, y: null })
       if (d.started) {
@@ -1791,7 +1803,10 @@ function EdgePanel({
                 doc.getState().change((d) =>
                   updateEdge(d, edge.id, (x) => {
                     const next = { ...x, route }
-                    if (!route) delete next.route
+                    if (!route) {
+                      delete next.route
+                      delete next.bend
+                    }
                     return next
                   })
                 )
@@ -1802,6 +1817,23 @@ function EdgePanel({
           ))}
         </div>
       </div>
+      {edge.route === 'elbow' && typeof edge.bend === 'number' && (
+        <button
+          className="text-button"
+          title="Drop where you dragged its middle and route it by itself again"
+          onClick={() =>
+            doc.getState().change((d) =>
+              updateEdge(d, edge.id, (x) => {
+                const next = { ...x }
+                delete next.bend
+                return next
+              })
+            )
+          }
+        >
+          Automatic route
+        </button>
+      )}
       <button
         className="text-button"
         title="Swap start and end"

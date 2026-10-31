@@ -97,6 +97,11 @@ export interface CanvasEdge {
   toLabel?: string
   /** Our own: drawn with right angles around other boxes instead of as a curve. */
   route?: 'elbow'
+  /**
+   * Our own: where I dragged the middle piece of a right-angle arrow, its x when the arrow
+   * leaves its box sideways, else its y. Without it the route is found by itself.
+   */
+  bend?: number
   [extra: string]: unknown
 }
 

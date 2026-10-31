@@ -39,6 +39,15 @@ const EdgeView = memo(function EdgeView({
       {geometry.markers.map((m, i) => (
         <path key={i} className={`canvas-marker fill-${m.fill}`} d={m.d} />
       ))}
+      {selected && geometry.bend && (
+        <circle
+          className={`canvas-bend ${geometry.bend.axis}`}
+          cx={geometry.bend.at.x}
+          cy={geometry.bend.at.y}
+          data-bend={edge.id}
+          data-axis={geometry.bend.axis}
+        />
+      )}
     </g>
   )
 })

@@ -3887,6 +3887,23 @@ input.canvas-group-label {
   stroke-dasharray: 6 4;
 }
 
+/* Drags the middle piece of a selected right-angle arrow. */
+.canvas-bend {
+  r: calc(5px / var(--canvas-zoom, 1));
+  fill: var(--bg);
+  stroke: var(--accent);
+  stroke-width: calc(1.5px / var(--canvas-zoom, 1));
+  pointer-events: all;
+}
+
+.canvas-bend.x {
+  cursor: ew-resize;
+}
+
+.canvas-bend.y {
+  cursor: ns-resize;
+}
+
 .canvas-edge-hit {
   fill: none;
   stroke: transparent;
