@@ -24,6 +24,7 @@ Claude is built in two ways:
 </picture>
 
 **Organise**
+
 - Open any folder as a vault. Top-level folders are courses, subfolders are lectures, nested as deep as you like.
 - Create, rename, move and delete from the sidebar. Deletes go to the Recycle Bin.
 - Give any folder a colour (red, orange, yellow, green, dark green, blue, ...), for example to track which lectures you have reviewed.
@@ -32,6 +33,7 @@ Claude is built in two ways:
 - Natural sort order (B2 before B10). An optional `_order.json` in a folder sets your own order.
 
 **Slides**
+
 - Import PDFs by drag and drop or Ctrl+Shift+I. The original is copied, never moved.
 - Pen, highlighter, eraser and text boxes, on the slide or in a margin next to it.
 - Highlight selected slide text with H. Colour or resize part of the text in a text box.
@@ -41,6 +43,7 @@ Claude is built in two ways:
 - Export a PDF with all annotations burned in.
 
 **Notes**
+
 - Markdown editor with live preview: headings, tables, images and KaTeX math render in place and turn back into source where your cursor is.
 - Slash menu for headings, lists, tables, math blocks, text colour and slide links. It puts the heading level you most likely want next first.
 - Fold a section under its heading. Folds are remembered per note.
@@ -50,21 +53,31 @@ Claude is built in two ways:
 - Files stay standard Markdown, so they open the same in Obsidian or VS Code.
 
 **Canvas**
+
 - A page you can zoom and pan without end, for diagrams, mind maps and overviews. Text boxes with Markdown and math, images, pen drawings, groups and arrows between boxes.
 - UML shapes and relations: classes with compartments, interfaces, actors, use cases, states, decisions, and arrows for inheritance, realization, composition, aggregation and dependency, with multiplicities.
+- Boxes snap to the edges and middles of other boxes, to equal spacing, and evenly around a box above (two subclasses under their superclass). Hold Alt to place freely.
+- Arrows are curved or go around boxes at right angles. Drag the middle of a right-angle arrow to route it yourself.
+- Larger and smaller text (Ctrl+Shift+> and <) grows the box with it, so the text wraps as before.
 - Saved as `.canvas` files in the JSON Canvas format, so they open in Obsidian too. Export a canvas as a one-page PDF.
 
-**Lecture mode**
+**Lecture mode and side by side**
+
 - Ctrl+Shift+M puts the slides on the left and their note on the right, and hides the sidebar.
 - A PDF can have several notes (your summary, a derivation, the transcript). The title of the note pane switches between them and remembers your pick.
+- Open two, three or four files side by side (Ctrl+Alt+G, or drag a file from the sidebar to the edge of a pane). Drag the borders to resize.
 
 **Recording and transcripts**
+
 - Ctrl+Shift+R records the lecture. The app remembers which slide was on screen when, so the transcript links each part to its slide.
+- Record the microphone, or the computer's own sound for a lecture video you watch at home.
 - Speech to text runs locally with whisper.cpp; no audio leaves your PC. Transcription starts by itself while the laptop is plugged in, in the language you set per course, and goes on where it stopped after a restart.
 - Drop a video or audio file of a lecture to transcribe it. For a video, the app matches the frames to the slides.
+- Import a transcript someone else recorded, or the captions a lecturer posts (.vtt, .srt, .txt). Each paragraph is linked to the slide it talks about, matched by its words.
 - Transcripts stay out of the way: a lecture with recordings shows a small microphone badge in the sidebar. Claude and search still use them.
 
 **Search**
+
 - Ctrl+P to jump to any file, Ctrl+Shift+F to search the text of every note and slide.
 
 ## Claude in the app
@@ -77,12 +90,16 @@ Claude is built into the places you already work, and it always knows where you 
 </picture>
 
 **Ask questions in the chat panel (Ctrl+L)**
+
 - "Explain the formula on this slide" or "Why is entropy maximal here?" works without any setup.
 - Type `@` to add other notes or PDFs from your vault as context, a whole folder (a course or a lecture), or the conversation of another lecture.
+- Paste, drop or pick images to send along with a question.
+- The panel sits under the files or on their right (Settings).
 - One conversation per lecture, kept when you close the app. The chat you ask in stays while you open files in its subfolders; the name above the chat switches to the chat of any other folder.
 - Select text in an answer to copy it (formulas come out as LaTeX) or to ask about that part.
 
 **Let it edit your notes and slides**
+
 - Ask "add a short version of this under Information gain" and it writes into your note, under that heading.
 - On the slides it can add, change, move and remove text boxes, highlight or underline text, draw lines and arrows, and add blank pages.
 - On a canvas it reads and draws boxes and arrows, and lays out new diagrams itself.
@@ -91,22 +108,26 @@ Claude is built into the places you already work, and it always knows where you 
 - With "ask before editing" on (the default), you see each change first and accept or reject it. Click a waiting change in the chat to jump to it. "Accept all" lets the rest of that answer through. Every edit is one undo step.
 
 **Write in place with `/claude`**
+
 - Type `/claude <request>` at the end of a line in a note or in a text box on a slide, and press Enter.
 - The answer replaces the request right there, using the slide and the text around it. For example `/claude derive this step` under a formula, or `/claude fix the LaTeX in this paragraph`.
 - You can keep typing while it works, run several at once, and cancel with Esc.
 
 **Skills**
+
 - Type `/` in the chat for longer jobs on the lecture you have open:
   - `/summary` writes a summary note from the slides, the transcript, your notes and your annotations, linked to the PDF.
   - `/cleanup` tidies your annotations (typos, LaTeX, layout) without dropping anything you wrote, and adds a **Check:** line where something looks wrong.
-  - `/uml` models a system you describe (a class diagram by default, or use case, state and activity diagrams) on a canvas.
+  - `/uml` models a system you describe (a class diagram by default, or use case, state and activity diagrams) on a canvas. It can learn one course first (Claude settings): it reads the slides, transcripts, notes and your diagrams lesson by lesson into notes and a short playbook, so its diagrams follow how that lecturer models. Learning the whole course the first time takes a lot of usage; after that it takes in new files when you ask, or by itself if you turn that on.
   - `/exercise` turns an exercise session (the chat, your notes and annotations) into a note with the solutions, key takeaways, exam tips and what to redo.
 - Text after the command is passed on, for example `/summary only the part on pruning`.
 
 **Your own instructions**
+
 - The Claude settings have a field for standing instructions, added to the chat, `/claude` and the terminal. I use it for what my folder colours mean.
 
 **Terminal tab**
+
 - Runs Claude Code inside your vault folder, for bigger jobs like reorganising a course or writing a summary from several lectures.
 
 Claude can only read files inside your vault. The chat panel cannot run commands: it changes files only through the app (new notes, edits to notes and annotations), and with "ask before editing" on you approve each change.
@@ -196,22 +217,23 @@ Electron, React, TypeScript, pdf.js, pdf-lib, CodeMirror 6, KaTeX, Mermaid, Vega
 
 ## Hotkeys
 
-| Action | Default |
-| --- | --- |
-| Lecture mode | Ctrl+Shift+M |
-| Claude panel | Ctrl+L |
-| Record the lecture | Ctrl+Shift+R |
-| Import PDF | Ctrl+Shift+I |
-| Insert link to current slide | Ctrl+Shift+L |
-| Slide snapshot | Ctrl+Shift+S |
-| Quick switcher | Ctrl+P |
-| Search everything | Ctrl+Shift+F |
-| Find in the slides | Ctrl+F |
-| Todo note | Ctrl+Shift+T |
-| Show or hide the sidebar | Ctrl+\ |
-| Close the open files | Ctrl+W |
-| Full screen | F11 |
-| Settings | Ctrl+, |
+| Action                                     | Default       |
+| ------------------------------------------ | ------------- |
+| Lecture mode                               | Ctrl+Shift+M  |
+| Files side by side (1, 2, 3 or 4)          | Ctrl+Alt+G    |
+| Claude panel                               | Ctrl+L        |
+| Record the lecture                         | Ctrl+Shift+R  |
+| Import PDF                                 | Ctrl+Shift+I  |
+| Insert link to current slide               | Ctrl+Shift+L  |
+| Slide snapshot                             | Ctrl+Shift+S  |
+| Quick switcher                             | Ctrl+P        |
+| Search everything                          | Ctrl+Shift+F  |
+| Find in the slides                         | Ctrl+F        |
+| Todo note                                  | Ctrl+Shift+T  |
+| Show or hide the sidebar                   | Ctrl+\        |
+| Close the open files                       | Ctrl+W        |
+| Full screen                                | F11           |
+| Settings                                   | Ctrl+,        |
 | Select, pen, highlighter, eraser, text box | V, P, H, E, T |
 
 All of them except Ctrl+F can be changed in Settings.
