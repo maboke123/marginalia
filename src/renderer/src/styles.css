@@ -1990,6 +1990,7 @@ h2 {
 
 .claude-panel {
   position: relative;
+  container-type: inline-size;
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
@@ -2032,6 +2033,25 @@ h2 {
   height: 36px;
   padding: 0 8px 0 16px;
   border-bottom: 1px solid var(--border);
+}
+
+/* When the panel is narrow the chat name gives way; the buttons keep their size. */
+.claude-header > * {
+  flex-shrink: 0;
+}
+
+.claude-header > .claude-chat-name {
+  flex-shrink: 1;
+}
+
+@container (max-width: 400px) {
+  .claude-title {
+    display: none;
+  }
+
+  .claude-header {
+    padding-left: 8px;
+  }
 }
 
 .claude-title {

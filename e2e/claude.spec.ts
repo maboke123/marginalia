@@ -254,6 +254,13 @@ test('a narrow chat on the right never scrolls sideways, and Ctrl+wheel zooms it
     .poll(() => messages.evaluate((el) => el.scrollWidth - el.clientWidth))
     .toBeLessThanOrEqual(0)
   await page.screenshot({ path: path.join('test-results', 'claude-panel-narrow.png') })
+  // Its header fits: the last buttons are not cut off.
+  const box = (await panel.boundingBox())!
+  const width = await page.evaluate(() => window.innerWidth)
+  for (const name of ['Claude settings', 'Close']) {
+    const button = (await panel.getByRole('button', { name, exact: true }).boundingBox())!
+    expect(button.x + button.width).toBeLessThanOrEqual(Math.min(box.x + box.width, width))
+  }
 
   const size = (): Promise<number> =>
     answer
