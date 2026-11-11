@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { CanvasData, CanvasNode, InkStroke, Rect } from '../../../shared/canvas'
+import type { CanvasData, CanvasNode, InkNode, InkStroke, Rect } from '../../../shared/canvas'
 import { fitCamera, toScreen, toWorld, zoomAt, zoomStep } from './camera'
 import { createCanvasDoc } from './doc'
 import { clickScale, makeScaled, templateByName } from './shapes'
@@ -34,6 +34,7 @@ import {
   pasteItems,
   removeItems,
   resized,
+  resizedInk,
   snapResized,
   withStroke
 } from './ops'
@@ -624,5 +625,36 @@ describe('shapes', () => {
     const node = makeScaled(start, { x: 0, y: 0 }, 1, { x: 0, y: 0, width: 90, height: 30 })
     expect(node.width).toBe(node.height)
     expect(node.fontScale).toBeUndefined()
+  })
+})
+
+describe('resizedInk', () => {
+  it('stretches the strokes with the box, from the drawing as it was', () => {
+    const drawing: InkNode = {
+      id: 'd',
+      type: 'ink',
+      x: 10,
+      y: 20,
+      width: 100,
+      height: 50,
+      strokes: [
+        {
+          color: '#000',
+          width: 2,
+          points: [
+            [0, 0, 0.5],
+            [100, 50, 0.5]
+          ]
+        }
+      ]
+    }
+    const big = resizedInk(drawing, { x: 0, y: 0, width: 200, height: 100 })
+    expect(big).toMatchObject({ x: 0, y: 0, width: 200, height: 100 })
+    expect(big.strokes[0].points).toEqual([
+      [0, 0, 0.5],
+      [200, 100, 0.5]
+    ])
+    expect(big.strokes[0].width).toBe(4)
+    expect(drawing.strokes[0].points[1]).toEqual([100, 50, 0.5])
   })
 })

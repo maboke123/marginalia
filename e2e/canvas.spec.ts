@@ -548,6 +548,22 @@ test('pen strokes close together become one drawing', async () => {
   await draw(80, box.height - 100)
   await expect(page.locator('.canvas-node.canvas-ink')).toHaveCount(1)
   await expect(page.locator('.canvas-ink path')).toHaveCount(2)
+
+  // Selected, a corner makes the drawing itself bigger.
+  await surface().press('v')
+  const ink = page.locator('.canvas-node.canvas-ink')
+  await ink.click()
+  await expect(ink).toHaveClass(/selected/)
+  const before = (await ink.locator('svg').boundingBox())!
+  const corner = (await ink.locator('.canvas-handle.h-se').boundingBox())!
+  await page.mouse.move(corner.x + corner.width / 2, corner.y + corner.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(corner.x + 80, corner.y + 50, { steps: 5 })
+  await page.mouse.up()
+  const path0 = ink.locator('path').first()
+  await expect.poll(async () => (await path0.boundingBox())!.width).toBeGreaterThan(50)
+  const after = (await ink.locator('svg').boundingBox())!
+  expect(after.width).toBeGreaterThan(before.width * 1.5)
 })
 
 test('exports the whole canvas as a PDF', async () => {

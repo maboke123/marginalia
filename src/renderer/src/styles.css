@@ -3743,7 +3743,7 @@ input.canvas-group-label {
   background: transparent;
 }
 
-.canvas-ink {
+.canvas-strokes {
   position: absolute;
   top: 0;
   left: 0;

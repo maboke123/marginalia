@@ -131,7 +131,7 @@ function NoteBody({ width, height }: { width: number; height: number }): React.J
 
 function Ink({ node }: { node: InkNode }): React.JSX.Element {
   return (
-    <svg className="canvas-ink" width={node.width} height={node.height} aria-hidden>
+    <svg className="canvas-strokes" width={node.width} height={node.height} aria-hidden>
       {node.strokes.map((s, i) => (
         <path
           key={i}

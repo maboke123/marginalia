@@ -264,6 +264,26 @@ export function scaleText(data: CanvasData, ids: string[], step: 1 | -1): Canvas
   }
 }
 
+/**
+ * A drawing resized to `rect`: its strokes stretch with the box (and the pen gets thicker or
+ * thinner), measured from `from`, the drawing as it was when the resize started.
+ */
+export function resizedInk(from: InkNode, rect: Rect): InkNode {
+  const sx = rect.width / from.width
+  const sy = rect.height / from.height
+  const thick = Math.sqrt(sx * sy)
+  const r2 = (n: number): number => Math.round(n * 100) / 100
+  return {
+    ...from,
+    ...rect,
+    strokes: from.strokes.map((s) => ({
+      ...s,
+      width: r2(s.width * thick),
+      points: s.points.map(([x, y, p]): [number, number, number] => [r2(x * sx), r2(y * sy), p])
+    }))
+  }
+}
+
 /** Puts copied items in, placed so their top left lands at (x, y). */
 export function pasteItems(
   data: CanvasData,

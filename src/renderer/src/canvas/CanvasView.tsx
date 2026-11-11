@@ -54,6 +54,7 @@ import {
   connectTarget,
   copyItems,
   duplicateItems,
+  resizedInk,
   scaleText,
   drawOrder,
   groupAround,
@@ -885,7 +886,13 @@ function CanvasSurface({
           rect = snapped.rect
           setGuides({ x: snapped.gx, y: snapped.gy })
         }
-        s.update((data) => updateNode(data, d.id, rect))
+        // A drawing stretches with its box; its strokes are relative to the box's corner.
+        const before = nodeById(s.started(), d.id)
+        s.update((data) =>
+          before?.type === 'ink'
+            ? updateNode(data, d.id, resizedInk(before, rect))
+            : updateNode(data, d.id, rect)
+        )
         return
       }
       case 'bend': {
