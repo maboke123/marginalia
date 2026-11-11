@@ -594,6 +594,10 @@ test('shapes come from the Shapes menu by click or drag, and the right-click men
   await expect(preview).toBeHidden()
   await expect(page.locator('.canvas-editor')).toBeFocused()
   await page.keyboard.type('Payment')
+  // Tab indents instead of leaving the box.
+  await page.keyboard.press('Tab')
+  await expect(page.locator('.canvas-editor')).toBeFocused()
+  await page.keyboard.press('Shift+Tab')
   await page.keyboard.press('Escape')
   await expect
     .poll(async () => (await read('Shop.canvas')).nodes.at(-1)!.text)

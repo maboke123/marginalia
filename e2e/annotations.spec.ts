@@ -457,6 +457,23 @@ test('text boxes take a colour from the toolbar', async () => {
   await expect(box).toHaveCSS('color', 'rgb(207, 34, 46)')
 })
 
+test('Tab indents the line in a text box instead of leaving it', async () => {
+  await openSlides()
+  await page.keyboard.press('t')
+  await drawOnPage([0.7, 0.2], [0.7, 0.2])
+  await page.keyboard.type('- Gain')
+  const editor = page.locator('.text-box-editor')
+  await page.keyboard.press('Tab')
+  await expect(editor).toBeFocused()
+  await expect(editor).toHaveValue('  - Gain')
+  await page.keyboard.type(' ratio')
+  await expect(editor).toHaveValue('  - Gain ratio')
+  await page.keyboard.press('Shift+Tab')
+  await expect(editor).toHaveValue('- Gain ratio')
+  await page.keyboard.press('Control+z')
+  await expect(editor).toHaveValue('  - Gain ratio')
+})
+
 test('part of a text box gets its own colour and size', async () => {
   await openSlides()
   await page.keyboard.press('t')

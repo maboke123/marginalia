@@ -6,6 +6,7 @@ import { mapPosition, planWrite, type WriteAnswer } from '../claude/writePlan'
 import { RenderedHtml } from '../components/RenderedHtml'
 import { renderMarkdown } from '../lib/markdown'
 import { markInTextarea, markOfKey } from '../lib/emphasis'
+import { indentInTextarea } from '../lib/indent'
 import { useApp } from '../store'
 import { widestAt, type FitPage } from './fit'
 
@@ -314,6 +315,12 @@ function Editor({
         if (mark) {
           e.preventDefault()
           markInTextarea(e.currentTarget, mark)
+          return
+        }
+        if (e.key === 'Tab' && !e.ctrlKey && !e.altKey) {
+          e.preventDefault()
+          indentInTextarea(e.currentTarget, e.shiftKey)
+          grow(e.currentTarget)
           return
         }
         if (e.key === 'Escape' && writing.length) {

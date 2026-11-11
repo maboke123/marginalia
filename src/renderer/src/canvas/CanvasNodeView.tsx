@@ -12,6 +12,7 @@ import { RenderedHtml } from '../components/RenderedHtml'
 import { Icon } from '../components/Icon'
 import { vaultUrl } from '../editor/links'
 import { markInTextarea, markOfKey } from '../lib/emphasis'
+import { indentInTextarea } from '../lib/indent'
 import { renderMarkdown } from '../lib/markdown'
 import type { Handle } from './ops'
 import { inOperations, insertOperations, operationName } from './overrides'
@@ -256,7 +257,10 @@ function Editor({
             }
           }
           const mark = markOfKey(e)
-          if (mark) {
+          if (e.key === 'Tab' && !e.ctrlKey && !e.altKey) {
+            e.preventDefault()
+            indentInTextarea(e.currentTarget, e.shiftKey)
+          } else if (mark) {
             e.preventDefault()
             markInTextarea(e.currentTarget, mark)
           } else if (e.key === 'Escape' || (e.key === 'Enter' && e.ctrlKey)) {
