@@ -924,6 +924,24 @@ test('a canvas linked to slides shows under them and opens next to them', async 
   await expect(page.locator('.canvas-toolbar .note-switch')).toContainText('Shop')
 })
 
+test("a new canvas from the slides' menu is named after them and linked", async () => {
+  await makeSlides(file('Patterns.pdf'), 3)
+  await row('Design of Software Systems').click()
+  await row('les_1').click()
+  await row('Patterns').click({ button: 'right' })
+  await page.getByRole('menuitem', { name: 'New linked canvas' }).click()
+  await page.locator('.tree-row input').press('Enter')
+  await expect
+    .poll(async () => {
+      const state = JSON.parse(
+        await fs.readFile(path.join(env.vault, '.marginalia', 'state.json'), 'utf8')
+      )
+      return state.notes[`${lesson}/Patterns.pdf`]
+    })
+    .toEqual([`${lesson}/Patterns.canvas`])
+  await expect(row('Patterns')).toHaveCount(2)
+})
+
 test('a canvas dragged onto a folder moves there; dropped on slides it links to them', async () => {
   await fs.mkdir(file('../les_2'), { recursive: true })
   await makeSlides(file('../les_2/Patterns.pdf'), 3)

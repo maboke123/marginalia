@@ -218,7 +218,8 @@ interface AppState {
   setInk(ink: Partial<Ink>): void
   saveSettings(change: Partial<AppSettings>): Promise<void>
 
-  create(item: NewItem, parent: string): Promise<void>
+  /** `linkTo`: a PDF the new page or canvas is linked to, named after it. */
+  create(item: NewItem, parent: string, linkTo?: string): Promise<void>
   rename(path: string, name: string): Promise<void>
   move(path: string, parent: string, before?: Position): Promise<void>
   trash(path: string): Promise<void>
@@ -801,8 +802,13 @@ export const useApp = create<AppState>((set, get) => {
       get().openFile(notes[0])
     },
 
-    async create(item, parent) {
-      const name = DEFAULT_NAMES[item]
+    async create(item, parent, linkTo) {
+      const name = linkTo
+        ? linkTo
+            .split('/')
+            .pop()!
+            .replace(/\.pdf$/i, '')
+        : DEFAULT_NAMES[item]
       const path = await attempt(() =>
         item === 'page'
           ? api.createNote(parent, name)
@@ -811,6 +817,7 @@ export const useApp = create<AppState>((set, get) => {
             : api.createFolder(parent, name)
       )
       if (!path) return
+      if (linkTo) await link(linkTo, path, 'add')
       if (parent) get().setExpanded(parent, true)
       await get().refresh()
       set({ selected: path, renaming: path })

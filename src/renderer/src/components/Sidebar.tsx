@@ -172,6 +172,14 @@ export function Sidebar(): React.JSX.Element {
       if (node.kind === 'pdf') {
         items.push(
           {
+            label: 'New linked page',
+            onSelect: () => app.create('page', parentOf(node.path), node.path)
+          },
+          {
+            label: 'New linked canvas',
+            onSelect: () => app.create('canvas', parentOf(node.path), node.path)
+          },
+          {
             label: 'Transcribe a recording of this...',
             onSelect: () =>
               void useFiles.getState().transcribe(parentOf(node.path), undefined, node.path)
