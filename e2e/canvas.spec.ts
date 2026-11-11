@@ -181,6 +181,33 @@ test('double-click makes a box to type in; one undo takes it away', async () => 
   await expect.poll(async () => (await read('Shop.canvas')).nodes.length).toBe(7)
 })
 
+test('the text tool makes a box where I click, or as big as I drag it', async () => {
+  await openShop()
+  const box = (await surface().boundingBox())!
+  await page.getByRole('button', { name: /^Text box/ }).click()
+  await page.mouse.click(box.x + box.width - 140, box.y + 80)
+  await expect(page.locator('.canvas-editor')).toBeFocused()
+  await page.keyboard.type('Payment')
+  await page.keyboard.press('Escape')
+  await expect.poll(async () => (await read('Shop.canvas')).nodes.at(-1)!.text).toBe('Payment')
+
+  await page.keyboard.press('t')
+  const [x, y] = [box.x + box.width - 300, box.y + box.height - 160]
+  await page.mouse.move(x, y)
+  await page.mouse.down()
+  await page.mouse.move(x + 120, y + 60, { steps: 4 })
+  await page.mouse.up()
+  await expect(page.locator('.canvas-editor')).toBeFocused()
+  await page.keyboard.type('Refund')
+  await page.keyboard.press('Escape')
+  await expect.poll(async () => (await read('Shop.canvas')).nodes.length).toBe(9)
+  const zoom =
+    Number((await page.locator('.canvas-zoom-value').textContent())!.replace('%', '')) / 100
+  const made = (await read('Shop.canvas')).nodes.at(-1)!
+  expect(made.text).toBe('Refund')
+  expect(made.width * zoom).toBeCloseTo(120, -1)
+})
+
 test('dragging from a box edge to another box connects them; the panel sets the relation', async () => {
   await openShop()
   await page.locator('[data-node="line"]').click()

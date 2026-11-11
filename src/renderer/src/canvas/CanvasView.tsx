@@ -188,6 +188,7 @@ const HOVER_PX = 28
 type Drag =
   | { kind: 'pan'; x: number; y: number; camera: Camera }
   | { kind: 'place'; from: { x: number; y: number }; template: Template }
+  | { kind: 'text'; from: { x: number; y: number } }
   | { kind: 'marquee'; from: { x: number; y: number }; add: Selection }
   | {
       kind: 'move'
@@ -799,9 +800,9 @@ function CanvasSurface({
         )
         return
       } else if (tool === 'text') {
-        addBox(textBoxAt(at.x, at.y), true)
-        setTool('select')
-        return
+        // Made on release, like a shape: made now, the click's own focus change ended its typing.
+        drag.current = { kind: 'text', from: at }
+        setMarquee({ ...at, width: 0, height: 0 })
       } else {
         drag.current = { kind: 'marquee', from: at, add: e.shiftKey ? s.selection : NOTHING }
         if (!e.shiftKey) s.select(NOTHING)
@@ -840,6 +841,7 @@ function CanvasSurface({
         setLiveInk([...d.points])
         return
       case 'place':
+      case 'text':
         setMarquee(placedRect(d.from, at))
         return
       case 'connect': {
@@ -939,6 +941,12 @@ function CanvasSurface({
       const at = worldOf(e)
       const rect = placedRect(d.from, at)
       addTemplate(d.template, d.from, isDragged(rect, cameraRef.current.zoom) ? rect : undefined)
+    } else if (d.kind === 'text') {
+      setMarquee(null)
+      const rect = placedRect(d.from, worldOf(e))
+      const box = textBoxAt(d.from.x, d.from.y)
+      addBox(isDragged(rect, cameraRef.current.zoom) ? { ...box, ...rect } : box, true)
+      setTool('select')
     } else if (d.kind === 'connect') {
       setDraft(null)
       const at = worldOf(e)
