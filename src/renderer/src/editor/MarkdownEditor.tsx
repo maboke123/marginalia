@@ -159,7 +159,14 @@ export function MarkdownEditor({
             ]
           })
         })
-        setEditor({ path, insert: (t) => view && insertText(view, t) })
+        setEditor({
+          path,
+          insert: (t) => view && insertText(view, t),
+          image: async (data, ext) => {
+            const link = await window.api.vault.saveAsset(path, data, ext)
+            if (view) insertText(view, `![](${link})\n`)
+          }
+        })
         const goto = useApp.getState().noteGoto
         if (goto?.path === path) goToLine(goto.line)
         unregisterNote = registerNote({ path, view })

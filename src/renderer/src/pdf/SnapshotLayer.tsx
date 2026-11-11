@@ -19,7 +19,7 @@ type Box = { x: number; y: number; w: number; h: number }
 
 /**
  * Covers the slides while taking a snapshot: drag a rectangle (or click for the whole slide)
- * and that part of the slide goes into the summary as an image.
+ * and that part of the slide goes into the open note or canvas as an image.
  */
 export function SnapshotLayer({
   pdf,
@@ -69,8 +69,7 @@ export function SnapshotLayer({
     }
     try {
       const png = await renderRegion(pdf, pdfPage, [x0, y0, x1 - x0, y1 - y0])
-      const link = await window.api.vault.saveAsset(editor.path, png, 'png')
-      editor.insert(`![](${link})\n`)
+      await editor.image(png, 'png')
     } catch (err) {
       showError(`Snapshot failed: ${(err as Error).message}`)
     }

@@ -653,6 +653,28 @@ function CanvasSurface({
     }
   }
 
+  /** Image files (dropped or picked) as boxes, a little apart from each other. */
+  const addFiles = (files: File[], at: { x: number; y: number }): void => {
+    files
+      .filter((f) => IMAGE_TYPES[f.type])
+      .forEach((file, i) => {
+        void file.arrayBuffer().then((buf) =>
+          addImage(new Uint8Array(buf), IMAGE_TYPES[file.type], {
+            x: at.x + i * 40,
+            y: at.y + i * 40
+          })
+        )
+      })
+  }
+
+  const imagePicker = useRef<HTMLInputElement>(null)
+  /** Where picked images go: the right-clicked spot, else the middle of the view. */
+  const picked = useRef<{ x: number; y: number } | null>(null)
+  const pickImages = (at?: { x: number; y: number }): void => {
+    picked.current = at ?? null
+    imagePicker.current?.click()
+  }
+
   /**
    * Boxes on screen a moved or resized set can line up with. Groups only count when a group
    * moves: a box would otherwise stick to the border of the group it sits in.
@@ -1105,6 +1127,23 @@ function CanvasSurface({
     addBox({ ...textBoxAt(at.x, at.y, 280, 120), text } as CanvasNode, false)
   }
 
+  // The canvas takes what is meant for the open note: slide snapshots and slide links.
+  const handle = useRef({ addImage, paste, viewCenter })
+  useLayoutEffect(() => {
+    handle.current = { addImage, paste, viewCenter }
+  })
+  useEffect(() => {
+    const { setEditor } = useApp.getState()
+    setEditor({
+      path,
+      insert: (text) => handle.current.paste(handle.current.viewCenter(), text),
+      image: (data, ext) => handle.current.addImage(data, ext, handle.current.viewCenter())
+    })
+    return () => {
+      if (useApp.getState().editor?.path === path) setEditor(null)
+    }
+  }, [path])
+
   /** Paste from the right-click menu, which gets no paste event. */
   const pasteFromClipboard = async (at: { x: number; y: number }): Promise<void> => {
     const items = await navigator.clipboard.read().catch(() => [])
@@ -1207,15 +1246,7 @@ function CanvasSurface({
     if (!images.length) return
     // Workspace imports dropped PDFs; images are mine.
     e.preventDefault()
-    const at = worldOf(e)
-    images.forEach((file, i) => {
-      void file.arrayBuffer().then((buf) =>
-        addImage(new Uint8Array(buf), IMAGE_TYPES[file.type], {
-          x: at.x + i * 40,
-          y: at.y + i * 40
-        })
-      )
-    })
+    addFiles(images, worldOf(e))
   }
 
   /** Right-click: shapes to add on empty space, and what can be done with a box or arrow. */
@@ -1275,6 +1306,7 @@ function CanvasSurface({
     } else {
       items = [
         { label: 'Paste', hint: 'Ctrl+V', onSelect: () => void pasteFromClipboard(at) },
+        { label: 'Image from this computer...', onSelect: () => pickImages(at) },
         { separator: true },
         {
           label: 'Text box',
@@ -1379,6 +1411,29 @@ function CanvasSurface({
             <span>{placing?.name ?? 'Shapes'}</span>
             <Icon name="down" />
           </button>
+          <button
+            className="icon-button"
+            title="Add an image from this computer (or paste a screenshot with Ctrl+V)"
+            aria-label="Add an image"
+            onPointerDown={(e) => e.preventDefault()}
+            onClick={() => pickImages()}
+          >
+            <Icon name="image" />
+          </button>
+          <input
+            ref={imagePicker}
+            type="file"
+            accept="image/png,image/jpeg,image/gif,image/webp"
+            multiple
+            hidden
+            aria-label="Images from this computer"
+            onChange={(e) => {
+              if (e.target.files) addFiles([...e.target.files], picked.current ?? viewCenter())
+              // The same file can be picked again later.
+              e.target.value = ''
+              surfaceRef.current?.focus({ preventScroll: true })
+            }}
+          />
           {editingNode?.type === 'text' && (
             <>
               <span className="toolbar-divider" />

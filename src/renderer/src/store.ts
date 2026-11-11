@@ -96,6 +96,8 @@ export interface NoteCursor {
 export interface EditorHandle {
   path: string
   insert(text: string): void
+  /** A picture (a slide snapshot): saved next to the note or canvas and put in. */
+  image(data: Uint8Array, ext: string): Promise<void>
 }
 
 /** Ask the slide viewer to jump to a page. `nonce` makes repeated clicks on one link work. */
@@ -673,7 +675,7 @@ export const useApp = create<AppState>((set, get) => {
     startSnapshot() {
       const { editor, lectureMode, slidesFile, showError } = get()
       if (!editor || !lectureMode || !slidesFile) {
-        showError('Open slides and a summary side by side (Ctrl+Shift+M) to take a snapshot')
+        showError('Open slides and a note or canvas side by side (Ctrl+Shift+M) to take a snapshot')
         return
       }
       set({ snapshotting: true })

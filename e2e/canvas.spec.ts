@@ -989,6 +989,45 @@ test("a new canvas from the slides' menu is named after them and linked", async 
   await expect(row('Patterns')).toHaveCount(2)
 })
 
+test('a slide snapshot and a picked image land on the canvas next to the slides', async () => {
+  await makeSlides(file('Patterns.pdf'), 3)
+  await row('Design of Software Systems').click()
+  await row('les_1').click()
+  await row('Shop').click({ button: 'right' })
+  await page.getByRole('menuitem', { name: 'Link to Patterns' }).click()
+  await row('Patterns').first().click()
+  await page.keyboard.press('Control+Shift+M')
+  await expect(surface()).toBeVisible()
+
+  await page.keyboard.press('Control+Shift+S')
+  const slide = (await page.locator('.pdf-page[data-page="1"]').boundingBox())!
+  await page.mouse.click(slide.x + 100, slide.y + 100)
+  const images = (): Promise<number> =>
+    read('Shop.canvas').then((c) => c.nodes.filter((n) => n.type === 'file').length)
+  await expect.poll(images).toBe(1)
+  await expect(page.locator('.canvas-image')).toHaveCount(1)
+
+  const width = 60
+  const pixels = Buffer.alloc(width * width * 4, 0x90)
+  const png = await app.evaluate(
+    ({ nativeImage }, [bitmap, size]) =>
+      nativeImage
+        .createFromBitmap(Buffer.from(bitmap as number[]), {
+          width: size as number,
+          height: size as number
+        })
+        .toPNG()
+        .toJSON().data,
+    [[...pixels], width] as const
+  )
+  await page.locator('input[aria-label="Images from this computer"]').setInputFiles({
+    name: 'board.png',
+    mimeType: 'image/png',
+    buffer: Buffer.from(png)
+  })
+  await expect.poll(images).toBe(2)
+})
+
 test('a canvas dragged onto a folder moves there; dropped on slides it links to them', async () => {
   await fs.mkdir(file('../les_2'), { recursive: true })
   await makeSlides(file('../les_2/Patterns.pdf'), 3)
