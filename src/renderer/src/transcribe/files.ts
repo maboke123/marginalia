@@ -67,7 +67,7 @@ export const useFiles = create<FilesState>((set, get) => {
         ? jobs.map((j) => (j.id === job.id ? job : j))
         : [...jobs, job]
     })
-    if (job.transcript) void useApp.getState().refresh()
+    if (job.transcript || job.empty) void useApp.getState().refresh()
   })
 
   return {

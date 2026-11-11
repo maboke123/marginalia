@@ -27,6 +27,22 @@ export function pcmOfWav(wav: Buffer): Int16Array {
   throw new Error('Not a WAV file')
 }
 
+// A muted microphone, or computer sound with nothing playing, gives zeros (opus adds a sample
+// of noise at most). Even a quiet room with noise suppression stays well above this.
+const SILENT_RMS = 1e-4 * 32768
+
+/** Whether no half second of a recording has any sound in it. */
+export function isSilent(samples: Int16Array, rate: number): boolean {
+  const frame = Math.round(rate / 2)
+  for (let f = 0; f < samples.length; f += frame) {
+    const end = Math.min(samples.length, f + frame)
+    let energy = 0
+    for (let i = f; i < end; i++) energy += samples[i] * samples[i]
+    if (Math.sqrt(energy / (end - f)) > SILENT_RMS) return false
+  }
+  return true
+}
+
 /**
  * Where to cut a recording into pieces, as sample offsets from `from` to the end (both
  * included). Each cut is at the quietest moment of the seconds before the piece is full.

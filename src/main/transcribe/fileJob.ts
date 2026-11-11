@@ -8,9 +8,17 @@ import { VaultError } from '../vault/names'
 import { timestamp, type Vault } from '../vault/vault'
 import type { Model, Transcriber } from './engine'
 import createMatchWorker from './matchWorker?nodeWorker'
-import { checkpointFile, pcmOfWav, pieceBounds, readCheckpoint, writeCheckpoint } from './pieces'
+import {
+  checkpointFile,
+  isSilent,
+  pcmOfWav,
+  pieceBounds,
+  readCheckpoint,
+  writeCheckpoint
+} from './pieces'
 import {
   headerOf,
+  NOTHING_HEARD,
   paragraphs,
   slideAt,
   slideMarker,
@@ -172,7 +180,7 @@ async function transcribeInPieces(
   wav: string,
   temp: string,
   checkpoint: string | false | undefined
-): Promise<Segment[]> {
+): Promise<{ segments: Segment[]; silent: boolean }> {
   const samples = pcmOfWav(await fs.readFile(wav))
   const total = samples.length / SAMPLE_RATE
   const saved = checkpoint ? await readCheckpoint(checkpoint) : null
@@ -213,19 +221,28 @@ async function transcribeInPieces(
     if (checkpoint) await writeCheckpoint(checkpoint, { done: to, segments })
     report(to)
   }
-  return segments
+  return { segments, silent: !segments.length && isSilent(samples, SAMPLE_RATE) }
+}
+
+export interface FileResult {
+  /** Vault path of the transcript note. */
+  transcript: string
+  /** Whisper found no speech: the note says so instead. */
+  empty: boolean
+  /** Not a sound in the whole recording (a muted microphone, say). */
+  silent: boolean
 }
 
 /**
  * A video or audio recording of a lecture to a transcript note in `folder`, with the sound
- * kept as a small opus file next to it. Returns the note's vault path.
+ * kept as a small opus file next to it.
  */
 export async function transcribeFile(
   vault: Vault,
   engine: Transcriber,
   job: FileJob,
   now = new Date()
-): Promise<string> {
+): Promise<FileResult> {
   const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'marginalia-file-'))
   const wav = path.join(temp, 'audio.wav')
   const opus = path.join(temp, 'audio.webm')
@@ -244,7 +261,13 @@ export async function transcribeFile(
     const checkpoint =
       job.checkpoints &&
       (await checkpointFile(job.checkpoints, job.source, job.model, job.language))
-    const segments = await transcribeInPieces(engine, job, wav, path.dirname(wav), checkpoint)
+    const { segments, silent } = await transcribeInPieces(
+      engine,
+      job,
+      wav,
+      path.dirname(wav),
+      checkpoint
+    )
     job.onProgress('writing', 100)
     let transcript: string
     let header: string
@@ -268,9 +291,9 @@ export async function transcribeFile(
         return transcriptParagraph(p.at, p.segments, marker)
       })
       .join('')
-    await vault.writeText(transcript, header + body)
+    await vault.writeText(transcript, header + (body || `\n${NOTHING_HEARD}\n`))
     if (checkpoint) await fs.rm(checkpoint, { force: true })
-    return transcript
+    return { transcript, empty: !body, silent }
   } finally {
     await fs.rm(temp, { recursive: true, force: true }).catch(() => undefined)
   }

@@ -336,6 +336,13 @@ export class Vault {
     return fs.readFile(path.join(dir, name), 'utf8')
   }
 
+  /** Moves a file of the assets folder next to `nearRel` to the Recycle Bin, if it is there. */
+  async trashAsset(nearRel: string, name: string): Promise<void> {
+    if (!/^[\w.-]+$/.test(name)) throw new VaultError(`Bad asset name: ${name}`)
+    const file = path.join(path.dirname(this.resolveItem(nearRel)), ASSETS_DIR, name)
+    if (await exists(file)) await this.trashItem(file)
+  }
+
   /** Writes (replaces) a small file of the app's own in the assets folder next to `nearRel`. */
   async writeAsset(nearRel: string, name: string, text: string): Promise<string> {
     if (!/^[\w.-]+$/.test(name)) throw new VaultError(`Bad asset name: ${name}`)

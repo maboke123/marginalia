@@ -6,6 +6,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { Vault } from '../vault/vault'
 import type { Transcriber, TranscribeOptions } from './engine'
 import { extractAudio, transcribeFile } from './fileJob'
+import { NOT_TRANSCRIBED, NOTHING_HEARD, untranscribed } from './transcript'
 
 // The slide matching worker starts on import; these tests do not need it.
 vi.mock('./matchWorker?nodeWorker', () => ({ default: () => null }))
@@ -84,7 +85,7 @@ describe.skipIf(!hasFfmpeg)('transcribeFile', () => {
       expect(await fs.readdir(job.checkpoints)).toHaveLength(1)
 
       failOn = 0
-      const note = await transcribeFile(vault, engine, job)
+      const { transcript: note } = await transcribeFile(vault, engine, job)
       // Piece 1 was kept; the run went on with piece 2 and 3, with the text so far as prompt.
       expect(calls).toHaveLength(4)
       expect(calls[2].prompt).toBe('Piece 1.')
@@ -92,6 +93,40 @@ describe.skipIf(!hasFfmpeg)('transcribeFile', () => {
       const text = await vault.readText(note)
       expect(text).toMatch(/Piece 1\.[\s\S]*Piece 3\.[\s\S]*Piece 4\./)
       expect(await fs.readdir(job.checkpoints)).toHaveLength(0)
+    } finally {
+      await fs.rm(dir, { recursive: true, force: true })
+    }
+  }, 60_000)
+  it('marks a silent recording as heard, so it is not started again', async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'marginalia-silent-'))
+    try {
+      await fs.mkdir(path.join(dir, 'vault/ML/assets'), { recursive: true })
+      const source = path.join(dir, 'vault/ML/assets/recording.webm')
+      execFileSync('ffmpeg', [
+        ...['-hide_banner', '-loglevel', 'error', '-f', 'lavfi', '-i', 'anullsrc=d=20'],
+        ...['-c:a', 'libopus', source]
+      ])
+      const header =
+        '# Transcript 9 October 2026, 10:30\n\nAudio: [recording.webm](assets/recording.webm)\n'
+      await fs.writeFile(
+        path.join(dir, 'vault/ML/Transcript.md'),
+        `${header}\n${NOT_TRANSCRIBED}\n`
+      )
+      const vault = new Vault(path.join(dir, 'vault'), async () => undefined)
+      const engine = { transcribe: async () => [] } as unknown as Transcriber
+      const result = await transcribeFile(vault, engine, {
+        folder: 'ML',
+        source,
+        model: 'small',
+        language: 'nl',
+        into: 'ML/Transcript.md',
+        signal: new AbortController().signal,
+        onProgress: () => undefined
+      })
+      expect(result).toEqual({ transcript: 'ML/Transcript.md', empty: true, silent: true })
+      const text = await vault.readText('ML/Transcript.md')
+      expect(text).toContain(NOTHING_HEARD)
+      expect(untranscribed(text)).toBe(false)
     } finally {
       await fs.rm(dir, { recursive: true, force: true })
     }

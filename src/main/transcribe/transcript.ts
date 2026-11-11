@@ -82,6 +82,9 @@ export function paragraphs(
 export const NOT_TRANSCRIBED =
   '*Not transcribed yet. Right-click this note in the sidebar and choose "Transcribe the recording".*'
 
+/** Replaces the text of a transcript whose recording had no speech, so it is not tried again. */
+export const NOTHING_HEARD = '*Nothing was heard in this recording.*'
+
 /**
  * A transcript with a kept recording and no text yet: marked so, or only its header (a live
  * transcription that wrote nothing).

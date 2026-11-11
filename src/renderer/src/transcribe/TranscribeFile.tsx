@@ -161,12 +161,19 @@ function queueOf(jobs: TranscribeJob[]): {
   current: TranscribeJob | undefined
   waiting: TranscribeJob[]
 } {
-  const open = jobs.filter((j) => !j.transcript && !j.error)
+  const open = jobs.filter((j) => !j.transcript && !j.error && !j.empty)
   const current = open.find((j) => j.phase !== 'waiting')
   const waiting = open
     .filter((j) => j.phase === 'waiting')
     .sort((a, b) => (a.place ?? 0) - (b.place ?? 0))
   return { open, current, waiting }
+}
+
+function finishedText(job: TranscribeJob): string {
+  if (job.error) return job.error
+  if (job.empty === 'deleted') return 'Nothing was recorded, so it went to the Recycle Bin'
+  if (job.empty === 'kept') return 'No speech was found in this recording'
+  return 'Transcript ready'
 }
 
 export function TranscribeJobs(): React.JSX.Element | null {
@@ -175,7 +182,12 @@ export function TranscribeJobs(): React.JSX.Element | null {
   if (!jobs.length && !offers.length) return null
   const { cancel, dismiss, transcribeRecorded, dismissOffer, showQueue } = useFiles.getState()
   const { open, current, waiting } = queueOf(jobs)
-  const finished = jobs.filter((j) => j.transcript || j.error)
+  // One bar for all finished ones, the latest shown: a day of recordings done in the background
+  // gave a bar each and filled the screen.
+  const finished = jobs.filter((j) => j.transcript || j.error || j.empty)
+  const latest = finished[finished.length - 1]
+  const more = finished.length - 1
+  const dismissAll = (): void => finished.forEach((j) => dismiss(j.id))
 
   return (
     <>
@@ -218,30 +230,33 @@ export function TranscribeJobs(): React.JSX.Element | null {
           )}
         </div>
       )}
-      {finished.map((job) => (
-        <div key={job.id} className="recording-bar" role="status" aria-label="Transcribing">
-          <span className="recording-time">{job.name}</span>
-          {job.error ? (
-            <span className="recording-progress error">{job.error}</span>
-          ) : (
-            <span className="recording-progress">Transcript ready</span>
+      {latest && (
+        <div className="recording-bar" role="status" aria-label="Transcribing">
+          <span className="recording-time">{latest.name}</span>
+          <span className={latest.error ? 'recording-progress error' : 'recording-progress'}>
+            {finishedText(latest)}
+          </span>
+          {more > 0 && (
+            <span className="recording-progress muted">
+              {more === 1 ? 'and 1 more done' : `and ${more} more done`}
+            </span>
           )}
-          {job.transcript && (
+          {latest.transcript && (
             <button
               className="text-button"
               onClick={() => {
-                useApp.getState().openFile(job.transcript!)
-                dismiss(job.id)
+                useApp.getState().openFile(latest.transcript!)
+                dismiss(latest.id)
               }}
             >
               Show transcript
             </button>
           )}
-          <button className="button" onClick={() => dismiss(job.id)}>
-            Close
+          <button className="button" onClick={more > 0 ? dismissAll : () => dismiss(latest.id)}>
+            {more > 0 ? 'Close all' : 'Close'}
           </button>
         </div>
-      ))}
+      )}
     </>
   )
 }

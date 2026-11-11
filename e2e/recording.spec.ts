@@ -532,6 +532,14 @@ test('the queue shows recordings not started yet, and starts them on battery', a
   await expect(job).toContainText('transcribing')
   await expect(page.getByText('Paused on battery power')).toHaveCount(0)
   await expect(queue).toContainText('Nothing left to transcribe.', { timeout: 30_000 })
+
+  // Finished ones share one bar instead of one each.
+  await queue.getByRole('button', { name: 'Close' }).click()
+  const done = page.getByRole('status', { name: 'Transcribing' })
+  await expect(done).toHaveCount(1)
+  await expect(done).toContainText('and 1 more done')
+  await done.getByRole('button', { name: 'Close all' }).click()
+  await expect(done).toHaveCount(0)
 })
 
 test('recording stops and is kept when the laptop goes to sleep', async () => {

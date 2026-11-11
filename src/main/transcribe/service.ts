@@ -335,7 +335,7 @@ export function registerTranscription(
           update(id, { phase: 'downloading', percent: Math.round((got / total) * 100) })
         })
       }
-      const transcript = await transcribeFile(vault, engine, {
+      const result = await transcribeFile(vault, engine, {
         ...request,
         signal: abort.signal,
         checkpoints: path.join(dataDir, 'transcribe'),
@@ -349,7 +349,16 @@ export function registerTranscription(
             resumed: info.resumed
           })
       })
-      update(id, { transcript, phase: 'writing', percent: 100 })
+      // Recorded with the microphone muted or from the wrong source: nothing worth keeping.
+      if (result.silent && request.into) {
+        await trashRecording(vault, result.transcript)
+        update(id, { empty: 'deleted', phase: 'writing', percent: 100 })
+      } else {
+        const empty = result.empty ? ('kept' as const) : undefined
+        update(id, { transcript: result.transcript, empty, phase: 'writing', percent: 100 })
+      }
+      // Whatever went wrong, the app must not keep starting the same recording by itself.
+      if (job.note && (await untranscribed(vault, job.note))) skipped.add(job.note)
     } catch (err) {
       const { job } = jobs.get(id)!
       if (job.auto && job.note && !abort.signal.aborted) skipped.add(job.note)
@@ -360,6 +369,18 @@ export function registerTranscription(
       running = null
       void runNext()
     }
+  }
+
+  /** The transcript with its audio and slide timeline, to the Recycle Bin. */
+  async function trashRecording(vault: Vault, note: string): Promise<void> {
+    const audio = audioOf(await vault.readText(note))
+      ?.split('/')
+      .pop()
+    if (audio) {
+      await vault.trashAsset(note, audio)
+      await vault.trashAsset(note, timelineName(audio))
+    }
+    await vault.trash(note)
   }
 
   // A waiting job just leaves the queue; the running one stops whisper or ffmpeg, and the

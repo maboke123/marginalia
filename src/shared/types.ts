@@ -368,6 +368,11 @@ export interface TranscribeJob {
   resumed?: boolean
   /** Set when done. */
   transcript?: string
+  /**
+   * Done, but no speech was found: the note says so (`kept`), or the recording was pure
+   * silence and went to the Recycle Bin with its note (`deleted`, no `transcript` then).
+   */
+  empty?: 'kept' | 'deleted'
   error?: string
   /** The transcript note of a recording made in the app. */
   note?: string

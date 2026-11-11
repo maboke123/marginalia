@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { wavFromPcm } from './wav'
-import { pcmOfWav, pieceBounds } from './pieces'
+import { isSilent, pcmOfWav, pieceBounds } from './pieces'
 
 const RATE = 1000
 
@@ -44,5 +44,19 @@ describe('pcmOfWav', () => {
     ])
     const withList = Buffer.concat([wav.subarray(0, 36), list, wav.subarray(36)])
     expect([...pcmOfWav(withList)]).toEqual([...samples])
+  })
+})
+
+describe('isSilent', () => {
+  it('holds for a muted microphone, not for a quiet room', () => {
+    expect(isSilent(new Int16Array(30 * RATE), RATE)).toBe(true)
+    // Opus leaves a stray sample of noise in a muted recording.
+    const muted = new Int16Array(30 * RATE)
+    muted[1234] = 2
+    expect(isSilent(muted, RATE)).toBe(true)
+    const room = new Int16Array(30 * RATE)
+    for (let i = 0; i < room.length; i++) room[i] = i % 2 ? 20 : -20
+    expect(isSilent(room, RATE)).toBe(false)
+    expect(isSilent(speech(30, []), RATE)).toBe(false)
   })
 })
