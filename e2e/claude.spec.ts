@@ -61,6 +61,7 @@ interface LogEntry {
   images: number
   question: string
   instructions: string
+  readFolders: string[]
   memory: { me: string; course: string; courseNote: string }
 }
 
@@ -360,12 +361,20 @@ test('my instructions and the lesson colours go along with a question', async ()
   await page.keyboard.press('Control+L')
   await page.getByRole('button', { name: 'Claude settings' }).click()
   await page.getByRole('textbox', { name: 'Instructions for Claude' }).fill('Orange: followed.')
+  // A folder outside the vault, like the code of a project.
+  const code = path.join(env.dir, 'oss-project')
+  await app.evaluate(({ dialog }, folder) => {
+    dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [folder] })
+  }, code)
+  await page.getByRole('button', { name: 'Add a folder...' }).click()
+  await expect(page.locator('.claude-read-folders')).toContainText('oss-project')
   await page.getByRole('button', { name: 'Done' }).click()
 
   await ask('Where am I?')
   await expect(answers()).toHaveCount(1)
   const [first] = await readLog()
   expect(first.instructions).toBe('Orange: followed.')
+  expect(first.readFolders).toEqual([code])
   expect(first.text).toContain(`Folder colours: ${section}: orange`)
 })
 

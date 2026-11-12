@@ -1,3 +1,4 @@
+import path from 'path'
 /** Appended to the Claude Code system prompt (SPEC section 6, "Behaviour"). */
 export const SYSTEM_APPEND = `You are a study assistant inside my lecture-notes app.
 - The context packet says what I am looking at; assume questions are about it.
@@ -163,6 +164,27 @@ export function withMemory(
 }
 
 /** A system prompt with the instructions I wrote in the Claude settings after it. */
+/** Whether a read tool's path lies inside one of the folders I let Claude read. */
+export function inReadFolder(toolInput: Record<string, unknown>, folders: string[]): boolean {
+  const target = toolInput.file_path ?? toolInput.path
+  if (typeof target !== 'string' || !path.isAbsolute(target)) return false
+  const resolved = path.resolve(target).toLowerCase()
+  return folders.some((f) => {
+    const folder = path.resolve(f).toLowerCase()
+    return resolved === folder || resolved.startsWith(folder + path.sep)
+  })
+}
+
+/** Tells Claude which folders outside the vault it may read, by absolute path. */
+export function withReadFolders(prompt: string, folders: string[]): string {
+  if (!folders.length) return prompt
+  return (
+    `${prompt}\n\nBesides the vault you may read these folders of mine with Read, Glob and ` +
+    `Grep (use their absolute paths; you cannot change them):\n` +
+    folders.map((f) => `- ${f}`).join('\n')
+  )
+}
+
 export function withInstructions(prompt: string, instructions: string): string {
   const mine = instructions.trim()
   return mine

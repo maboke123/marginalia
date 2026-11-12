@@ -4,7 +4,15 @@ import type { StoredClaudeSettings } from '../config'
 import { claudeEnvironment, claudeExecutable } from './cli'
 import { moveSession, projectsDir } from './sessions'
 import { toChatEvents, type StreamState } from './events'
-import { LEARN_PROMPT, SYSTEM_APPEND, withInstructions, withMemory, type Memory } from './prompt'
+import {
+  LEARN_PROMPT,
+  SYSTEM_APPEND,
+  withInstructions,
+  withMemory,
+  inReadFolder,
+  withReadFolders,
+  type Memory
+} from './prompt'
 import { APP_TOOLS, appToolServer, LEARN_TOOL_NAMES, LEARN_TOOLS, type CallTool } from './tools'
 
 export interface AgentInput {
@@ -26,6 +34,7 @@ export interface AgentInput {
 export type Agent = (input: AgentInput) => AsyncIterable<ChatEvent>
 
 const READ_TOOLS = ['Read', 'Glob', 'Grep']
+
 const WEB_TOOLS = ['WebSearch', 'WebFetch']
 
 /**
@@ -74,26 +83,35 @@ export const claudeAgent: Agent = async function* (input) {
     systemPrompt: {
       type: 'preset',
       preset: 'claude_code',
-      append: withMemory(withInstructions(SYSTEM_APPEND, settings.instructions), input.memory, {
-        tool: true
-      })
+      append: withMemory(
+        withReadFolders(
+          withInstructions(SYSTEM_APPEND, settings.instructions),
+          settings.readFolders
+        ),
+        input.memory,
+        { tool: true }
+      )
     },
     // My own CLAUDE.md, hooks and plugins are for coding, not for this app.
     settingSources: [],
     // No Bash, Write or Edit at all: every change goes through the app tools.
     tools: builtIn,
+    // As --add-dir: reads there are allowed like reads in the vault.
+    additionalDirectories: settings.readFolders,
     mcpServers: { marginalia: appToolServer(sdk, input.callTool) },
     // Reads inside the vault (the working directory) are allowed by default. Everything else
     // asks, and is answered here. Read, Glob and Grep must not go in allowedTools: a bare
     // entry approves them for every path on the disk.
     permissionMode: 'default',
     canUseTool: async (name, toolInput) =>
-      allowed.has(name)
+      allowed.has(name) ||
+      (READ_TOOLS.includes(name) && inReadFolder(toolInput, settings.readFolders))
         ? { behavior: 'allow', updatedInput: toolInput }
         : {
             behavior: 'deny',
             message:
-              'Only files inside the notes vault can be read, and changes go through the app tools.'
+              'Only files inside the notes vault (and folders added in the Claude settings) ' +
+              'can be read, and changes go through the app tools.'
           },
     includePartialMessages: true,
     abortController,

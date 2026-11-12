@@ -1214,6 +1214,44 @@ function SettingsView({ onDone }: { onDone(): void }): React.JSX.Element {
           </p>
         </div>
       </div>
+      <div className="field">
+        <span>Folders Claude may read</span>
+        <div className="claude-instructions">
+          {settings.readFolders.length > 0 && (
+            <ul className="claude-read-folders">
+              {settings.readFolders.map((folder) => (
+                <li key={folder}>
+                  <span title={folder}>{folder}</span>
+                  <button
+                    className="text-button"
+                    onClick={() =>
+                      void save({ readFolders: settings.readFolders.filter((f) => f !== folder) })
+                    }
+                  >
+                    Remove
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+          <button
+            className="button"
+            onClick={() =>
+              void window.api.claude.pickReadFolder().then((folder) => {
+                if (folder && !settings.readFolders.includes(folder)) {
+                  void save({ readFolders: [...settings.readFolders, folder] })
+                }
+              })
+            }
+          >
+            Add a folder...
+          </button>
+          <p className="muted">
+            Outside the vault, like the code of a course project. The chat can read them, never
+            change them.
+          </p>
+        </div>
+      </div>
       <MemoryField />
       <PlaybookField />
       <div className="field">

@@ -131,6 +131,7 @@ const api: MarginaliaApi = {
   claude: {
     settings: () => invoke('claude:settings'),
     setSettings: (update) => invoke('claude:setSettings', update),
+    pickReadFolder: () => invoke('claude:pickReadFolder'),
     send: (request) => invoke('claude:send', request),
     stop: () => invoke('claude:stop'),
     complete: (request) => invoke('claude:complete', request),

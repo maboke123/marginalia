@@ -213,6 +213,8 @@ export interface MarginaliaApi {
   claude: {
     settings(): Promise<ClaudeSettings>
     setSettings(update: ClaudeSettingsUpdate): Promise<ClaudeSettings>
+    /** A folder dialog for a folder outside the vault the chat may read; null when cancelled. */
+    pickReadFolder(): Promise<string | null>
     /** Resolves when Claude has finished answering; the answer arrives through onEvent. */
     send(request: ChatRequest): Promise<void>
     stop(): Promise<void>

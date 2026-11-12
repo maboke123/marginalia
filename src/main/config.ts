@@ -28,7 +28,14 @@ export function claudeSettings(raw: unknown): StoredClaudeSettings {
     askBeforeEditing: typeof r.askBeforeEditing === 'boolean' ? r.askBeforeEditing : true,
     openEditedFiles: r.openEditedFiles === true,
     webSearch: r.webSearch === true,
-    instructions: typeof r.instructions === 'string' ? r.instructions : ''
+    instructions: typeof r.instructions === 'string' ? r.instructions : '',
+    readFolders: Array.isArray(r.readFolders)
+      ? [
+          ...new Set(
+            r.readFolders.filter((f): f is string => typeof f === 'string' && path.isAbsolute(f))
+          )
+        ]
+      : []
   }
 }
 

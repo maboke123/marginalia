@@ -24,6 +24,8 @@ export interface ClaudeSettings {
   webSearch: boolean
   /** My own words added to every Claude prompt (chat, /claude and the terminal). */
   instructions: string
+  /** Folders outside the vault the chat may read too (my code for a course project). */
+  readFolders: string[]
   /** An API key is stored; it is never sent back to the renderer. */
   hasApiKey: boolean
 }
@@ -41,6 +43,7 @@ export const DEFAULT_CLAUDE_SETTINGS: ClaudeSettings = {
   openEditedFiles: false,
   webSearch: false,
   instructions: '',
+  readFolders: [],
   hasApiKey: false
 }
 

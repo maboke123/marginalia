@@ -2486,6 +2486,26 @@ button.claude-proposal-label:hover {
   margin-bottom: 6px;
 }
 
+.claude-read-folders {
+  margin: 0 0 6px;
+  padding: 0;
+  list-style: none;
+}
+
+.claude-read-folders li {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.claude-read-folders li > span {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .playbook {
   display: flex;
   flex-direction: column;

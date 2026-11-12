@@ -1,7 +1,7 @@
 import { randomUUID } from 'crypto'
 import fs from 'fs/promises'
 import path from 'path'
-import { app, BrowserWindow, ipcMain, safeStorage } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, safeStorage } from 'electron'
 import { pathToFileURL } from 'url'
 import type {
   CompleteRequest,
@@ -435,6 +435,18 @@ export function registerClaude(
       apiKey: encrypted === undefined ? c.apiKey : encrypted
     }))
     return settings()
+  })
+
+  handle('claude:pickReadFolder', async () => {
+    const options: Electron.OpenDialogOptions = {
+      title: 'A folder Claude may read',
+      properties: ['openDirectory']
+    }
+    const win = getWindow()
+    const result = win
+      ? await dialog.showOpenDialog(win, options)
+      : await dialog.showOpenDialog(options)
+    return result.canceled ? null : (result.filePaths[0] ?? null)
   })
 
   handle('claude:send', async (request: ChatRequest) => {

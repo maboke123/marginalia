@@ -240,6 +240,7 @@ export async function* agent(input) {
     }),
     question,
     instructions: input.settings.instructions,
+    readFolders: input.settings.readFolders,
     memory: input.memory
   })
   yield { type: 'done' }
