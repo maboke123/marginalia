@@ -1227,3 +1227,28 @@ test('/claude at the end of a list item sends and its blocks render', async () =
   await page.keyboard.type('/')
   await expect(page.locator('.cm-tooltip-autocomplete')).toBeVisible()
 })
+
+test('a history full of charts opens at its end and stays there while they draw', async () => {
+  await app.close()
+  const chart = (i: number): string =>
+    `Question ${i}: $$H(S) = -\\sum_i p_i \\log_2 p_i$$\n\n\`\`\`mermaid\nflowchart TD\n` +
+    `  A${i}[Outlook] --> B${i}[Humidity]\n  A${i} --> C${i}[Wind]\n\`\`\``
+  await fs.mkdir(path.join(env.vault, '.marginalia'), { recursive: true })
+  await fs.writeFile(
+    path.join(env.vault, '.marginalia', 'state.json'),
+    JSON.stringify({ chats: { [section]: 'charts' } })
+  )
+  await fs.writeFile(
+    fakeLog(env),
+    JSON.stringify({ charts: Array.from({ length: 12 }, (_, i) => ({ question: chart(i) })) })
+  )
+  ;({ app, page } = await launch(env))
+  await openSlides()
+  await page.keyboard.press('Control+L')
+  await expect(page.locator('.claude-messages svg')).toHaveCount(12, { timeout: 20_000 })
+  const gap = (): Promise<number> =>
+    page
+      .locator('.claude-messages')
+      .evaluate((el) => el.scrollHeight - el.scrollTop - el.clientHeight)
+  await expect.poll(gap).toBeLessThan(2)
+})

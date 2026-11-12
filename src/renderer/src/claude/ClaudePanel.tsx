@@ -253,6 +253,10 @@ function MessageList({
 }): React.JSX.Element {
   const ref = useRef<HTMLDivElement>(null)
   const pinned = useRef(true)
+  const lastTouch = useRef(0)
+  const touched = (): void => {
+    lastTouch.current = performance.now()
+  }
   const [menu, setMenu] = useState<{ x: number; y: number; text: string } | null>(null)
   const [zoom, setZoom] = useState(() => readZoom(ZOOM_KEY))
 
@@ -276,6 +280,18 @@ function MessageList({
     const el = ref.current!
     if (pinned.current) el.scrollTop = el.scrollHeight
   }, [messages])
+
+  // Charts, math fonts and images finish after the text: on a fresh start a history with a
+  // dozen charts grew in a dozen steps, each moving the list, and stopped short of the end.
+  useEffect(() => {
+    const el = ref.current!
+    const observer = new ResizeObserver(() => {
+      if (pinned.current) el.scrollTop = el.scrollHeight
+    })
+    observer.observe(el)
+    if (el.firstElementChild) observer.observe(el.firstElementChild)
+    return () => observer.disconnect()
+  }, [])
 
   const onClick = (e: React.MouseEvent): void => {
     const target = e.target as HTMLElement
@@ -339,8 +355,18 @@ function MessageList({
       onMouseUp={onMouseUp}
       onContextMenu={onContextMenu}
       onCopy={onCopy}
+      onWheel={touched}
+      onPointerDown={touched}
+      onKeyDown={touched}
       onScroll={(e) => {
         const el = e.currentTarget
+        // Only my own scrolling unpins the list. Chromium also scrolls it to keep a chart in
+        // place while the ones above it draw; that scroll would otherwise leave it short of
+        // the end.
+        if (pinned.current && performance.now() - lastTouch.current > 500) {
+          el.scrollTop = el.scrollHeight
+          return
+        }
         pinned.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40
       }}
     >
