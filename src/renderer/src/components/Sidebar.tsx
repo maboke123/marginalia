@@ -144,6 +144,15 @@ export function Sidebar(): React.JSX.Element {
           onSelect: () => void useFiles.getState().transcribe(node.path)
         },
         {
+          label: 'Export folder as PDFs...',
+          hint: 'Slides with their annotations, notes and canvases, in a new folder',
+          onSelect: () => void app.exportFolder(node.path, false)
+        },
+        {
+          label: 'Export folder as a zip...',
+          onSelect: () => void app.exportFolder(node.path, true)
+        },
+        {
           label: 'Import notes or a transcript...',
           hint: "A friend's transcript, or the lecturer's (.vtt, .srt, .txt): linked to the slides",
           onSelect: () => void pickAndImport(node.path)
@@ -162,7 +171,10 @@ export function Sidebar(): React.JSX.Element {
       if (node.kind === 'pdf') {
         items.push({ label: 'Export annotated PDF...', onSelect: () => app.exportPdf(node.path) })
       } else if (node.kind === 'canvas') {
-        items.push({ label: 'Export as PDF...', onSelect: () => app.exportCanvas(node.path) })
+        items.push(
+          { label: 'Preview as PDF', onSelect: () => app.showPreview(node.path) },
+          { label: 'Export as PDF...', onSelect: () => app.exportCanvas(node.path) }
+        )
       } else {
         items.push(
           { label: 'Preview as PDF', onSelect: () => app.showPreview(node.path) },

@@ -16,7 +16,8 @@ import {
   type Side
 } from './lib/grid'
 import { canvasFrom } from '../../shared/canvas'
-import { noteHtml } from './lib/notePdf'
+import { noteHtml, pageHtmlOf } from './lib/notePdf'
+import { exportNames, type ExportItem } from '../../shared/exportNames'
 import { slideCandidates } from './transcribe/candidates'
 import { slideTexts } from './transcribe/slideTexts'
 import {
@@ -212,6 +213,8 @@ interface AppState {
   exportNote(path: string): Promise<void>
   /** Saves the canvas, then prints all of it to a one-page PDF where I choose. */
   exportCanvas(path: string): Promise<void>
+  /** Every slide deck (annotated), note and canvas in a folder as PDFs: a new folder or a zip. */
+  exportFolder(folder: string, zip: boolean): Promise<void>
   showPreview(path: string | null): void
   setPdfView(view: PdfView | null): void
   setPdfSelection(selection: PdfSelection | null): void
@@ -745,6 +748,46 @@ export const useApp = create<AppState>((set, get) => {
         api.exportNote(path, await noteHtml(path, await api.readText(path)))
       )
       get().showNotice(done ? `Exported to ${done}` : null, done ? exportActions(done) : [])
+    },
+
+    async exportFolder(folder, zip) {
+      await flushAll()
+      const items: ExportItem[] = []
+      const walk = (nodes: VaultNode[]): void => {
+        for (const n of nodes) {
+          if (n.children) walk(n.children)
+          else if (n.kind === 'pdf' || n.kind === 'markdown' || n.kind === 'canvas') {
+            items.push({ path: n.path, kind: n.kind })
+          }
+        }
+      }
+      walk(findNode(get().nodes, folder)?.children ?? [])
+      if (!items.length) {
+        get().showError('This folder has no slides, notes or canvases to export')
+        return
+      }
+      const job = await attempt(() => api.startFolderExport(folder, zip))
+      if (!job) return
+      const names = exportNames(folder, items)
+      const failed: string[] = []
+      let sent = 0
+      for (const [i, item] of items.entries()) {
+        const name = names.get(item.path)!
+        get().showNotice(`Exporting ${i + 1} of ${items.length}: ${name}`)
+        try {
+          const html = item.kind === 'pdf' ? null : await pageHtmlOf(item.path)
+          await api.exportFolderItem(job.id, { ...item, name }, html)
+          sent++
+        } catch (err) {
+          failed.push(`${name}: ${err instanceof Error ? err.message : String(err)}`)
+        }
+      }
+      const target = await attempt(() => api.finishFolderExport(job.id))
+      get().showNotice(
+        target ? `Exported ${sent} of ${items.length} files to ${target}` : null,
+        target ? exportActions(target) : []
+      )
+      if (failed.length) get().showError(`Not exported: ${failed.join('; ')}`)
     },
 
     showPreview: (previewNote) => set({ previewNote }),

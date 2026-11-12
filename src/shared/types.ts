@@ -19,6 +19,9 @@ import type {
   ToolReply
 } from './claude'
 
+export type { ExportItem } from './exportNames'
+import type { ExportItem } from './exportNames'
+
 export interface VaultNode {
   /** File or folder name on disk, including extension. */
   name: string
@@ -136,6 +139,19 @@ export interface MarginaliaApi {
     exportNote(note: string, html: string): Promise<string | null>
     /** The PDF Export as PDF would write for this page (from noteHtml), without saving it. */
     printNote(html: string): Promise<Uint8Array>
+    /**
+     * Asks where a folder export goes (a new folder in the one picked, or a zip file); null when
+     * cancelled. Then each file is sent with exportFolderItem, and finishFolderExport writes the
+     * zip and returns where it all went.
+     */
+    startFolderExport(folder: string, zip: boolean): Promise<{ id: string; target: string } | null>
+    /** One file of a folder export: slides are annotated by main, notes and canvases sent as HTML. */
+    exportFolderItem(
+      id: string,
+      item: ExportItem & { name: string },
+      html: string | null
+    ): Promise<void>
+    finishFolderExport(id: string): Promise<string>
     /** Opens a file exported in this session with its default app, or shows it in Explorer. */
     openExport(file: string): Promise<void>
     revealExport(file: string): Promise<void>

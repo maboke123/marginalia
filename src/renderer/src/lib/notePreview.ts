@@ -2,13 +2,12 @@ import type { ChatImage } from '../../../shared/claude'
 import { toShot } from '../claude/screenshot'
 import { loadPdf } from '../pdf/pdfjs'
 import { flushAll } from './flush'
-import { noteHtml } from './notePdf'
+import { pageHtmlOf } from './notePdf'
 
-/** The PDF that Export as PDF would write for this note, as it is saved now. */
+/** The PDF that Export as PDF would write for this note or canvas, as it is saved now. */
 export async function printNote(path: string): Promise<Uint8Array> {
   await flushAll()
-  const html = await noteHtml(path, await window.api.vault.readText(path))
-  return window.api.vault.printNote(html)
+  return window.api.vault.printNote(await pageHtmlOf(path))
 }
 
 /** Pages of a PDF drawn `width` pixels wide: all of them, or only the numbers in `only`. */

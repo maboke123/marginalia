@@ -1,4 +1,4 @@
-import { createHash } from 'crypto'
+import { createHash, randomUUID } from 'crypto'
 import { app, BrowserWindow, dialog, ipcMain, nativeTheme, shell } from 'electron'
 import { promises as fs } from 'fs'
 import path from 'path'
@@ -16,6 +16,8 @@ import type {
 import { ConfigStore } from './config'
 import { exportAnnotated } from './export/exportPdf'
 import { fileImages, printHtml } from './export/printNote'
+import { zipFiles, type ZipEntry } from './export/zip'
+import type { ExportItem } from '../shared/exportNames'
 import { appendFeedback, ensureFeedbackFile } from './feedback'
 import { writeFileAtomic } from './vault/atomic'
 import { SearchIndex } from './search/searchIndex'
@@ -268,6 +270,92 @@ export function registerIpc(
     await writeFileAtomic(choice.filePath, await printNote(html))
     exported.add(choice.filePath)
     return choice.filePath
+  })
+
+  // A folder exported as PDFs, into a new folder or one zip. The renderer sends the files one
+  // by one (it makes the HTML of notes and canvases); only targets chosen in the dialog count.
+  const folderExports = new Map<string, { target: string; zip: ZipEntry[] | null }>()
+  handle('vault:startFolderExport', async (folder: string, zip: boolean) => {
+    const name = path.basename(current().resolve(folder))
+    const win = getWindow()
+    let target: string
+    if (zip) {
+      const options: Electron.SaveDialogOptions = {
+        title: 'Export the folder as a zip',
+        defaultPath: path.join(app.getPath('downloads'), `${name}.zip`),
+        filters: [{ name: 'Zip', extensions: ['zip'] }]
+      }
+      const choice = win
+        ? await dialog.showSaveDialog(win, options)
+        : await dialog.showSaveDialog(options)
+      if (choice.canceled || !choice.filePath) return null
+      target = choice.filePath
+    } else {
+      const options: Electron.OpenDialogOptions = {
+        title: `Export ${name} as PDFs into...`,
+        defaultPath: app.getPath('downloads'),
+        properties: ['openDirectory', 'createDirectory']
+      }
+      const choice = win
+        ? await dialog.showOpenDialog(win, options)
+        : await dialog.showOpenDialog(options)
+      if (choice.canceled || !choice.filePaths[0]) return null
+      // A new folder with the folder's name, so nothing there is overwritten.
+      target = path.join(choice.filePaths[0], name)
+      for (
+        let n = 2;
+        await fs.stat(target).then(
+          () => true,
+          () => false
+        );
+        n++
+      ) {
+        target = path.join(choice.filePaths[0], `${name} (${n})`)
+      }
+    }
+    const id = randomUUID()
+    folderExports.set(id, { target, zip: zip ? [] : null })
+    return { id, target }
+  })
+
+  handle(
+    'vault:exportFolderItem',
+    async (id: string, item: ExportItem & { name: string }, html: string | null) => {
+      const job = folderExports.get(id)
+      if (!job) throw new VaultError('This export is over')
+      const name = item.name.replace(/\\/g, '/')
+      if (path.isAbsolute(name) || name.split('/').includes('..') || !/\.pdf$/i.test(name)) {
+        throw new VaultError(`Bad export name: ${item.name}`)
+      }
+      let bytes: Uint8Array
+      if (item.kind === 'pdf') {
+        bytes = (await annotated(item.path, (await current().readAnnotations(item.path)).file))
+          .bytes
+      } else {
+        if (html === null) throw new VaultError(`No page for ${item.path}`)
+        bytes = await printNote(html)
+      }
+      if (job.zip) {
+        job.zip.push({
+          name: `${path.basename(job.target).replace(/\.zip$/i, '')}/${name}`,
+          data: bytes
+        })
+        return
+      }
+      const file = path.join(job.target, ...name.split('/'))
+      await fs.mkdir(path.dirname(file), { recursive: true })
+      await writeFileAtomic(file, bytes)
+    }
+  )
+
+  handle('vault:finishFolderExport', async (id: string) => {
+    const job = folderExports.get(id)
+    if (!job) throw new VaultError('This export is over')
+    folderExports.delete(id)
+    if (job.zip) await writeFileAtomic(job.target, zipFiles(job.zip))
+    else await fs.mkdir(job.target, { recursive: true })
+    exported.add(job.target)
+    return job.target
   })
 
   // Only files exported in this session: the renderer cannot open anything else this way.

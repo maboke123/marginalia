@@ -11,7 +11,11 @@ export function NotePreview({ path }: { path: string }): React.JSX.Element {
   const [error, setError] = useState<string | null>(null)
   const dialogRef = useRef<HTMLDivElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
-  const name = path.split('/').pop()!.replace(/\.md$/i, '')
+  const name = path
+    .split('/')
+    .pop()!
+    .replace(/\.(md|canvas)$/i, '')
+  const canvas = /\.canvas$/i.test(path)
   const close = (): void => useApp.getState().showPreview(null)
 
   useEffect(() => {
@@ -50,7 +54,7 @@ export function NotePreview({ path }: { path: string }): React.JSX.Element {
   const status = error
     ? `Could not make the preview: ${error}`
     : pages
-      ? `${pages} ${pages === 1 ? 'page' : 'pages'}, A4`
+      ? `${pages} ${pages === 1 ? 'page' : 'pages'}${canvas ? ', the size of the canvas' : ', A4'}`
       : 'Making the preview...'
 
   return (
@@ -72,7 +76,9 @@ export function NotePreview({ path }: { path: string }): React.JSX.Element {
             className="text-button"
             onClick={() => {
               close()
-              void useApp.getState().exportNote(path)
+              void (canvas
+                ? useApp.getState().exportCanvas(path)
+                : useApp.getState().exportNote(path))
             }}
           >
             Export as PDF...

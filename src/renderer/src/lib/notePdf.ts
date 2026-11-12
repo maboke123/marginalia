@@ -1,3 +1,4 @@
+import { canvasFrom } from '../../../shared/canvas'
 import { resolveLink, vaultUrl } from '../editor/links'
 import { drawDiagrams } from './diagrams'
 import { fontSize, frontMatter, imageAttributes, pageMargin } from './frontMatter'
@@ -141,4 +142,12 @@ export async function noteHtml(notePath: string, source: string): Promise<string
   } finally {
     root.remove()
   }
+}
+
+/** The page a note or canvas prints as. A canvas is loaded on first use. */
+export async function pageHtmlOf(path: string): Promise<string> {
+  const text = await window.api.vault.readText(path)
+  if (!/\.canvas$/i.test(path)) return noteHtml(path, text)
+  const { canvasHtml } = await import('../canvas/exportHtml')
+  return canvasHtml(path, canvasFrom(text))
 }

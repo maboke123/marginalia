@@ -1625,6 +1625,14 @@ function CanvasSurface({
         </div>
         <button
           className="icon-button"
+          title="See how the canvas looks as a PDF"
+          aria-label="Preview as PDF"
+          onClick={() => useApp.getState().showPreview(path)}
+        >
+          <Icon name="pdf" />
+        </button>
+        <button
+          className="icon-button"
           title="Export this canvas as a PDF"
           aria-label="Export as PDF"
           onClick={() => useApp.getState().exportCanvas(path)}

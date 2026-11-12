@@ -222,3 +222,56 @@ test('a note can be previewed as a PDF before exporting it', async () => {
   await page.keyboard.press('Escape')
   await expect(dialog).toHaveCount(0)
 })
+
+test('a canvas can be previewed, and a whole folder exported as PDFs or a zip', async () => {
+  const dir = path.join(env.vault, section)
+  await fs.writeFile(
+    path.join(dir, 'slides.md'),
+    '# Decision trees\n\nSplit on information gain.\n'
+  )
+  await fs.mkdir(path.join(dir, 'exercises'))
+  await fs.writeFile(
+    path.join(dir, 'exercises', 'Tree.canvas'),
+    JSON.stringify({
+      nodes: [{ id: 'a', type: 'text', text: 'Outlook', x: 0, y: 0, width: 200, height: 80 }],
+      edges: []
+    })
+  )
+
+  await page.locator('.tree-row', { hasText: 'Machine Learning' }).click()
+  await page.locator('.tree-row', { hasText: 'B2 Decision trees' }).click()
+  await page.locator('.tree-row', { hasText: 'exercises' }).click()
+  await page.locator('.tree-row', { hasText: /^Tree$/ }).click()
+  await page.getByRole('button', { name: 'Preview as PDF' }).click()
+  const dialog = page.getByRole('dialog', { name: 'PDF preview' })
+  await expect(dialog.getByRole('status')).toHaveText('1 page, the size of the canvas', {
+    timeout: 20_000
+  })
+  await page.keyboard.press('Escape')
+
+  const out = path.join(env.dir, 'out')
+  await fs.mkdir(out)
+  await app.evaluate(
+    ({ dialog }, [folder, zip]) => {
+      dialog.showOpenDialog = (async () => ({ canceled: false, filePaths: [folder] })) as never
+      dialog.showSaveDialog = (async () => ({ canceled: false, filePath: zip })) as never
+    },
+    [out, path.join(out, 'B2.zip')]
+  )
+  const folderRow = page.locator('.tree-row', { hasText: 'B2 Decision trees' })
+  await folderRow.click({ button: 'right' })
+  await page.getByRole('menuitem', { name: 'Export folder as PDFs...' }).click()
+  await expect(page.getByRole('status')).toContainText('Exported 3 of 3 files', { timeout: 30_000 })
+  const made = path.join(out, 'B2 Decision trees')
+  expect((await fs.readdir(made)).sort()).toEqual(['exercises', 'slides (notes).pdf', 'slides.pdf'])
+  expect(await fs.readdir(path.join(made, 'exercises'))).toEqual(['Tree.pdf'])
+  const slides = await PDFDocument.load(await fs.readFile(path.join(made, 'slides.pdf')))
+  expect(slides.getPageCount()).toBe(3)
+
+  await folderRow.click({ button: 'right' })
+  await page.getByRole('menuitem', { name: 'Export folder as a zip...' }).click()
+  await expect(page.getByRole('status')).toContainText('B2.zip', { timeout: 30_000 })
+  const zip = await fs.readFile(path.join(out, 'B2.zip'))
+  expect(zip.subarray(0, 4).toString('hex')).toBe('504b0304')
+  expect(zip.includes(Buffer.from('B2/exercises/Tree.pdf'))).toBe(true)
+})
