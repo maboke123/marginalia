@@ -1,6 +1,8 @@
 import {
   edgeStyle,
+  endRect,
   facingSides,
+  isShape,
   type CanvasEdge,
   type CanvasNode,
   type Marker,
@@ -23,6 +25,7 @@ const NORMALS: Record<Side, Point> = {
 const MARKER_LENGTH: Record<Marker, number> = {
   none: 0,
   arrow: 0,
+  'arrow-filled': 13,
   triangle: 16,
   diamond: 20,
   'diamond-filled': 20
@@ -79,6 +82,8 @@ function markerShape(marker: Marker, tip: Point, dir: Point): MarkerShape | null
   switch (marker) {
     case 'arrow':
       return { d: `M${at(13, 7)} L${t} L${at(13, -7)}`, fill: 'none' }
+    case 'arrow-filled':
+      return { d: `M${t} L${at(13, 6)} L${at(13, -6)} Z`, fill: 'line' }
     case 'triangle':
       return { d: `M${t} L${at(16, 9)} L${at(16, -9)} Z`, fill: 'background' }
     case 'diamond':
@@ -587,9 +592,11 @@ export type Ports = Map<string, { from: number; to: number }>
 export function edgePorts(edges: CanvasEdge[], byId: Map<string, CanvasNode>): Ports {
   const sides = new Map<string, { edge: string; end: 'from' | 'to'; along: number }[]>()
   for (const edge of edges) {
-    const from = byId.get(edge.fromNode)
-    const to = byId.get(edge.toNode)
-    if (!from || !to) continue
+    const fromNode = byId.get(edge.fromNode)
+    const toNode = byId.get(edge.toNode)
+    if (!fromNode || !toNode) continue
+    const from = { ...endRect(fromNode), id: fromNode.id }
+    const to = { ...endRect(toNode), id: toNode.id }
     const [fromSide, toSide] = facingSides(from, to)
     const ends = [
       ['from', from, edge.fromSide ?? fromSide, to],
@@ -624,22 +631,27 @@ export function edgeGeometries(
   byId: Map<string, CanvasNode>
 ): Map<string, EdgeGeometry> {
   const ports = edgePorts(edges, byId)
-  const boxes = [...byId.values()].filter((n) => n.type !== 'group')
+  // Arrows cross lifelines and fragments all the time; only their heads are in the way.
+  const boxes = [...byId.values()]
+    .filter((n) => n.type !== 'group' && !isShape(n, 'fragment'))
+    .map(endRect)
   const out = new Map<string, EdgeGeometry>()
   const elbows: { id: string; sides: [Side, Side]; markers: [Marker, Marker] }[] = []
   const routes: Point[][] = []
   const taken: Segment[] = []
   for (const edge of edges) {
-    const from = byId.get(edge.fromNode)
-    const to = byId.get(edge.toNode)
-    if (!from || !to) continue
+    const fromNode = byId.get(edge.fromNode)
+    const toNode = byId.get(edge.toNode)
+    if (!fromNode || !toNode) continue
+    const from = endRect(fromNode)
+    const to = endRect(toNode)
     const [facingFrom, facingTo] = facingSides(from, to)
     const fromSide = edge.fromSide ?? facingFrom
     const toSide = edge.toSide ?? facingTo
     const style = edgeStyle(edge)
     const port = ports.get(edge.id)
-    const fromEnd = { at: port?.from, shape: shapeOf(from) }
-    const toEnd = { at: port?.to, shape: shapeOf(to) }
+    const fromEnd = { at: port?.from, shape: shapeOf(fromNode) }
+    const toEnd = { at: port?.to, shape: shapeOf(toNode) }
     if (edge.route !== 'elbow') {
       out.set(
         edge.id,

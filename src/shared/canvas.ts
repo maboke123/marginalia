@@ -17,7 +17,10 @@ export const SHAPES = [
   'class',
   'actor',
   'initial',
-  'final'
+  'final',
+  'lifeline',
+  'activation',
+  'fragment'
 ] as const
 export type Shape = (typeof SHAPES)[number]
 
@@ -28,7 +31,9 @@ export const RELATIONS = [
   'realization',
   'dependency',
   'aggregation',
-  'composition'
+  'composition',
+  'message',
+  'reply'
 ] as const
 export type Relation = (typeof RELATIONS)[number]
 
@@ -243,7 +248,7 @@ export function facingSides(from: Rect, to: Rect): [Side, Side] {
   return dy >= 0 ? ['bottom', 'top'] : ['top', 'bottom']
 }
 
-export type Marker = 'none' | 'arrow' | 'triangle' | 'diamond' | 'diamond-filled'
+export type Marker = 'none' | 'arrow' | 'arrow-filled' | 'triangle' | 'diamond' | 'diamond-filled'
 
 export interface EdgeStyle {
   dashed: boolean
@@ -263,7 +268,10 @@ export function edgeStyle(edge: CanvasEdge): EdgeStyle {
     case 'realization':
       return { dashed: true, fromMarker: 'none', toMarker: 'triangle' }
     case 'dependency':
+    case 'reply':
       return { dashed: true, fromMarker: 'none', toMarker: 'arrow' }
+    case 'message':
+      return { dashed: false, fromMarker: 'none', toMarker: 'arrow-filled' }
     case 'directed':
       return { dashed: false, fromMarker: 'none', toMarker: 'arrow' }
     case 'aggregation':
@@ -295,6 +303,74 @@ export function withRelation(edge: CanvasEdge, relation: Relation | undefined): 
     fromEnd: style.fromMarker === 'none' ? 'none' : 'arrow',
     toEnd: style.toMarker === 'none' ? 'none' : 'arrow'
   }
+}
+
+/** How tall a lifeline's head is, at normal text size. */
+export const LIFELINE_HEAD = 56
+// How far from a lifeline's dashed line, or a fragment's border, a click still hits it.
+const LINE_REACH = 10
+
+const scaleOf = (node: CanvasNode): number =>
+  typeof node.fontScale === 'number' && node.fontScale >= 0.25 && node.fontScale <= 8
+    ? node.fontScale
+    : 1
+
+export const isShape = (node: CanvasNode | undefined, shape: Shape): boolean =>
+  node?.type === 'text' && node.shape === shape
+
+/**
+ * Where arrows meet a box. A lifeline is a head with a long dashed line under it: arrows to it
+ * (a create message) end at the head; calls go to the activation bars on its line.
+ */
+export function endRect(node: CanvasNode): Rect {
+  if (!isShape(node, 'lifeline')) return node
+  return {
+    x: node.x,
+    y: node.y,
+    width: node.width,
+    height: Math.min(node.height, lifelineHeadHeight(node))
+  }
+}
+
+export const lifelineHeadHeight = (node: CanvasNode): number =>
+  Math.round(LIFELINE_HEAD * scaleOf(node))
+
+/** The x of a lifeline's dashed line. */
+export const lifelineX = (node: Rect): number => node.x + node.width / 2
+
+/**
+ * Whether a point lands on a box. A lifeline only counts at its head and dashed line, a
+ * combined fragment at its border and tag: what lies beside or inside them stays reachable.
+ */
+export function hitsNode(node: CanvasNode, x: number, y: number): boolean {
+  const inside = x >= node.x && x <= node.x + node.width && y >= node.y && y <= node.y + node.height
+  if (!inside) return false
+  if (isShape(node, 'lifeline')) {
+    return y <= node.y + lifelineHeadHeight(node) || Math.abs(x - lifelineX(node)) <= LINE_REACH
+  }
+  if (isShape(node, 'fragment')) {
+    const tag = { width: 220 * scaleOf(node), height: 34 * scaleOf(node) }
+    const onTag = x <= node.x + tag.width && y <= node.y + tag.height
+    const onBorder =
+      x - node.x <= LINE_REACH ||
+      node.x + node.width - x <= LINE_REACH ||
+      y - node.y <= LINE_REACH ||
+      node.y + node.height - y <= LINE_REACH
+    return onTag || onBorder
+  }
+  return true
+}
+
+/** The activation bars that sit on a lifeline's dashed line, which move along with it. */
+export function barsOn(lifeline: CanvasNode, nodes: CanvasNode[]): CanvasNode[] {
+  const x = lifelineX(lifeline)
+  return nodes.filter(
+    (n) =>
+      isShape(n, 'activation') &&
+      Math.abs(n.x + n.width / 2 - x) <= Math.max(LINE_REACH, n.width) &&
+      n.y + n.height > lifeline.y &&
+      n.y < lifeline.y + lifeline.height
+  )
 }
 
 /** A class box's compartments: name, attributes, operations, split at lines of "---". */

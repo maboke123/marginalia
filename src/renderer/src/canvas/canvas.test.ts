@@ -35,6 +35,7 @@ import {
   removeItems,
   resized,
   resizedInk,
+  callTo,
   snapResized,
   withStroke
 } from './ops'
@@ -656,5 +657,61 @@ describe('resizedInk', () => {
     ])
     expect(big.strokes[0].width).toBe(4)
     expect(drawing.strokes[0].points[1]).toEqual([100, 50, 0.5])
+  })
+})
+
+describe('sequence diagrams', () => {
+  const lifeline = (id: string, x: number): CanvasNode => ({
+    id,
+    type: 'text',
+    shape: 'lifeline',
+    text: id,
+    x,
+    y: 0,
+    width: 200,
+    height: 500
+  })
+  const bar = (id: string, x: number, y: number): CanvasNode => ({
+    id,
+    type: 'text',
+    shape: 'activation',
+    text: '',
+    x,
+    y,
+    width: 16,
+    height: 80
+  })
+  const seq: CanvasData = {
+    nodes: [lifeline('client', 0), lifeline('shop', 400), bar('b1', 92, 100)],
+    edges: []
+  }
+
+  it('a call puts a bar on the other lifeline, level with the start, and a message to it', () => {
+    const call = callTo(seq, 'b1', 'right', 'shop')!
+    expect(call.bar).toMatchObject({ shape: 'activation', x: 492, y: 100, width: 16 })
+    expect(call.edge).toMatchObject({
+      fromNode: 'b1',
+      fromSide: 'right',
+      toNode: call.bar.id,
+      toSide: 'left',
+      relation: 'message'
+    })
+    expect(call.data.nodes).toHaveLength(4)
+  })
+
+  it('a call to its own lifeline goes right and down', () => {
+    const call = callTo(seq, 'b1', 'right', 'client')!
+    expect(call.bar.x).toBeGreaterThan(92)
+    expect(call.bar.y).toBeGreaterThan(100)
+    expect(call.edge).toMatchObject({ fromSide: 'right', toSide: 'right' })
+  })
+
+  it('a lifeline takes its bars along and only catches clicks on its head and line', () => {
+    expect(movingSet(seq, ['client'])).toEqual(new Set(['client', 'b1']))
+    expect(movingSet(seq, ['shop'])).toEqual(new Set(['shop']))
+    expect(nodeAt(seq, 20, 300)).toBeNull()
+    expect(nodeAt(seq, 100, 300)?.id).toBe('client')
+    expect(nodeAt(seq, 20, 20)?.id).toBe('client')
+    expect(nodeAt(seq, 100, 120)?.id).toBe('b1')
   })
 })

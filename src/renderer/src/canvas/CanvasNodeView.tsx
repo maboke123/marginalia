@@ -91,7 +91,31 @@ function TextContent({ node }: { node: TextNode }): React.JSX.Element | null {
       return <Actor text={node.text} />
     case 'initial':
     case 'final':
+    case 'activation':
       return null
+    case 'lifeline':
+      return (
+        <>
+          <div className="canvas-lifeline-head">
+            <Markdown text={node.text} className="canvas-md canvas-centered" />
+          </div>
+          <div className="canvas-lifeline-line" />
+        </>
+      )
+    case 'fragment': {
+      // The first line is the operator and guard ("loop [for each child]") in the corner tag.
+      const [tag, ...rest] = node.text.split('\n')
+      return (
+        <>
+          <div className="canvas-fragment-tag">
+            <Markdown text={tag || ' '} className="canvas-md" />
+          </div>
+          {rest.join('\n').trim() && (
+            <Markdown text={rest.join('\n')} className="canvas-md canvas-fragment-guard" />
+          )}
+        </>
+      )
+    }
     case 'diamond':
       return (
         <>

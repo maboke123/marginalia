@@ -225,7 +225,7 @@ test('dragging from a box edge to another box connects them; the panel sets the 
   // The relations show their arrow; the one pointed at says what it means.
   await panel.getByRole('button', { name: 'Relation: Arrow' }).click()
   const relations = panel.getByRole('listbox', { name: 'Relation' })
-  await expect(relations.getByRole('option')).toHaveCount(8)
+  await expect(relations.getByRole('option')).toHaveCount(10)
   await relations.getByRole('option', { name: /^Composition/ }).hover()
   await expect(panel.locator('.canvas-relation-meaning')).toContainText(
     'lives and dies with the whole'
@@ -999,7 +999,9 @@ test('a slide snapshot and a picked image land on the canvas next to the slides'
   await page.keyboard.press('Control+Shift+M')
   await expect(surface()).toBeVisible()
 
+  await expect(page.locator('.pdf-page[data-page="1"] canvas')).toBeVisible()
   await page.keyboard.press('Control+Shift+S')
+  await expect(page.locator('.snapshot-layer')).toBeVisible()
   const slide = (await page.locator('.pdf-page[data-page="1"]').boundingBox())!
   await page.mouse.click(slide.x + 100, slide.y + 100)
   const images = (): Promise<number> =>
@@ -1052,4 +1054,75 @@ test('a canvas dragged onto a folder moves there; dropped on slides it links to 
       return state.notes?.['Design of Software Systems/les_2/Patterns.pdf']
     })
     .toEqual(['Design of Software Systems/les_2/Shop.canvas'])
+})
+
+test('dragging from a bar onto another lifeline draws the call with a bar there', async () => {
+  const lifeline = (id: string, x: number, text: string): object => ({
+    id,
+    type: 'text',
+    shape: 'lifeline',
+    text,
+    x,
+    y: 0,
+    width: 200,
+    height: 500
+  })
+  await fs.writeFile(
+    file('Visit.canvas'),
+    JSON.stringify({
+      nodes: [
+        lifeline('client', 0, ':Client'),
+        lifeline('dir', 400, 'root: Directory'),
+        {
+          id: 'b1',
+          type: 'text',
+          shape: 'activation',
+          text: '',
+          x: 92,
+          y: 120,
+          width: 16,
+          height: 80
+        }
+      ],
+      edges: []
+    })
+  )
+  await row('Design of Software Systems').click()
+  await row('les_1').click()
+  await row('Visit').click()
+  await expect(page.locator('.canvas-node')).toHaveCount(3)
+  await expect(page.locator('[data-node="dir"] .canvas-lifeline-head')).toHaveText(
+    'root: Directory'
+  )
+
+  // Beside a lifeline's dashed line the click goes through to the canvas.
+  const head = (await page.locator('[data-node="client"] .canvas-lifeline-head').boundingBox())!
+  await page.mouse.click(head.x + 10, head.y + head.height * 3)
+  await expect(page.locator('.canvas-node.selected')).toHaveCount(0)
+
+  const bar = page.locator('[data-node="b1"]')
+  await bar.click()
+  const dot = (await bar.locator('.canvas-connect.c-right').boundingBox())!
+  const line = (await page.locator('[data-node="dir"] .canvas-lifeline-line').boundingBox())!
+  await page.mouse.move(dot.x + dot.width / 2, dot.y + dot.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(line.x + line.width / 2, dot.y + 40, { steps: 8 })
+  await page.mouse.up()
+
+  await expect.poll(async () => (await read('Visit.canvas')).nodes.length).toBe(4)
+  const saved = await read('Visit.canvas')
+  const made = saved.nodes.at(-1)!
+  expect(made).toMatchObject({ shape: 'activation', x: 492, y: 120 })
+  expect(saved.edges[0]).toMatchObject({ fromNode: 'b1', toNode: made.id, relation: 'message' })
+  await page.screenshot({ path: path.join('test-results', 'canvas-sequence.png') })
+
+  // Moving a lifeline takes its bars along.
+  const dirHead = (await page.locator('[data-node="dir"] .canvas-lifeline-head').boundingBox())!
+  await page.mouse.move(dirHead.x + 20, dirHead.y + 20)
+  await page.mouse.down()
+  await page.mouse.move(dirHead.x + 120, dirHead.y + 20, { steps: 6 })
+  await page.mouse.up()
+  await expect
+    .poll(async () => (await read('Visit.canvas')).nodes.find((n) => n.id === made.id)!.x)
+    .toBeGreaterThan(520)
 })

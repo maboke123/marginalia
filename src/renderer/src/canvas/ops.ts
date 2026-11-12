@@ -1,11 +1,17 @@
 import {
+  barsOn,
   boundsOf,
   contains,
+  endRect,
+  hitsNode,
+  isShape,
   facingSides,
   inGroup,
+  lifelineX,
   newCanvasId,
   overlaps,
   sidePoint,
+  withRelation,
   type CanvasData,
   type CanvasEdge,
   type CanvasNode,
@@ -38,7 +44,11 @@ export function drawOrder(nodes: CanvasNode[]): CanvasNode[] {
   const groups = nodes
     .filter((n) => n.type === 'group')
     .sort((a, b) => b.width * b.height - a.width * a.height)
-  return [...groups, ...nodes.filter((n) => n.type !== 'group')]
+  // In a sequence diagram fragments frame the lifelines, and the bars sit on top of those.
+  const rank = (n: CanvasNode): number =>
+    isShape(n, 'fragment') ? 0 : isShape(n, 'lifeline') ? 1 : 2
+  const rest = nodes.filter((n) => n.type !== 'group')
+  return [...groups, ...[0, 1, 2].flatMap((k) => rest.filter((n) => rank(n) === k))]
 }
 
 export function addNodes(data: CanvasData, nodes: CanvasNode[]): CanvasData {
@@ -84,6 +94,10 @@ export function movingSet(data: CanvasData, ids: string[]): Set<string> {
   for (const id of ids) {
     const node = nodeById(data, id)
     if (node?.type === 'group') for (const inner of inGroup(node, data.nodes)) moving.add(inner.id)
+  }
+  for (const id of [...moving]) {
+    const node = nodeById(data, id)
+    if (isShape(node, 'lifeline')) for (const bar of barsOn(node!, data.nodes)) moving.add(bar.id)
   }
   return moving
 }
@@ -339,7 +353,7 @@ export function connect(
   const a = nodeById(data, from)
   const b = nodeById(data, to)
   if (!a || !b || a.id === b.id) return null
-  const [fromSide, toSide] = facingSides(a, b)
+  const [fromSide, toSide] = facingSides(endRect(a), endRect(b))
   return {
     id: newCanvasId(),
     fromNode: from,
@@ -368,11 +382,7 @@ export function nodeAt(
   skip?: Set<string>
 ): CanvasNode | null {
   const order = drawOrder(data.nodes).reverse()
-  return (
-    order.find(
-      (n) => !skip?.has(n.id) && x >= n.x && x <= n.x + n.width && y >= n.y && y <= n.y + n.height
-    ) ?? null
-  )
+  return order.find((n) => !skip?.has(n.id) && hitsNode(n, x, y)) ?? null
 }
 
 const SIDES: Side[] = ['top', 'right', 'bottom', 'left']
@@ -392,13 +402,13 @@ export function connectTarget(
   const boxes = data.nodes.filter((n) => n.type !== 'group' && n.id !== skip)
   const under = drawOrder(boxes)
     .reverse()
-    .find((n) => x >= n.x && x <= n.x + n.width && y >= n.y && y <= n.y + n.height)
-  if (under) return { id: under.id, side: nearestSide(under, x, y) }
+    .find((n) => hitsNode(n, x, y))
+  if (under) return { id: under.id, side: nearestSide(endRect(under), x, y) }
   let best: { id: string; side: Side } | null = null
   let distance = reach
   for (const n of boxes) {
     for (const side of SIDES) {
-      const p = sidePoint(n, side)
+      const p = sidePoint(endRect(n), side)
       const d = Math.hypot(p.x - x, p.y - y)
       if (d <= distance) {
         distance = d
@@ -464,4 +474,60 @@ export function withStroke(base: InkNode | null, stroke: InkStroke): InkNode {
       { ...stroke, points: moved(stroke.points, left, top) }
     ]
   }
+}
+
+const isSequence = (node: CanvasNode | undefined): boolean =>
+  isShape(node, 'activation') || isShape(node, 'lifeline')
+
+/** An arrow between bars or lifelines is a message: a straight call arrow. */
+export function sequenceStyle(data: CanvasData, edge: CanvasEdge): CanvasEdge | null {
+  if (!isSequence(nodeById(data, edge.fromNode)) && !isSequence(nodeById(data, edge.toNode))) {
+    return null
+  }
+  const message = withRelation(edge, 'message')
+  delete message.route
+  return message
+}
+
+/**
+ * A call in a sequence diagram, from a box to a lifeline's dashed line: a new activation bar on
+ * that line, level with the start so the message runs straight across, and the message to it.
+ * A call from a bar on the same lifeline (to itself) gets a bar just right of and below it.
+ */
+export function callTo(
+  data: CanvasData,
+  from: string,
+  fromSide: Side,
+  lifeline: string
+): { data: CanvasData; bar: CanvasNode; edge: CanvasEdge } | null {
+  const start = nodeById(data, from)
+  const line = nodeById(data, lifeline)
+  if (!start || !line || !isShape(line, 'lifeline')) return null
+  const scale = typeof line.fontScale === 'number' ? line.fontScale : 1
+  const [width, height] = [Math.round(16 * scale), Math.round(80 * scale)]
+  const x = lifelineX(line)
+  const self = barsOn(line, [start]).length > 0
+  const from_ = endRect(start)
+  const middle = self
+    ? from_.y + from_.height / 2 + 30 * scale + height / 2
+    : sidePoint(from_, fromSide).y
+  const bar: CanvasNode = {
+    id: newCanvasId(),
+    type: 'text',
+    shape: 'activation',
+    text: '',
+    x: Math.round(x - width / 2 + (self ? width / 2 : 0)),
+    y: Math.round(middle - height / 2),
+    width,
+    height
+  }
+  const toRight = x > from_.x + from_.width / 2
+  const sides = self
+    ? { fromSide: 'right' as const, toSide: 'right' as const }
+    : { fromSide, toSide: toRight ? ('left' as const) : ('right' as const) }
+  const next = addNodes(data, [bar])
+  const edge = connect(next, from, bar.id, sides)
+  if (!edge) return null
+  const message = sequenceStyle(next, edge)!
+  return { data: { ...next, edges: [...next.edges, message] }, bar, edge: message }
 }

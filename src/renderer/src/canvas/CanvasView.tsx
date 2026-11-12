@@ -4,7 +4,10 @@ import {
   boundsOf,
   canvasFrom,
   contains,
+  endRect,
   formatCanvas,
+  isShape,
+  lifelineHeadHeight,
   newCanvasId,
   overlaps,
   PRESET_COLORS,
@@ -56,6 +59,8 @@ import {
   duplicateItems,
   resizedInk,
   scaleText,
+  sequenceStyle,
+  callTo,
   drawOrder,
   groupAround,
   isEmpty,
@@ -103,7 +108,14 @@ const IMAGE_TYPES: Record<string, string> = {
 const NOOP = (): void => {}
 
 // Start and end dots have no text to type.
-const isMarker = (shape: Shape | undefined): boolean => shape === 'initial' || shape === 'final'
+/** Below the head of a lifeline: where a call puts a new activation bar. */
+function onLifelineLine(data: CanvasData, id: string, y: number): boolean {
+  const node = data.nodes.find((n) => n.id === id)
+  return !!node && isShape(node, 'lifeline') && y > node.y + lifelineHeadHeight(node)
+}
+
+const isMarker = (shape: Shape | undefined): boolean =>
+  shape === 'initial' || shape === 'final' || shape === 'activation'
 
 const SHAPE_CHOICES: { shape: Shape; label: string }[] = [
   { shape: 'rectangle', label: 'Box' },
@@ -130,8 +142,10 @@ function loadCamera(path: string): Camera | null {
 }
 
 /** New arrows get the relation and line of the settings. */
-function withDefaultStyle(edge: CanvasEdge | null): CanvasEdge | null {
+function withDefaultStyle(edge: CanvasEdge | null, data?: CanvasData): CanvasEdge | null {
   if (!edge) return null
+  const message = data && sequenceStyle(data, edge)
+  if (message) return message
   const { arrowRoute, arrowRelation } = useApp.getState().settings
   const styled = arrowRelation ? withRelation(edge, arrowRelation) : edge
   return arrowRoute === 'elbow' ? { ...styled, route: 'elbow' } : styled
@@ -785,7 +799,7 @@ function CanvasSurface({
         drag.current = { kind: 'resize', id: nodeId, handle, from: at, rect: node }
       } else if (side && nodeId) {
         drag.current = { kind: 'connect', id: nodeId, side }
-        setDraft({ from: nodeById(s.data, nodeId)!, fromSide: side, to: at, land: null })
+        setDraft({ from: endRect(nodeById(s.data, nodeId)!), fromSide: side, to: at, land: null })
         setHover(null)
       } else if (nodeId) {
         if (s.editing === nodeId) return
@@ -868,8 +882,11 @@ function CanvasSurface({
         setMarquee(placedRect(d.from, at))
         return
       case 'connect': {
-        const land = connectTarget(s.data, at.x, at.y, LAND_PX / zoom, d.id)
-        const rect = land ? nodeById(s.data, land.id) : undefined
+        const target = connectTarget(s.data, at.x, at.y, LAND_PX / zoom, d.id)
+        // On a lifeline's line the arrow follows the pointer: a bar comes there on release.
+        const land = target && !onLifelineLine(s.data, target.id, at.y) ? target : null
+        const node = land ? nodeById(s.data, land.id) : undefined
+        const rect = node ? endRect(node) : undefined
         setDraft((dr) =>
           dr ? { ...dr, to: at, land: land && rect ? { ...land, rect } : null } : dr
         )
@@ -982,9 +999,15 @@ function CanvasSurface({
       const from = nodeById(s.data, d.id)
       if (!from) return
       const land = connectTarget(s.data, at.x, at.y, LAND_PX / cameraRef.current.zoom, d.id)
-      if (land) {
+      const call =
+        land && onLifelineLine(s.data, land.id, at.y) ? callTo(s.data, d.id, d.side, land.id) : null
+      if (call) {
+        s.change(() => call.data)
+        s.select({ nodes: [], edges: [call.edge.id] })
+      } else if (land) {
         const edge = withDefaultStyle(
-          connect(s.data, d.id, land.id, { fromSide: d.side, toSide: land.side })
+          connect(s.data, d.id, land.id, { fromSide: d.side, toSide: land.side }),
+          s.data
         )
         if (edge) {
           s.change((data) => ({ ...data, edges: [...data.edges, edge] }))
@@ -998,7 +1021,10 @@ function CanvasSurface({
         s.begin()
         s.update((data) => {
           const withBox = addNodes(data, [box])
-          const edge = withDefaultStyle(connect(withBox, d.id, box.id, { fromSide: d.side }))
+          const edge = withDefaultStyle(
+            connect(withBox, d.id, box.id, { fromSide: d.side }),
+            withBox
+          )
           return edge ? { ...withBox, edges: [...withBox.edges, edge] } : withBox
         })
         newBox.current = box.id

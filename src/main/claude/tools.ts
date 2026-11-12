@@ -53,7 +53,11 @@ const canvasChange = z.object({
       'Text box shape. class: name, attributes and operations split by lines of ---, ' +
         'stereotype like «interface» on the first line. actor and ellipse for use cases, ' +
         'rounded for states and actions, diamond for decisions, initial and final for start ' +
-        'and end, note for remarks'
+        'and end, note for remarks. Sequence diagrams: lifeline (text "name: Class" in its ' +
+        'head, a dashed line down; tall, like 200 x 600), activation (an empty bar, 16 wide, ' +
+        'centred on the x of a lifeline, which takes it along when moved) and fragment (a ' +
+        'frame with its first line in the corner tag, like "loop [for each child]" or ' +
+        '"alt [found]")'
     ),
   text: z.string().optional().describe('Markdown of a text box; $...$ for math'),
   label: z.string().optional().describe('Label of a group (a package or system boundary)'),
@@ -76,7 +80,10 @@ const canvasChange = z.object({
     .describe(
       'UML relation; "" for a plain arrow. inheritance and realization point from child to ' +
         'parent; aggregation and composition go from the whole (diamond) to the part; ' +
-        'dependency and directed point at what is used'
+        'dependency and directed point at what is used. In a sequence diagram message is a ' +
+        'call (from bar to bar, labelled with the call, like accept(v)) and reply its answer; ' +
+        'give both bars the same middle y so the arrow runs straight, and an arrow to a ' +
+        'lifeline itself is a create message to its head'
     ),
   arrow_label: z.string().optional().describe('Name of the association, in the middle'),
   from_label: z.string().optional().describe('Multiplicity or role at the start, like 1'),

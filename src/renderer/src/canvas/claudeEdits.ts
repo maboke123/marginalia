@@ -63,6 +63,10 @@ export function sizeFor(text: string, shape: Shape | undefined): { width: number
   if (shape === 'initial') return { width: 30, height: 30 }
   if (shape === 'final') return { width: 34, height: 34 }
   if (shape === 'actor') return { width: 90, height: 130 }
+  if (shape === 'activation') return { width: 16, height: 80 }
+  if (shape === 'lifeline')
+    return { width: Math.max(160, sizeFor(text, undefined).width), height: 600 }
+  if (shape === 'fragment') return { width: 420, height: 240 }
   const lines = text.split('\n').filter((l) => !/^\s*-{3,}\s*$/.test(l))
   const longest = Math.max(8, ...lines.map((l) => l.length))
   const parts = shape === 'class' ? compartments(text).length : 1

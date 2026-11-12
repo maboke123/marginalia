@@ -78,6 +78,22 @@ export const TEMPLATES: { section: string; items: Template[] }[] = [
       { name: 'Start', make: text('initial', '', 30, 30) },
       { name: 'End', make: text('final', '', 34, 34) }
     ]
+  },
+  {
+    section: 'Sequence diagram',
+    items: [
+      {
+        name: 'Lifeline',
+        hint: 'Drag an arrow from a bar onto it for a call',
+        make: text('lifeline', 'obj: Class', 200, 460)
+      },
+      { name: 'Activation bar', make: text('activation', '', 16, 80) },
+      {
+        name: 'Fragment',
+        hint: 'loop, alt, opt: the first line goes in the corner',
+        make: text('fragment', 'loop [for each item]', 420, 240)
+      }
+    ]
   }
 ]
 

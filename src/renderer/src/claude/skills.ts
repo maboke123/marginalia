@@ -104,8 +104,12 @@ or the canvas I have open) as UML on a canvas:
 4. Draw it with edit_canvas on the canvas I have open; if none is open, create_canvas in the
    folder of the exercise or of what I have open, named after the system. Put all boxes and
    arrows in one edit_canvas call; leave out x and y so the layout is done for you, or give
-   positions when the diagram needs a particular shape. A sequence diagram goes in one text
-   box as a mermaid \`sequenceDiagram\` block.
+   positions when the diagram needs a particular shape. A sequence diagram uses lifelines
+   (one per object, heads in a row at the top), activation bars on their dashed lines while
+   a call runs, message arrows from bar to bar labelled with the call, reply arrows (dashed)
+   only where the answer matters, and fragments for loop / alt / opt. Give every box x and y
+   for it: lifelines 300 apart, each call a bar a little lower than the one before, the two
+   bars of a message at the same middle y.
 5. Look at the result with screenshot. Fix overlapping boxes, crossing arrows and text cut
    off by a box that is too small (change_box with a bigger width or height), with one more
    edit_canvas call.

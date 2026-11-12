@@ -3676,6 +3676,109 @@ button.claude-proposal-label:hover {
   border-radius: 50%;
 }
 
+/* Sequence diagrams. A lifeline and a fragment only take clicks at their head, line, tag or
+   border, so the bars and arrows around them stay reachable. Head height: LIFELINE_HEAD. */
+
+.canvas-node.shape-lifeline,
+.canvas-node.shape-fragment {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  pointer-events: none;
+}
+
+.canvas-node.shape-lifeline > *,
+.canvas-node.shape-fragment > .canvas-fragment-tag,
+.canvas-node.shape-fragment > .canvas-handle,
+.canvas-node.shape-fragment > .canvas-connect,
+.canvas-node.shape-fragment > .canvas-editor {
+  pointer-events: auto;
+}
+
+.canvas-lifeline-head {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 3.5em;
+  padding: 0 0.5em;
+  border: 1.5px solid var(--border-strong);
+  background: var(--bg);
+}
+
+.canvas-node.shape-lifeline.colored .canvas-lifeline-head {
+  border-color: var(--node-color);
+  background: color-mix(in srgb, var(--node-color) 8%, var(--bg));
+}
+
+.canvas-lifeline-line {
+  position: absolute;
+  top: 3.5em;
+  bottom: 0;
+  left: 50%;
+  width: 20px;
+  transform: translateX(-50%);
+}
+
+.canvas-lifeline-line::before {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  border-left: 1.5px dashed var(--border-strong);
+  content: '';
+}
+
+.canvas-node.shape-lifeline > .canvas-editor {
+  height: 3.5em;
+}
+
+.canvas-node.shape-lifeline > .canvas-connect.c-left,
+.canvas-node.shape-lifeline > .canvas-connect.c-right {
+  top: 1.75em;
+}
+
+.canvas-node.shape-lifeline > .canvas-connect.c-bottom {
+  display: none;
+}
+
+.canvas-node.shape-activation {
+  padding: 0;
+  border-radius: 0;
+}
+
+.canvas-node.shape-fragment::before {
+  position: absolute;
+  inset: 0;
+  border: 1.5px solid var(--border-strong);
+  content: '';
+}
+
+.canvas-node.shape-fragment.colored::before {
+  border-color: var(--node-color);
+}
+
+.canvas-fragment-tag {
+  position: absolute;
+  top: 0;
+  left: 0;
+  max-width: 100%;
+  padding: 0.2em 0.8em 0.2em 0.5em;
+  border-right: 1.5px solid var(--border-strong);
+  border-bottom: 1.5px solid var(--border-strong);
+  background: var(--bg);
+}
+
+.canvas-fragment-guard {
+  position: absolute;
+  top: 2.4em;
+  left: 0.6em;
+  color: var(--text-muted);
+}
+
 .canvas-node.shape-final::after {
   position: absolute;
   inset: 4px;

@@ -40,6 +40,16 @@ const HELP: Record<Kind, { label: string; meaning: string; read(a: string, b: st
       'The start is a whole, the end a part that can exist on its own. Hollow diamond at the whole.',
     read: (a, b) => `${a} has ${b}, which can exist without it`
   },
+  message: {
+    label: 'Message',
+    meaning: 'A call in a sequence diagram: the start calls the method on the end and waits.',
+    read: (a, b) => `${a} calls ${b}`
+  },
+  reply: {
+    label: 'Reply',
+    meaning: 'The answer of a call in a sequence diagram, back to the caller. Dashed line.',
+    read: (a, b) => `${a} answers ${b}`
+  },
   composition: {
     label: 'Composition',
     meaning:
