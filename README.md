@@ -27,6 +27,8 @@ Claude is built in two ways:
 
 - Open any folder as a vault. Top-level folders are courses, subfolders are lectures, nested as deep as you like.
 - Create, rename, move and delete from the sidebar. Deletes go to the Recycle Bin.
+- Right-click slides for a new note or canvas that is linked to them.
+- Export a whole folder as PDFs (slides with their annotations, notes and canvases, subfolders kept) into a new folder or one zip.
 - Give any folder a colour (red, orange, yellow, green, dark green, blue, ...), for example to track which lectures you have reviewed.
 - Hide folders and files you do not want to see, like a code repository for an assignment. Settings lists them to bring them back.
 - A Todo note pinned above all courses, for things that do not belong to one lecture.
@@ -48,7 +50,8 @@ Claude is built in two ways:
 - Slash menu for headings, lists, tables, math blocks, text colour and slide links. It puts the heading level you most likely want next first.
 - Fold a section under its heading. Folds are remembered per note.
 - `mermaid` and `vega-lite` code blocks are drawn as charts.
-- Ctrl+Shift+L inserts a link to the current slide, Ctrl+Shift+S pastes a snapshot of part of it.
+- Ctrl+Shift+L inserts a link to the current slide, Ctrl+Shift+S pastes a snapshot of part of it (into a canvas too).
+- Preview a note or canvas as a PDF before exporting it.
 - Zoom with Ctrl+wheel or a touchpad pinch.
 - Files stay standard Markdown, so they open the same in Obsidian or VS Code.
 
@@ -56,6 +59,8 @@ Claude is built in two ways:
 
 - A page you can zoom and pan without end, for diagrams, mind maps and overviews. Text boxes with Markdown and math, images, pen drawings, groups and arrows between boxes.
 - UML shapes and relations: classes with compartments, interfaces, actors, use cases, states, decisions, and arrows for inheritance, realization, composition, aggregation and dependency, with multiplicities.
+- Sequence diagrams: lifelines, activation bars and fragments (loop, alt, opt), with message and reply arrows. Drag an arrow from a bar onto another lifeline and the bar for that call appears at the same height. A lifeline takes its bars along when you move it.
+- Add images from your computer, paste a screenshot, or select a drawing to resize it, strokes and all. Tab indents inside a box.
 - Boxes snap to the edges and middles of other boxes, to equal spacing, and evenly around a box above (two subclasses under their superclass). Hold Alt to place freely.
 - Arrows are curved or go around boxes at right angles. Drag the middle of a right-angle arrow to route it yourself.
 - Larger and smaller text (Ctrl+Shift+> and <) grows the box with it, so the text wraps as before.
@@ -74,6 +79,7 @@ Claude is built in two ways:
 - Speech to text runs locally with whisper.cpp; no audio leaves your PC. Transcription starts by itself while the laptop is plugged in, in the language you set per course, and goes on where it stopped after a restart.
 - Drop a video or audio file of a lecture to transcribe it. For a video, the app matches the frames to the slides.
 - Import a transcript someone else recorded, or the captions a lecturer posts (.vtt, .srt, .txt). Each paragraph is linked to the slide it talks about, matched by its words.
+- A recording with no sound at all (a muted microphone, the wrong source) goes to the Recycle Bin instead of being tried again and again.
 - Transcripts stay out of the way: a lecture with recordings shows a small microphone badge in the sidebar. Claude and search still use them.
 
 **Search**
@@ -103,6 +109,7 @@ Claude is built into the places you already work, and it always knows where you 
 - Ask "add a short version of this under Information gain" and it writes into your note, under that heading.
 - On the slides it can add, change, move and remove text boxes, highlight or underline text, draw lines and arrows, and add blank pages.
 - On a canvas it reads and draws boxes and arrows, and lays out new diagrams itself.
+- It makes folders and renames, moves and links files like the sidebar does; deleting asks you first.
 - It can take a screenshot of a page or a canvas as the app draws it, to check that things fit and do not overlap.
 - Your view stays where you are reading while it edits; a change to a note that is not open goes straight into the file.
 - With "ask before editing" on (the default), you see each change first and accept or reject it. Click a waiting change in the chat to jump to it. "Accept all" lets the rest of that answer through. Every edit is one undo step.
@@ -125,12 +132,13 @@ Claude is built into the places you already work, and it always knows where you 
 **Your own instructions**
 
 - The Claude settings have a field for standing instructions, added to the chat, `/claude` and the terminal. I use it for what my folder colours mean.
+- Add folders outside the vault that the chat may read, like the code of a course project.
 
 **Terminal tab**
 
 - Runs Claude Code inside your vault folder, for bigger jobs like reorganising a course or writing a summary from several lectures.
 
-Claude can only read files inside your vault. The chat panel cannot run commands: it changes files only through the app (new notes, edits to notes and annotations), and with "ask before editing" on you approve each change.
+Claude can only read files inside your vault and the folders you add in its settings. The chat panel cannot run commands: it changes files only through the app (new notes, edits to notes and annotations), and with "ask before editing" on you approve each change.
 
 ## How your files look on disk
 
