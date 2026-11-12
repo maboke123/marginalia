@@ -174,6 +174,48 @@ export function appToolServer(
       run('create_canvas')
     ),
     sdk.tool(
+      'create_folder',
+      'Makes a folder: a course (a notebook) when parent is "", else a lesson or subfolder ' +
+        'inside parent. A name that is taken gets a number. Returns its vault path.',
+      {
+        parent: z.string().describe('Vault path of the folder it goes in, or "" for a course'),
+        name: z.string()
+      },
+      run('create_folder')
+    ),
+    sdk.tool(
+      'rename_item',
+      'Renames a file or folder (keep the extension for files). Its annotations, linked notes ' +
+        'and open panes follow; a PDF takes the note with its own name along. Never ' +
+        'overwrites. Returns the new vault path.',
+      { path: z.string().describe('Vault path of the file or folder'), name: z.string() },
+      run('rename_item')
+    ),
+    sdk.tool(
+      'move_item',
+      'Moves a file or folder into another folder. A PDF takes its annotations and notes ' +
+        'along. Never overwrites. Returns the new vault path.',
+      {
+        path: z.string().describe('Vault path of the file or folder'),
+        to_folder: z.string().describe('Vault path of the folder to move it into')
+      },
+      run('move_item')
+    ),
+    sdk.tool(
+      'move_to_recycle_bin',
+      'Moves a file or folder to the Windows Recycle Bin, after I confirm in a dialog. Only ' +
+        'when I ask for it.',
+      { path: z.string().describe('Vault path of the file or folder') },
+      run('move_to_recycle_bin')
+    ),
+    sdk.tool(
+      'link_note',
+      'Links a note or canvas to slides (shown under the PDF in the sidebar, opened next to ' +
+        'it in lecture mode), or unlinks it. Both must be in the same folder.',
+      { pdf, file: z.string().describe('Vault path of the .md or .canvas'), linked: z.boolean() },
+      run('link_note')
+    ),
+    sdk.tool(
       'read_canvas',
       'Everything on a canvas: each box with its id, shape, position, size and text, groups, ' +
         'images, and each arrow with its relation and labels. Includes changes not saved yet.',
@@ -431,6 +473,11 @@ const CHAT_TOOLS = [
   'read_pdf_text',
   'create_note',
   'create_canvas',
+  'create_folder',
+  'rename_item',
+  'move_item',
+  'move_to_recycle_bin',
+  'link_note',
   'read_canvas',
   'edit_canvas',
   'read_summary',

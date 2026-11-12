@@ -46,7 +46,7 @@ import {
 } from '../canvas/claudeEdits'
 import { openCanvas, openNote, openPdf, whenOpen, type OpenNote, type OpenPdf } from '../lib/open'
 import { flushAll } from '../lib/flush'
-import { findNode, isFolder } from '../lib/tree'
+import { findNode, isFolder, parentOf } from '../lib/tree'
 import { pageHtml } from '../annotations/pageHtml'
 import { loadPdf, pageSizes } from '../pdf/pdfjs'
 import { renderPage } from '../pdf/snapshot'
@@ -615,6 +615,60 @@ const TOOLS: Record<string, (args: Args) => Promise<Result>> = {
       .getState()
       .showNotice(`Claude made ${fileName(path)}`, [{ label: 'Open', run: () => show(path) }])
     return { text: `Made ${path}. It is empty; fill it with edit_canvas.` }
+  },
+
+  async create_folder(args) {
+    const parent = String(args.parent ?? '').trim() ? folderArg({ folder: args.parent }) : ''
+    const name = String(args.name ?? '').trim()
+    if (!name) throw new ToolError('The folder needs a name')
+    const where = parent ? ` in ${fileName(parent)}` : ' (a new course)'
+    const accepted = await useChat.getState().confirm(`New folder ${name}${where}`, () => () => {})
+    if (!accepted) throw new ToolError(REJECTED)
+    const path = await window.api.vault.createFolder(parent, name)
+    await useApp.getState().refresh()
+    return { text: `Made ${path}.` }
+  },
+
+  async rename_item(args) {
+    const path = fileArg({ file: args.path }, 'any')
+    const name = String(args.name ?? '').trim()
+    if (!name) throw new ToolError('A new name is needed')
+    const accepted = await useChat
+      .getState()
+      .confirm(`Rename ${fileName(path)} to ${name}`, () => () => {})
+    if (!accepted) throw new ToolError(REJECTED)
+    const to = await useApp.getState().rename(path, name, true)
+    return { text: to ? `Renamed to ${to}.` : 'The name is the same; nothing changed.' }
+  },
+
+  async move_item(args) {
+    const path = fileArg({ file: args.path }, 'any')
+    const folder = folderArg({ folder: args.to_folder })
+    const accepted = await useChat
+      .getState()
+      .confirm(`Move ${fileName(path)} to ${fileName(folder)}`, () => () => {})
+    if (!accepted) throw new ToolError(REJECTED)
+    const to = await useApp.getState().move(path, folder, undefined, true)
+    return { text: `Moved to ${to}.` }
+  },
+
+  async move_to_recycle_bin(args) {
+    const path = fileArg({ file: args.path }, 'any')
+    // The app's own dialog asks; "ask before editing" does not cover deleting.
+    const gone = await useApp.getState().trash(path, true)
+    if (!gone) throw new ToolError(REJECTED)
+    return { text: `${path} is in the Recycle Bin.` }
+  },
+
+  async link_note(args) {
+    const pdf = fileArg({ file: args.pdf }, 'pdf')
+    const path = fileArg(args, 'any')
+    if (!/\.(md|canvas)$/i.test(path)) throw new ToolError(`"${path}" is not a note or canvas`)
+    if (parentOf(path) !== parentOf(pdf)) {
+      throw new ToolError('A note is only linked to slides in its own folder; move it first')
+    }
+    await useApp.getState().setLinked(pdf, path, args.linked !== false)
+    return { text: `${args.linked !== false ? 'Linked' : 'Unlinked'} ${path} and ${pdf}.` }
   },
 
   async read_canvas(args) {

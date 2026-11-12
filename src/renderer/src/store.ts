@@ -222,9 +222,18 @@ interface AppState {
 
   /** `linkTo`: a PDF the new page or canvas is linked to, named after it. */
   create(item: NewItem, parent: string, linkTo?: string): Promise<void>
-  rename(path: string, name: string): Promise<void>
-  move(path: string, parent: string, before?: Position): Promise<void>
-  trash(path: string): Promise<void>
+  /**
+   * These return the new path (trash: whether it went), or undefined after an error toast;
+   * with `raise` (Claude's tools) the error is thrown instead of shown.
+   */
+  rename(path: string, name: string, raise?: boolean): Promise<string | undefined>
+  move(
+    path: string,
+    parent: string,
+    before?: Position,
+    raise?: boolean
+  ): Promise<string | undefined>
+  trash(path: string, raise?: boolean): Promise<boolean>
   setColor(folder: string, color: NotebookColor | null): Promise<void>
   setCourseLanguage(notebook: string, language: TranscribeLanguage): Promise<void>
   setHidden(path: string, hidden: boolean): Promise<void>
@@ -825,16 +834,17 @@ export const useApp = create<AppState>((set, get) => {
       set({ selected: path, renaming: path })
     },
 
-    async rename(path, name) {
+    async rename(path, name, raise) {
       set({ renaming: null })
       const node = findNode(get().nodes, path)
-      if (!node || name.trim() === '' || name === node.name) return
+      if (raise && !node) throw new Error(`"${path}" does not exist`)
+      if (!node || name.trim() === '' || name === node.name) return undefined
       // Main renames a note paired by name along with its PDF; open panes follow both.
       const stem = (n: string): string => n.replace(/\.(md|pdf)$/i, '').toLowerCase()
       const paired = pairNotes(childrenOf(get().nodes, parentOf(path)), get().links).get(path)
       const note = paired?.find((n) => stem(n.name) === stem(node.name))
-      const to = await attempt(() => api.rename(path, name))
-      if (!to) return
+      const to = raise ? await api.rename(path, name) : await attempt(() => api.rename(path, name))
+      if (!to) return undefined
       followMove(path, to)
       if (note) {
         const base = to
@@ -844,27 +854,32 @@ export const useApp = create<AppState>((set, get) => {
         followMove(note.path, `${parentOf(note.path)}/${base}.md`)
       }
       await get().refresh()
+      return to
     },
 
-    async move(path, parent, before) {
-      if (parentOf(path) === parent && before === undefined) return
+    async move(path, parent, before, raise) {
+      if (parentOf(path) === parent && before === undefined) return path
       // Main takes a PDF's note along to another folder; open panes and selection follow it.
       const from = parentOf(path)
       const notes =
         from !== parent
           ? (pairNotes(childrenOf(get().nodes, from), get().links).get(path) ?? [])
           : []
-      const to = await attempt(() => api.move(path, parent, before))
-      if (!to) return
+      const to = raise
+        ? await api.move(path, parent, before)
+        : await attempt(() => api.move(path, parent, before))
+      if (!to) return undefined
       if (parent) get().setExpanded(parent, true)
       followMove(path, to)
       for (const note of notes) followMove(note.path, `${parent}/${note.name}`)
       await get().refresh()
+      return to
     },
 
-    async trash(path) {
-      const done = await attempt(() => api.trash(path))
+    async trash(path, raise) {
+      const done = raise ? await api.trash(path) : await attempt(() => api.trash(path))
       if (done) await get().refresh()
+      return !!done
     },
 
     async setColor(folder, color) {

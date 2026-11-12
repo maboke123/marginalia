@@ -1138,6 +1138,17 @@ test('/summary runs a skill that writes a new note linked to the slides', async 
   expect(state.notes[pdfRel]).toContain(`${section}/slides summary.md`)
 })
 
+test('Claude makes folders and moves and renames files like the sidebar does', async () => {
+  await openSlides()
+  await ask('Tidy up this lesson')
+  await page.locator('.claude-proposal').getByRole('button', { name: 'Accept all' }).click()
+  await expect(answers().last()).toContainText('rename_item: Renamed to')
+  const solved = path.join(env.vault, section, 'Exercises', 'Sheet 1 solved.md')
+  await expect.poll(() => fs.readFile(solved, 'utf8').catch(() => null)).toContain('# Sheet 1')
+  await expect(answers().last()).toContainText(`create_folder: Made ${section}/Exercises.`)
+  await expect(row('Exercises')).toBeVisible()
+})
+
 test('/claude changes text that is already there, as one undo step', async () => {
   await row('Machine Learning').click()
   await row('B2 Decision trees').first().click()

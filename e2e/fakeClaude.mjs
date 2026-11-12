@@ -141,6 +141,19 @@ export async function* agent(input) {
     await call('delete_annotations', { page, ids: [line] })
     await call('delete_annotations', { page, ids: ['t_nope'] })
     yield { type: 'text', text: steps.join('\n\n') }
+  } else if (/tidy up/i.test(question)) {
+    // Files and folders, like the sidebar: a folder, a note moved into it, then renamed.
+    const folder = slides.split('/').slice(0, -1).join('/')
+    const steps = []
+    const call = async (name, args) => {
+      const reply = await input.callTool(name, args)
+      steps.push(`${name}: ${reply.text}`)
+    }
+    await call('create_folder', { parent: folder, name: 'Exercises' })
+    await call('create_note', { folder, name: 'Sheet 1', markdown: '# Sheet 1' })
+    await call('move_item', { path: `${folder}/Sheet 1.md`, to_folder: `${folder}/Exercises` })
+    await call('rename_item', { path: `${folder}/Exercises/Sheet 1.md`, name: 'Sheet 1 solved.md' })
+    yield { type: 'text', text: steps.join('\n\n') }
   } else if (question.startsWith('/summary')) {
     // A skill: its steps come in the context, the chat shows only the command.
     const text = await input.callTool('read_pdf_text', { file: slides })

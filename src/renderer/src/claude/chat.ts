@@ -146,6 +146,16 @@ function describeTool(name: string, input: Record<string, unknown>): string {
       return `Making the note ${input.name}.md`
     case 'create_canvas':
       return `Making the canvas ${input.name}`
+    case 'create_folder':
+      return `Making the folder ${input.name}`
+    case 'rename_item':
+      return `Renaming ${fileName(input.path)} to ${input.name}`
+    case 'move_item':
+      return `Moving ${fileName(input.path)} to ${fileName(input.to_folder)}`
+    case 'move_to_recycle_bin':
+      return `Asking to delete ${fileName(input.path)}`
+    case 'link_note':
+      return `${input.linked === false ? 'Unlinking' : 'Linking'} ${file} and ${fileName(input.pdf)}`
     case 'read_canvas':
       return `Read the canvas ${file.replace(/\.canvas$/i, '')}`
     case 'edit_canvas':
